@@ -110,6 +110,7 @@ export default function Hire() {
   const [selected, setSelected] = useState<string | null>(null);
   const [bundles, setBundles] = useState<Record<string, Bundle>>({});
   const [loadingProfile, setLoadingProfile] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [contactFor, setContactFor] = useState<Result | null>(null);
   const [message, setMessage] = useState("");
   const [channel, setChannel] = useState("platform");
@@ -133,10 +134,20 @@ export default function Hire() {
     }
     try {
       const last = JSON.parse(sessionStorage.getItem("tammy_last_search") ?? "null");
-      if (last?.results?.length) {
-        setResults(last.results);
+      const rows = Array.isArray(last?.results)
+        ? (last.results as Result[]).filter((r) => r?.id && r?.full_name)
+        : [];
+      if (rows.length) {
+        setResults(rows);
         setSearched(true);
-        if (last.results[0]?.id) void select(String(last.results[0].id));
+        if (rows[0]?.id) void select(String(rows[0].id));
+      } else if (last?.results?.length) {
+        // Corrupt/stale cache (e.g. deleted profiles) — drop it, search again.
+        try {
+          sessionStorage.removeItem("tammy_last_search");
+        } catch {
+          /* ignore */
+        }
       }
     } catch {
       /* ignore */
@@ -261,9 +272,10 @@ export default function Hire() {
       const r = await fetch(`/api/candidates?id=${encodeURIComponent(id)}`);
       if (!r.ok) return;
       const j = (await r.json()) as Bundle;
+      const c = (j.candidate ?? {}) as Record<string, any>;
+      if (!c?.id || !c?.full_name) return;
       cache.current[id] = j;
       setBundles((b) => ({ ...b, [id]: j }));
-      const c = (j.candidate ?? {}) as Record<string, any>;
       setResults([
         {
           id,
@@ -304,6 +316,7 @@ export default function Hire() {
 
   async function select(id: string) {
     setSelected(id);
+    setProfileError(null);
     if (cache.current[id]) {
       setBundles((b) => ({ ...b, [id]: cache.current[id] }));
       return;
@@ -311,11 +324,23 @@ export default function Hire() {
     setLoadingProfile(true);
     try {
       const r = await fetch(`/api/candidates?id=${encodeURIComponent(id)}`);
-      if (r.ok) {
-        const j = (await r.json()) as Bundle;
-        cache.current[id] = j;
-        setBundles((b) => ({ ...b, [id]: j }));
+      if (!r.ok) {
+        setProfileError(
+          r.status === 404
+            ? "This profile was deleted or hidden. Pick another match."
+            : "Couldn't load this profile. Check your connection and retry.",
+        );
+        return;
       }
+      const j = (await r.json()) as Bundle;
+      if (!j?.candidate?.id) {
+        setProfileError("This profile came back empty. Pick another match.");
+        return;
+      }
+      cache.current[id] = j;
+      setBundles((b) => ({ ...b, [id]: j }));
+    } catch {
+      setProfileError("Couldn't load this profile. Check your connection and retry.");
     } finally {
       setLoadingProfile(false);
     }
@@ -379,7 +404,15 @@ export default function Hire() {
   }
 
   function rowCard(c: Result, i = 0) {
+    if (!c?.id || !c?.full_name) return null;
     const active = selected === String(c.id);
+    const dot = String(c.full_name)
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0] ?? "")
+      .join("")
+      .toUpperCase();
     return (
       <motion.button
         key={String(c.id)}
@@ -394,7 +427,7 @@ export default function Hire() {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={c.photo_url} alt={c.full_name} />
         ) : (
-          <span className="cand-dot">{String(c.full_name ?? "?").slice(0, 1).toUpperCase()}</span>
+          <span className="cand-dot">{dot || "?"}</span>
         )}
         <span className="cand-main">
           <h4>{c.full_name}</h4>
@@ -620,7 +653,10 @@ export default function Hire() {
         <div ref={resultsRef} style={{ scrollMarginTop: 12 }}>
           <div className="rowline" style={{ marginBottom: 12, justifyContent: "space-between" }}>
             <span className="results-head" style={{ margin: 0 }}>
-              <strong>{results.length} matches</strong> — top fit opened for you
+              <strong>
+                {results.length} match{results.length === 1 ? "" : "es"}
+              </strong>
+              {" "}— top fit opened for you
             </span>
             <button
               className="btn-frame"
@@ -660,6 +696,37 @@ export default function Hire() {
               </div>
               {loadingProfile && !selectedBundle ? (
                 <p className="loading">Loading profile…</p>
+              ) : null}
+              {profileError && !selectedBundle ? (
+                <div className="center" style={{ padding: "60px 24px" }}>
+                  <p style={{ marginBottom: 16 }}>{profileError}</p>
+                  <div className="rowline" style={{ justifyContent: "center" }}>
+                    {selected ? (
+                      <button className="btn-frame btn-green" type="button" onClick={() => void select(selected)}>
+                        <span className="h tl"></span>
+                        <span className="h tr"></span>
+                        <span className="h bl"></span>
+                        <span className="h br"></span>
+                        Retry →
+                      </button>
+                    ) : null}
+                    <button
+                      className="btn-frame"
+                      type="button"
+                      onClick={() => {
+                        setSearched(false);
+                        setSelected(null);
+                        setProfileError(null);
+                      }}
+                    >
+                      <span className="h tl"></span>
+                      <span className="h tr"></span>
+                      <span className="h bl"></span>
+                      <span className="h br"></span>
+                      New search
+                    </button>
+                  </div>
+                </div>
               ) : null}
               {selectedBundle && selectedRow ? (
                 <Portfolio
