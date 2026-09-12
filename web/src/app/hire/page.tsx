@@ -60,6 +60,47 @@ export default function Hire() {
   const [empType, setEmpType] = useState("full-time");
   const [currency, setCurrency] = useState("INR");
   const [deep, setDeep] = useState(false);
+  const [relocation, setRelocation] = useState(false);
+
+  const SUGGESTIONS: { label: string; desc: string; title: string; domain: string; must: string; seniority: string; mode: string }[] = [
+    {
+      label: "Designer · fintech · remote",
+      desc: "Senior product designer for a fintech dashboard — owns flows end-to-end, runs usability tests, ships weekly with React engineers.",
+      title: "Product Designer",
+      domain: "Design",
+      must: "Figma, React, Design Systems",
+      seniority: "senior",
+      mode: "remote",
+    },
+    {
+      label: "Backend · Node/Postgres",
+      desc: "Backend developer for logistics APIs — owns auth, schema design and deployment, realtime tracking with WebSockets and Redis.",
+      title: "Backend Developer",
+      domain: "Software Development",
+      must: "Node.js, PostgreSQL, Redis",
+      seniority: "mid",
+      mode: "remote",
+    },
+    {
+      label: "Design systems lead",
+      desc: "Design systems lead to own tokens, component architecture and workflow surfaces across a web platform.",
+      title: "Design Systems Lead",
+      domain: "Design",
+      must: "Figma, Design Systems",
+      seniority: "lead",
+      mode: "hybrid",
+    },
+  ];
+
+  function useSuggestion(s: (typeof SUGGESTIONS)[number]) {
+    setDesc(s.desc);
+    setTitle(s.title);
+    setDomain(s.domain);
+    setMust(s.must);
+    setSeniority(s.seniority);
+    setMode(s.mode);
+    setError(null);
+  }
 
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -140,6 +181,7 @@ export default function Hire() {
       currency: (currency.trim() || "INR").toUpperCase().slice(0, 3),
       location: location.trim(),
       remote_policy: mode,
+      relocation_allowed: relocation,
       employment_type: empType,
       description,
     };
@@ -156,6 +198,7 @@ export default function Hire() {
     if (typeof job.remote_policy === "string") setMode(job.remote_policy);
     if (typeof job.employment_type === "string") setEmpType(job.employment_type);
     if (typeof job.currency === "string") setCurrency(job.currency);
+    if (typeof job.relocation_allowed === "boolean") setRelocation(job.relocation_allowed);
     if (typeof job.min_exp === "number") setMinExp(job.min_exp);
     if (typeof job.max_exp === "number") setMaxExp(job.max_exp);
     if (typeof job.salary_min === "number") setSalMin(job.salary_min);
@@ -462,33 +505,12 @@ export default function Hire() {
         <div className="chat-hero">
           <h1>Who do you need?</h1>
           <p>Describe the role like you&apos;d say it. Tune the filters, press Enter.</p>
-          <div className="rowline" style={{ marginBottom: 12 }}>
-            <button
-              className="btn-frame"
-              type="button"
-              onClick={() => {
-                setDesc(
-                  "Senior product designer for a fintech dashboard — owns flows end-to-end, works with React engineers, runs usability tests and ships weekly.",
-                );
-                setTitle("Product Designer");
-                setDomain("Design");
-                setSeniority("senior");
-                setMust("Figma, React, Design Systems");
-                setNice("Motion, SQL");
-                setLocation("Bengaluru");
-                setMode("remote");
-                setMinExp(2);
-                setMaxExp(6);
-                setEmpType("full-time");
-                setError(null);
-              }}
-            >
-              <span className="h tl"></span>
-              <span className="h tr"></span>
-              <span className="h bl"></span>
-              <span className="h br"></span>
-              ✨ Autofill test search
-            </button>
+          <div className="suggest-row">
+            {SUGGESTIONS.map((s) => (
+              <button key={s.label} type="button" className="chipbtn" onClick={() => useSuggestion(s)}>
+                ✦ {s.label}
+              </button>
+            ))}
           </div>
           <form onSubmit={search}>
             <div className="chat-box">
@@ -505,11 +527,15 @@ export default function Hire() {
                 <span className="rowline">
                   <button
                     type="button"
-                    className={"chipbtn" + (deep ? " on" : "")}
+                    className="switchrow"
+                    style={{ width: "auto", gap: 8 }}
                     onClick={() => setDeep(!deep)}
                     title="Deep read: the judge reads top profiles fully. Slower, sharper."
                   >
-                    {deep ? "● Deep read" : "○ Deep read"}
+                    <span style={{ fontSize: 12.5 }}>Deep read</span>
+                    <span className={"switch" + (deep ? " on" : "")}>
+                      <span className="thumb" />
+                    </span>
                   </button>
                   <button className="btn-frame btn-green" type="submit" disabled={busy}>
                     <span className="h tl"></span>
@@ -524,17 +550,52 @@ export default function Hire() {
             <div className="filters">
               <div className="field"><label>Role title *</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Product Designer" /></div>
               <div className="field"><label>Domain *</label><input className="input" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="Design" /></div>
-              <div className="field"><label>Seniority</label><select className="select" value={seniority} onChange={(e) => setSeniority(e.target.value)}><option value="intern">Intern</option><option value="junior">Junior</option><option value="mid">Mid</option><option value="senior">Senior</option><option value="lead">Lead</option></select></div>
-              <div className="field"><label>Work mode</label><select className="select" value={mode} onChange={(e) => setMode(e.target.value)}><option value="remote">Remote</option><option value="hybrid">Hybrid</option><option value="onsite">Onsite</option></select></div>
-              <div className="field"><label>Must-have skills *</label><input className="input" value={must} onChange={(e) => setMust(e.target.value)} placeholder="Figma, React" /></div>
-              <div className="field"><label>Nice-to-have</label><input className="input" value={nice} onChange={(e) => setNice(e.target.value)} placeholder="Motion, SQL" /></div>
               <div className="field"><label>Location</label><input className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Bengaluru" /></div>
               <div className="field"><label>Employment</label><select className="select" value={empType} onChange={(e) => setEmpType(e.target.value)}><option value="full-time">Full-time</option><option value="part-time">Part-time</option><option value="contract">Contract</option><option value="internship">Internship</option><option value="freelance">Freelance</option></select></div>
-              <div className="field"><label>Min exp (yrs)</label><input className="input" type="number" min={0} max={50} value={minExp} onChange={(e) => setMinExp(Number(e.target.value))} /></div>
-              <div className="field"><label>Max exp (yrs)</label><input className="input" type="number" min={0} max={50} value={maxExp} onChange={(e) => setMaxExp(Number(e.target.value))} /></div>
-              <div className="field"><label>Salary min</label><input className="input" type="number" min={0} value={salMin} onChange={(e) => setSalMin(Number(e.target.value))} /></div>
-              <div className="field"><label>Salary max (0 = any)</label><input className="input" type="number" min={0} value={salMax} onChange={(e) => setSalMax(Number(e.target.value))} /></div>
-              <div className="field"><label>Currency</label><select className="select" value={currency} onChange={(e) => setCurrency(e.target.value)}><option value="INR">INR</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="AED">AED</option></select></div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <label>Seniority</label>
+                <div className="seg">
+                  {(["intern", "junior", "mid", "senior", "lead"] as const).map((s) => (
+                    <button key={s} type="button" className={seniority === s ? "on" : ""} onClick={() => setSeniority(s)}>
+                      {s[0].toUpperCase() + s.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <label>Work mode</label>
+                <div className="seg">
+                  {(["remote", "hybrid", "onsite"] as const).map((m) => (
+                    <button key={m} type="button" className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
+                      {m[0].toUpperCase() + m.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}><label>Must-have skills *</label><input className="input" value={must} onChange={(e) => setMust(e.target.value)} placeholder="Figma, React" /></div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}><label>Nice-to-have</label><input className="input" value={nice} onChange={(e) => setNice(e.target.value)} placeholder="Motion, SQL" /></div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <div className="f-label"><span>Experience range</span><output>{minExp}–{maxExp} yrs</output></div>
+                <input type="range" className="slider" min={0} max={30} step={1} value={Math.min(minExp, 30)} onChange={(e) => setMinExp(Math.min(Number(e.target.value), maxExp))} aria-label="Minimum experience" />
+                <input type="range" className="slider" min={0} max={30} step={1} value={Math.min(maxExp, 30)} onChange={(e) => setMaxExp(Math.max(Number(e.target.value), minExp))} aria-label="Maximum experience" />
+              </div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <div className="f-label">
+                  <span>Salary range {salMax === 0 ? "(no max)" : ""}</span>
+                  <output>{Number(salMin).toLocaleString()} – {salMax === 0 ? "∞" : Number(salMax).toLocaleString()} {currency}</output>
+                </div>
+                <input type="range" className="slider" min={0} max={1000000} step={25000} value={Math.min(salMin, 1000000)} onChange={(e) => { const v = Number(e.target.value); setSalMin(v); if (salMax !== 0 && salMax < v) setSalMax(v); }} aria-label="Minimum salary" />
+                <input type="range" className="slider" min={0} max={1000000} step={25000} value={Math.min(salMax, 1000000)} onChange={(e) => { const v = Number(e.target.value); setSalMax(salMax !== 0 && v < salMin ? salMin : v); }} aria-label="Maximum salary, 0 means any" />
+                <div className="rowline" style={{ marginTop: 8 }}>
+                  <select className="select" value={currency} onChange={(e) => setCurrency(e.target.value)} style={{ maxWidth: 120 }}>
+                    <option value="INR">INR</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="AED">AED</option>
+                  </select>
+                  <label className="checkrow">
+                    <input type="checkbox" checked={relocation} onChange={(e) => setRelocation(e.target.checked)} />
+                    Open to relocation
+                  </label>
+                </div>
+              </div>
             </div>
           </form>
           {error ? <p className="err" style={{ marginTop: 12 }}>{error}</p> : null}

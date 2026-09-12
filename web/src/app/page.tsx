@@ -150,6 +150,7 @@ export default function Landing() {
           </span>
         </nav>
       </div>
+      <div className="hatch-top" />
 
       <div className="l-page">
         <motion.header
@@ -558,13 +559,87 @@ export default function Landing() {
           </div>
         </section>
 
-        <footer className="l-foot">
-          <span>Tammy · Evidence over buzzwords.</span>
-          <span>
-            <Link href="/start">Candidates</Link> · <Link href="/hire">Employers</Link>
-          </span>
-        </footer>
+        <motion.section
+          className="l-sec"
+          initial={{ opacity: 0, y: 22 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-60px" }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+        >
+          <div className="liquid-emerald-stage l-final">
+            <h2>Give talent a better first impression.</h2>
+            <p>
+              Build your page once and let verified matches come to you — or
+              bring your open role and find the people already doing the work.
+            </p>
+            <div className="l-actions">
+              <Link className="btn-frame inv" href="/start">
+                <span className="h tl"></span>
+                <span className="h tr"></span>
+                <span className="h bl"></span>
+                <span className="h br"></span>
+                Create candidate page →
+              </Link>
+              <Link className="btn-frame inv" href="/hire">
+                <span className="h tl"></span>
+                <span className="h tr"></span>
+                <span className="h bl"></span>
+                <span className="h br"></span>
+                Open sourcing desk
+              </Link>
+            </div>
+          </div>
+        </motion.section>
       </div>
+
+      <footer className="afoot">
+        <div className="afoot-grid">
+          <div className="afoot-brand">
+            <span className="brand">
+              Tammy <small>· Beta</small>
+            </span>
+            <p>
+              One deep portfolio per candidate. Evidence-ranked search for
+              employers. No keyword bingo, no endless applications.
+            </p>
+          </div>
+          <div className="afoot-col">
+            <h5>Candidates</h5>
+            <Link href="/start">Build my page</Link>
+            <Link href="/">Find my page</Link>
+            <Link href="/start">Edit section</Link>
+          </div>
+          <div className="afoot-col">
+            <h5>Employers</h5>
+            <Link href="/hire">Search talent</Link>
+            <Link href="/hire/dash">Dashboard</Link>
+            <Link href="/hire">Deep read</Link>
+          </div>
+          <div className="afoot-col">
+            <h5>Product</h5>
+            <a href="#preview">Live preview</a>
+            <a href="#studio">Studio</a>
+            <a href="#engine">Engine</a>
+          </div>
+          <div className="afoot-col">
+            <h5>Elsewhere</h5>
+            <div className="afoot-social">
+              <a href="/hire" title="Hire">H</a>
+              <a href="/start" title="Join">J</a>
+              <a href="/" title="Top">↑</a>
+            </div>
+          </div>
+        </div>
+        <div className="afoot-meta">
+          <span>© {new Date().getFullYear()} Tammy · Evidence over buzzwords.</span>
+          <span>
+            <Link href="/start">Terms</Link>
+            <Link href="/hire">Privacy</Link>
+          </span>
+        </div>
+        <div className="giant-watermark">TAMMY</div>
+        <div className="hatch-bar" />
+      </footer>
     </div>
   );
 }

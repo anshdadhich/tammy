@@ -516,6 +516,248 @@ a {
   scroll-margin-top: 80px;
 }
 
+/* ---------- liquid emerald + architectural system (landing) ---------- */
+
+:root {
+  --em-deep: #042f22;
+  --em-dark: #064e3b;
+  --em-mid: #059669;
+  --em-vivid: #10b981;
+  --em-mint: rgba(0, 245, 155, 0.4);
+}
+
+.liquid-emerald-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    radial-gradient(ellipse at 85% 15%, rgba(0, 245, 155, 0.4) 0%, transparent 55%),
+    radial-gradient(ellipse at 15% 85%, rgba(4, 47, 34, 0.95) 0%, transparent 65%),
+    linear-gradient(135deg, #064e3b 0%, #047857 40%, #059669 70%, #10b981 100%);
+}
+
+.liquid-emerald-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.8;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    repeating-linear-gradient(60deg, rgba(255, 255, 255, 0.03) 0px, rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 18px);
+  background-size:
+    24px 24px,
+    auto;
+}
+
+.hatch-top {
+  height: 6px;
+  background-image: repeating-linear-gradient(-45deg, #eef4f1 0, #eef4f1 8px, #dde8e2 8px, #dde8e2 16px);
+  border-bottom: 1px solid var(--border);
+}
+
+/* reticle brackets on landing section kickers */
+.l-sec > .section-label::before {
+  content: "[ ";
+  color: var(--accent);
+}
+
+.l-sec > .section-label::after {
+  content: " ]";
+  color: var(--accent);
+}
+
+/* final CTA emerald panel */
+.l-final {
+  margin-bottom: 0;
+  padding: 56px 32px;
+  text-align: center;
+  color: #fff;
+}
+
+.l-final > * {
+  position: relative;
+  z-index: 1;
+}
+
+.l-final h2 {
+  font-size: clamp(26px, 4vw, 38px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 10px;
+}
+
+.l-final p {
+  font-size: 14.5px;
+  opacity: 0.85;
+  max-width: 520px;
+  margin: 0 auto 24px;
+  line-height: 1.65;
+}
+
+.l-final .l-actions {
+  margin-bottom: 0;
+}
+
+.btn-frame.inv {
+  background: transparent;
+  border-color: #fff;
+  color: #fff;
+}
+
+.btn-frame.inv:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-frame.inv .h {
+  background: transparent;
+  border-color: #fff;
+}
+
+/* architectural monolithic footer */
+.afoot {
+  border-top: 1px solid var(--border);
+  background: #fff;
+}
+
+.afoot-grid {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 44px 20px 28px;
+  display: grid;
+  grid-template-columns: 1.8fr 1fr 1fr 1fr 1fr;
+  gap: 24px;
+}
+
+.afoot-brand p {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  max-width: 280px;
+  margin-top: 10px;
+  line-height: 1.6;
+}
+
+.afoot-col h5 {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-light);
+  margin-bottom: 10px;
+}
+
+.afoot-col a {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 3px 0;
+}
+
+.afoot-col a:hover {
+  color: var(--accent);
+}
+
+.afoot-social {
+  display: flex;
+  gap: 8px;
+}
+
+.afoot-social a {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.afoot-meta {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-light);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.afoot-meta a {
+  color: var(--text-muted);
+  text-decoration: none;
+  margin-left: 14px;
+}
+
+.giant-watermark {
+  font-weight: 900;
+  line-height: 0.88;
+  letter-spacing: -0.05em;
+  text-align: center;
+  font-size: clamp(4.5rem, 15vw, 13.5rem);
+  background: linear-gradient(135deg, #042f22 0%, #059669 45%, #10b981 80%, #6ee7b7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  padding: 10px 0 0;
+}
+
+.hatch-bar {
+  height: 32px;
+  background-image: repeating-linear-gradient(-45deg, #f4f8f6 0, #f4f8f6 8px, #e3ece7 8px, #e3ece7 16px);
+  border-top: 1px solid var(--border);
+}
+
+/* ---------- HR chatbot filter controls ---------- */
+
+.suggest-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.checkrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkrow input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.f-label {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.f-label output {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .afoot-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 /* ---------- landing sections (problem/studio/engine/flow/dossier/trust) ---------- */
 
 .l-sec {
