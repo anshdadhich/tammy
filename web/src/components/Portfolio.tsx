@@ -798,9 +798,9 @@ export default function Portfolio({
         {/* 8d. OWNER */}
         {mode === "public" && isOwner ? (
           <div className="pf-sec">
-            <div className="pf-sec-head">
-              <span className="pf-sec-title">Owner dashboard</span>
-              <span className="pf-sec-sub">only you see this</span>
+            <div className="liquid-emerald-stage owner-head">
+              <span>Owner dashboard</span>
+              <span>only you see this</span>
             </div>
             <div className="owner-panel">
               <div className="rowline" style={{ flexWrap: "wrap" }}>

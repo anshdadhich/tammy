@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import Portfolio, { type Bundle } from "@/components/Portfolio";
+import SkillPicker from "@/components/SkillPicker";
 
 type Result = Record<string, any>;
 
@@ -470,7 +471,7 @@ export default function Hire() {
             <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="priya@company.com" />
           </div>
           <div className="rowline" style={{ flexWrap: "wrap" }}>
-          <button className="btn-frame btn-green" type="submit">
+          <button className="btn-frame solid" type="submit">
             <span className="h tl"></span>
             <span className="h tr"></span>
             <span className="h bl"></span>
@@ -570,7 +571,7 @@ export default function Hire() {
                       <span className="thumb" />
                     </span>
                   </button>
-                  <button className="btn-frame btn-green" type="submit" disabled={busy}>
+                  <button className="btn-frame solid" type="submit" disabled={busy}>
                     <span className="h tl"></span>
                     <span className="h tr"></span>
                     <span className="h bl"></span>
@@ -605,20 +606,26 @@ export default function Hire() {
                   ))}
                 </div>
               </div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}><label>Must-have skills *</label><input className="input" value={must} onChange={(e) => setMust(e.target.value)} placeholder="Figma, React" /></div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}><label>Nice-to-have</label><input className="input" value={nice} onChange={(e) => setNice(e.target.value)} placeholder="Motion, SQL" /></div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <label>Must-have skills * — recognized names, so ranking stays clean</label>
+                <SkillPicker value={csv(must)} onChange={(a) => setMust(a.join(", "))} placeholder="Search must-have skills…" />
+              </div>
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <label>Nice-to-have</label>
+                <SkillPicker value={csv(nice)} onChange={(a) => setNice(a.join(", "))} placeholder="Search nice-to-have skills…" />
+              </div>
               <div className="field" style={{ gridColumn: "1 / -1" }}>
                 <div className="f-label"><span>Experience range</span><output>{minExp}–{maxExp} yrs</output></div>
-                <input type="range" className="slider" min={0} max={30} step={1} value={Math.min(minExp, 30)} onChange={(e) => setMinExp(Math.min(Number(e.target.value), maxExp))} aria-label="Minimum experience" />
-                <input type="range" className="slider" min={0} max={30} step={1} value={Math.min(maxExp, 30)} onChange={(e) => setMaxExp(Math.max(Number(e.target.value), minExp))} aria-label="Maximum experience" />
+                <div className="dual"><span>Min</span><input type="range" className="slider" min={0} max={Math.max(30, minExp, maxExp)} step={1} value={Math.min(minExp, Math.max(30, minExp, maxExp))} onChange={(e) => setMinExp(Math.min(Number(e.target.value), maxExp))} aria-label="Minimum experience" /></div>
+                <div className="dual"><span>Max</span><input type="range" className="slider" min={0} max={Math.max(30, minExp, maxExp)} step={1} value={Math.min(maxExp, Math.max(30, minExp, maxExp))} onChange={(e) => setMaxExp(Math.max(Number(e.target.value), minExp))} aria-label="Maximum experience" /></div>
               </div>
               <div className="field" style={{ gridColumn: "1 / -1" }}>
                 <div className="f-label">
                   <span>Salary range {salMax === 0 ? "(no max)" : ""}</span>
                   <output>{Number(salMin).toLocaleString()} – {salMax === 0 ? "∞" : Number(salMax).toLocaleString()} {currency}</output>
                 </div>
-                <input type="range" className="slider" min={0} max={1000000} step={25000} value={Math.min(salMin, 1000000)} onChange={(e) => { const v = Number(e.target.value); setSalMin(v); if (salMax !== 0 && salMax < v) setSalMax(v); }} aria-label="Minimum salary" />
-                <input type="range" className="slider" min={0} max={1000000} step={25000} value={Math.min(salMax, 1000000)} onChange={(e) => { const v = Number(e.target.value); setSalMax(salMax !== 0 && v < salMin ? salMin : v); }} aria-label="Maximum salary, 0 means any" />
+                <div className="dual"><span>Min</span><input type="range" className="slider" min={0} max={Math.max(1000000, salMin, salMax)} step={25000} value={Math.min(salMin, Math.max(1000000, salMin, salMax))} onChange={(e) => { const v = Number(e.target.value); setSalMin(v); if (salMax !== 0 && salMax < v) setSalMax(v); }} aria-label="Minimum salary" /></div>
+                <div className="dual"><span>Max</span><input type="range" className="slider" min={0} max={Math.max(1000000, salMin, salMax)} step={25000} value={Math.min(salMax, Math.max(1000000, salMin, salMax))} onChange={(e) => { const v = Number(e.target.value); setSalMax(salMax !== 0 && v < salMin ? salMin : v); }} aria-label="Maximum salary, 0 means any" /></div>
                 <div className="rowline" style={{ marginTop: 8 }}>
                   <select className="select" value={currency} onChange={(e) => setCurrency(e.target.value)} style={{ maxWidth: 120 }}>
                     <option value="INR">INR</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="AED">AED</option>
@@ -793,7 +800,7 @@ export default function Hire() {
               <button className="btn-plain" type="button" onClick={() => setContactFor(null)}>
                 Cancel
               </button>
-              <button className="btn-frame btn-green" type="button" onClick={sendContact} disabled={!message.trim()}>
+              <button className="btn-frame solid" type="button" onClick={sendContact} disabled={!message.trim()}>
                 <span className="h tl"></span>
                 <span className="h tr"></span>
                 <span className="h bl"></span>

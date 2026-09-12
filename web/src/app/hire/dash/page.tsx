@@ -154,25 +154,24 @@ export default function HireDashboard() {
         </span>
       </div>
 
-      <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 4 }}>
-        Your desk, {hr.name.split(" ")[0]}.
-      </h1>
-      <p style={{ fontSize: 13.5, color: "var(--text-muted)", marginBottom: 20 }}>
-        Shortlists, past searches and outreach — everything you did, one place.
-      </p>
-
-      <div className="dashstats">
-        <div className="form-card" style={{ marginBottom: 0 }}>
-          <p className="section-label">Shortlisted</p>
-          <h3 style={{ fontSize: 26 }}>{shorts.length}</h3>
+      <div className="liquid-emerald-stage dash-hero">
+        <div>
+          <h1>Your desk, {hr.name.split(" ")[0]}.</h1>
+          <p>Shortlists, past searches and outreach — everything you did, one place.</p>
         </div>
-        <div className="form-card" style={{ marginBottom: 0 }}>
-          <p className="section-label">Searches run</p>
-          <h3 style={{ fontSize: 26 }}>{searches.length}</h3>
-        </div>
-        <div className="form-card" style={{ marginBottom: 0 }}>
-          <p className="section-label">Candidates contacted</p>
-          <h3 style={{ fontSize: 26 }}>{contacts.length}</h3>
+        <div className="dashstats">
+          <div className="stat">
+            <p>Shortlisted</p>
+            <h3>{shorts.length}</h3>
+          </div>
+          <div className="stat">
+            <p>Searches run</p>
+            <h3>{searches.length}</h3>
+          </div>
+          <div className="stat">
+            <p>Contacted</p>
+            <h3>{contacts.length}</h3>
+          </div>
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { CANONICAL_SKILLS } from "@/lib/skills";
+import SkillPicker from "./SkillPicker";
 
 export type FormState = {
   name: string;
@@ -491,7 +491,6 @@ export default function CandidateForm({
   const [f, setF] = useState<FormState>(initial ?? blankForm());
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
-  const [skillDraft, setSkillDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(isEdit);
@@ -610,13 +609,6 @@ export default function CandidateForm({
     }
   }
 
-  function addSkill(v: string) {
-    const t = v.trim();
-    if (t && !f.skills.some((s) => s.toLowerCase() === t.toLowerCase())) {
-      set("skills", [...f.skills, t]);
-    }
-  }
-
   const reviewRows: [string, string][] = [
     ["Name", f.name || "—"],
     ["Email", f.email || "—"],
@@ -711,41 +703,10 @@ export default function CandidateForm({
               </div>
               <div className="field"><label>Headline</label><input className="input" value={f.headline} onChange={(e) => set("headline", e.target.value)} placeholder="Product designer, building in code." /></div>
               <div className="field"><label>Domain *</label><input className="input" value={f.domain} onChange={(e) => set("domain", e.target.value)} placeholder="Design" /></div>
-              <Slider label="Years of experience" value={f.exp} display={`${f.exp} yrs`} min={0} max={50} step={1} onChange={(v) => set("exp", v)} />
+              <Slider label="Years of experience" value={f.exp} display={`${f.exp} yrs`} min={0} max={Math.max(30, f.exp)} step={1} onChange={(v) => set("exp", v)} />
               <div className="field">
-                <label>Skills * — tap suggestions or type your own</label>
-                <div className="chips" style={{ marginBottom: 10 }}>
-                  {CANONICAL_SKILLS.filter((s) => !f.skills.some((x) => x.toLowerCase() === s.toLowerCase())).slice(0, 18).map((s) => (
-                    <button key={s} type="button" className="chipbtn" onClick={() => addSkill(s)}>+ {s}</button>
-                  ))}
-                </div>
-                <div className="rowline">
-                  <input
-                    className="input"
-                    value={skillDraft}
-                    onChange={(e) => setSkillDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addSkill(skillDraft);
-                        setSkillDraft("");
-                      }
-                    }}
-                    placeholder="Type a skill, Enter to add"
-                  />
-                  <button type="button" className="btn-frame" onClick={() => { addSkill(skillDraft); setSkillDraft(""); }}>
-                    <span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>
-                    Add
-                  </button>
-                </div>
-                <div className="chips">
-                  {f.skills.map((s) => (
-                    <span className="chip" key={s}>
-                      {s}
-                      <button type="button" onClick={() => set("skills", f.skills.filter((x) => x !== s))} aria-label={`remove ${s}`}>×</button>
-                    </span>
-                  ))}
-                </div>
+                <label>Skills * — recognized names only, so matching stays clean</label>
+                <SkillPicker value={f.skills} onChange={(v) => set("skills", v)} />
               </div>
             </div>
           )}
@@ -896,7 +857,7 @@ export default function CandidateForm({
                 value={f.min_salary}
                 display={f.min_salary > 0 ? `${Number(f.min_salary).toLocaleString()} ${f.currency}/${f.frequency}` : "Open / negotiable"}
                 min={0}
-                max={1000000}
+                max={Math.max(1000000, f.min_salary)}
                 step={10000}
                 onChange={(v) => set("min_salary", v)}
               />
@@ -958,7 +919,7 @@ export default function CandidateForm({
             Continue →
           </button>
         ) : (
-          <button type="button" className="btn-frame btn-green" onClick={submit} disabled={busy}>
+          <button type="button" className="btn-frame solid" onClick={submit} disabled={busy}>
             <span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>
             {busy ? "Saving…" : submitLabel}
           </button>
