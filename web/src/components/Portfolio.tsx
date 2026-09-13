@@ -798,7 +798,7 @@ export default function Portfolio({
         {/* 8d. OWNER */}
         {mode === "public" && isOwner ? (
           <div className="pf-sec">
-            <div className="liquid-emerald-stage owner-head">
+            <div className="owner-head">
               <span>Owner dashboard</span>
               <span>only you see this</span>
             </div>
