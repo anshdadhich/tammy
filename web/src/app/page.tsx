@@ -1,510 +1,913 @@
-"use client"
+"use client";
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+} from "lucide-react";
+import DitherEffect from "@/components/DitherEffect";
+import AppNav from "@/components/AppNav";
+import BeamButton from "@/components/BeamButton";
+import { AnimatePresence, motion } from "motion/react";
+import { getSession } from "@/lib/session";
 
-/* ═══════════════════════════════════════════════════════════════
-   COUNT-UP HOOK
-   ═══════════════════════════════════════════════════════════════ */
-function useCountUp(target: number, duration = 900, active = true) {
-  const [val, setVal] = useState(0)
-  useEffect(() => {
-    if (!active) { setVal(0); return }
-    let raf: number
-    const start = performance.now()
-    const step = (now: number) => {
-      const p = Math.min(1, (now - start) / duration)
-      const ease = 1 - Math.pow(1 - p, 3)
-      setVal(Math.round(target * ease))
-      if (p < 1) raf = requestAnimationFrame(step)
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [target, duration, active])
-  return val
-}
+/* ─── Data ─── */
 
-/* ═══════════════════════════════════════════════════════════════
-   STUDIO CHIPS DATA
-   ═══════════════════════════════════════════════════════════════ */
-const STUDIO_CHIPS = [
-  { label: "Design Systems", active: true },
-  { label: "0→1 Products", active: true },
-  { label: "User Research", active: true },
-  { label: "Figma", active: true },
-  { label: "Prototyping", active: false },
-  { label: "B2B SaaS", active: false },
-]
+const CHECKLIST_STEPS = [
+  "Parse brief",
+  "Embed query",
+  "Hybrid retrieval",
+  "Score 5 dimensions",
+  "Deep Read judge",
+  "Unlock contact",
+];
 
-/* ═══════════════════════════════════════════════════════════════
-   PIPELINE STAGES
-   ═══════════════════════════════════════════════════════════════ */
+const FAQS = [
+  {
+    q: "How is Tammy fundamentally different from LinkedIn or standard job boards?",
+    a: "Traditional boards incentivize candidates to spam 200 keyword-stuffed resumes into black-box ATS filters. On Tammy, you build a single, comprehensive engineering record backed by concrete artifacts (PRs, benchmarks, architecture decisions). Employers search semantically for what you built, and reach out directly with verified context.",
+  },
+  {
+    q: "Can my current employer see that I have an active profile on Tammy?",
+    a: "No. You can block specific domain names, corporate entities, or current employers with a single toggle. Additionally, there is no public candidate listing; only accredited, vetted hiring teams running calibrated searches can query indexed candidate signals.",
+  },
+  {
+    q: 'What is the "Deep Read Judge" and how are scores formed?',
+    a: "The Deep Read Judge is a structured reasoning model that inspects technical contributions across 5 distinct axes: system scale, architectural depth, operational evidence, verified metrics, and verified seniority. It does not output a mysterious vanity score—it gives the hiring manager written exhibits and specific suggested questions.",
+  },
+  {
+    q: "Is Tammy completely free for engineers and builders?",
+    a: "Yes, 100% free forever for candidates. Tammy monetizes strictly on the employer side through search subscriptions and successful placement guarantees. We never charge candidates for visibility, priority indexing, or unlocking offers.",
+  },
+];
+
 const PIPELINE = [
-  { stage: "01", weight: "PASS/FAIL", name: "Hard Filters", desc: "Location & work permit check.", width: 100, color: "var(--emerald)" },
-  { stage: "02", weight: "WT 50%", name: "Skills Overlap", desc: "Required craft signal overlap.", width: 92, color: "var(--blue)" },
-  { stage: "03", weight: "WT 25%", name: "Domain Context", desc: "Startup velocity & complexity.", width: 85, color: "var(--amber)" },
-  { stage: "04", weight: "WT 25%", name: "Logistics Fit", desc: "Availability & timezone.", width: 95, color: "#71717a" },
-]
+  {
+    n: "01",
+    nClass: "text-[#1F2DE6]",
+    title: "Filter",
+    desc: "Hard constraints, availability, and compensation requirements.",
+    fill: "88%",
+    fillBg: "#1F2DE6",
+  },
+  {
+    n: "02",
+    nClass: "text-purple-600",
+    title: "Vectors",
+    desc: "Every meaningful project chunk becomes semantically searchable.",
+    fill: "74%",
+    fillBg: "#1F2DE6",
+  },
+  {
+    n: "03",
+    nClass: "text-orange-600",
+    title: "Score",
+    desc: "Depth of technical contribution and evidence credibility.",
+    fill: "91%",
+    fillBg: "#ea580c",
+  },
+  {
+    n: "04",
+    nClass: "text-green-600",
+    title: "Judge",
+    desc: "Evaluates fit, flags gaps, and calibrates interview questions.",
+    fill: "82%",
+    fillBg: "#16a34a",
+  },
+];
 
-/* ═══════════════════════════════════════════════════════════════
-   CANDIDATES
-   ═══════════════════════════════════════════════════════════════ */
-const CANDIDATES = [
-  { name: "Maya Chen", role: "Senior Product Designer · Berlin · Available Now", img: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80", tags: ["Design Systems", "0→1 Products", "Figma"], score: 94 },
-  { name: "Noah Williams", role: "Product Designer & Systems Architect · London", img: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&q=80", tags: ["Figma Systems", "Fintech"], score: 89 },
-  { name: "Sarah Kim", role: "Product Strategist & UI Lead · Toronto", img: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80", tags: ["SaaS UX", "Prototyping"], score: 86 },
-]
+const DISCOVERY = [
+  {
+    n: "01",
+    dot: "bg-[#1F2DE6]",
+    title: "Describe",
+    desc: '"Senior backend engineer who has shipped distributed systems."',
+  },
+  {
+    n: "02",
+    dot: "bg-purple-600",
+    title: "Search",
+    desc: "Relevant experience and project chunks are retrieved.",
+  },
+  {
+    n: "03",
+    dot: "bg-orange-600",
+    title: "Evaluate",
+    desc: "Evidence depth and verified metrics shape candidate ranking.",
+  },
+  {
+    n: "04",
+    dot: "bg-green-600",
+    title: "Understand",
+    desc: "Verdicts, exhibits, gaps, and calibrated questions.",
+  },
+  {
+    n: "05",
+    dot: "bg-pink-600",
+    title: "Contact",
+    desc: "Reach out directly with full audit-logging on both sides.",
+  },
+];
 
-/* ═══════════════════════════════════════════════════════════════
-   FAQ DATA
-   ═══════════════════════════════════════════════════════════════ */
-const FAQ = [
-  { q: "How does Tammy rank candidates?", a: "Tammy uses a four-stage match engine: hard filters (location, work permit), skills overlap (weighted 50%), domain context (25%), and logistics fit (25%). Every score shows what counted and what was missing — no black boxes." },
-  { q: "Is my profile visible publicly?", a: "No. There is no public searchable directory. Profiles are discoverable solely through targeted recruiter searches. You control visibility and can unpublish or delete your profile at any time." },
-  { q: "What happens after I build my profile?", a: "Your structured profile becomes your single source of truth. When a recruiter describes a role they need, Tammy surfaces your profile as a ranked match — with evidence for why you scored where you did." },
-  { q: "Can I edit my profile after publishing?", a: "Yes. Changes propagate across recruiter indexes immediately. Update your skills, availability, or project evidence anytime — the match engine re-ranks in real time." },
-]
+/* ─── Scroll-reveal wrapper ─── */
 
-/* ═══════════════════════════════════════════════════════════════
-   SVG ICONS
-   ═══════════════════════════════════════════════════════════════ */
-const ChevronDown = ({ className }: { className?: string }) => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={className}>
-    <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-)
+function Reveal({
+  className = "",
+  stagger = 0,
+  children,
+}: {
+  className?: string;
+  stagger?: number;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
 
-/* ═══════════════════════════════════════════════════════════════
-   MAIN PAGE
-   ═══════════════════════════════════════════════════════════════ */
-export default function LandingPage() {
-  /* --- Live Demo Toggle --- */
-  const [demoActive, setDemoActive] = useState(true)
-  const [poolCount, setPoolCount] = useState(16)
-  const [studioChips, setStudioChips] = useState(STUDIO_CHIPS.map(c => c.active))
-
-  /* --- Count-ups (tied to demo toggle) --- */
-  const hero1 = useCountUp(94, 900, demoActive)
-  const hero2 = useCountUp(89, 900, demoActive)
-  const hero3 = useCountUp(86, 900, demoActive)
-  const dossierScore = useCountUp(94, 1000, demoActive)
-
-  /* --- SVG Ring --- */
-  const RING_CIRCUMFERENCE = 163.4
-  const ringOffset = demoActive ? RING_CIRCUMFERENCE * (1 - 94 / 100) : RING_CIRCUMFERENCE
-
-  /* --- Pool ticker --- */
   useEffect(() => {
-    const iv = setInterval(() => {
-      setPoolCount(14 + Math.floor(Math.random() * 5))
-    }, 4000)
-    return () => clearInterval(iv)
-  }, [])
-
-  /* --- Studio chip toggle --- */
-  const toggleChip = useCallback((i: number) => {
-    setStudioChips(prev => prev.map((v, idx) => idx === i ? !v : v))
-  }, [])
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            obs.unobserve(entry.target);
+          }
+        });
+      },
+      { root: null, rootMargin: "0px 0px -70px 0px", threshold: 0.1 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   return (
-    <>
-      {/* ─── TOP NAV ─── */}
-      <div className="nav-wrap">
-        <div className="page">
-          <nav className="nav">
-            <a href="#" className="brand">
-              <div className="brand-mark">TW</div>
-              Tammy
-            </a>
+    <div ref={ref} className={`reveal-blur ${stagger ? `stagger-${stagger}` : ""} ${className}`}>
+      {children}
+    </div>
+  );
+}
 
-            <div className="nav-links">
-              <a href="#problem">The Problem</a>
-              <a href="#studio">Profile Studio</a>
-              <a href="#matching">Match Engine</a>
-              <a href="#desk">Sourcing Desk</a>
+/* ─── Trace fill bar (animates when visible) ─── */
+
+function TraceFill({ width, bg }: { width: string; bg: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const fill = entry.target.querySelector(".trace-fill") as HTMLElement | null;
+            if (fill) setTimeout(() => (fill.style.width = width), 120);
+            obs.unobserve(entry.target);
+          }
+        });
+      },
+      { root: null, rootMargin: "0px 0px -70px 0px", threshold: 0.1 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [width]);
+
+  return (
+    <div ref={ref} className="trace-rule">
+      <div className="trace-fill" style={{ background: bg }} />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+
+export default function Landing() {
+  const router = useRouter();
+  const [statuses, setStatuses] = useState<string[]>(() =>
+    CHECKLIST_STEPS.map((_, i) => (i < 3 ? "done" : i === 3 ? "running" : "queued")),
+  );
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [matchMode, setMatchMode] = useState<"describe" | "search" | "deep">("search");
+  const runningRef = useRef(false);
+
+  // Recruiter home is /hire — logged-in employers skip the landing page.
+  useEffect(() => {
+    try {
+      if (getSession().kind === "hr") router.replace("/hire");
+    } catch {
+      /* ignore */
+    }
+  }, [router]);
+
+  const MATCH_COPY = {
+    describe: {
+      title: "Describe the role, not a query.",
+      desc: "Write how you'd brief a teammate — stack, scope, constraints, and seniority. No Boolean gymnastics. Tammy parses intent, not keywords, and surfaces evidence that matches meaning.",
+    },
+    search: {
+      title: "It explains every score.",
+      desc: "Semantic fit, skill evidence, project depth, constraints and seniority — each weighed from what people actually built, not what they claimed. Every value is real and inspectable, so what lands is a shortlist, not a guess.",
+    },
+    deep: {
+      title: "Deep Read judges the evidence.",
+      desc: "For the top profiles, the judge reads full context — written exhibits, gaps, and risks — then calibrates interview questions. Slower, sharper, and audit-logged so hiring stays accountable.",
+    },
+  } as const;
+
+  const runChecklist = useCallback(() => {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    setStatuses(CHECKLIST_STEPS.map(() => "queued"));
+    let i = 0;
+    const timer = setInterval(() => {
+      i++;
+      setStatuses(
+        CHECKLIST_STEPS.map((_, j) =>
+          j < i ? "done" : j === i ? "running" : "queued",
+        ),
+      );
+      if (i >= CHECKLIST_STEPS.length) {
+        clearInterval(timer);
+        runningRef.current = false;
+      }
+    }, 380);
+  }, []);
+
+  return (
+    <div className="relative min-h-screen bg-paper text-ink antialiased selection:bg-[#1F2DE6] selection:text-white">
+      {/* Vertical guidelines */}
+      <div className="g-v g-v-l hidden lg:block" />
+      <div className="g-v g-v-r hidden lg:block" />
+
+      {/* ================= HEADER ================= */}
+      <AppNav />
+
+      {/* ================= HERO ================= */}
+      <section id="top" className="relative pt-16 pb-20 overflow-hidden">
+        <i className="g-handle pos-tl hidden lg:block" />
+        <i className="g-handle pos-tr hidden lg:block" />
+
+        <div className="max-w-[1160px] mx-auto px-6">
+          <Reveal className="mb-14">
+            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.06] text-ink">
+              Candidates don&apos;t apply.
+              <br />
+              Employers discover them.
+            </h1>
+            <div className="flex flex-wrap items-center gap-3 mt-7">
+              <BeamButton>
+                <Link
+                  href="/start"
+                  className="press rounded-lg bg-[#1F2DE6] hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 shadow-sm inline-block"
+                >
+                  Build my page
+                </Link>
+              </BeamButton>
+              <Link
+                href="/hire"
+                className="press rounded-lg bg-white border border-slate-300 hover:border-slate-400 text-sm font-semibold px-5 py-2.5 flex items-center gap-1.5 shadow-sm"
+              >
+                I&apos;m hiring <ArrowRight className="w-4 h-4 text-slate-500" aria-hidden="true" />
+              </Link>
             </div>
+          </Reveal>
 
-            <div className="nav-right">
-              <div className="pool-ticker">
-                <span className="ticker-dot" />
-                <span>{poolCount} live profiles</span>
-              </div>
-              <a href="#studio" className="btn btn-dark">Build a profile</a>
-            </div>
-          </nav>
-        </div>
-      </div>
+          <div className="grid lg:grid-cols-5 gap-10 lg:gap-14 items-start">
+            {/* Dither panel with checklist */}
+            <Reveal className="lg:col-span-3 relative" stagger={1}>
+              <i className="g-handle -top-1 -left-1" />
+              <i className="g-handle -top-1 -right-1" />
+              <i className="g-handle -bottom-1 -left-1" />
+              <i className="g-handle -bottom-1 -right-1" />
 
-      <main className="page">
-
-        {/* ─── HERO ─── */}
-        <section className="hero">
-          <div className="hero-badge">A verified signal layer for hiring</div>
-
-          <h1>
-            Meet the person<br />
-            <span>behind the resume.</span>
-          </h1>
-
-          <p className="hero-sub">
-            Give candidates a living profile showing how they actually work. Describe the role you need, and surface a shortlist ranked by real evidence — not keyword fluff.
-          </p>
-
-          <div className="hero-actions">
-            <a href="#studio" className="btn btn-emerald btn-lg">Build your profile ↗</a>
-            <a href="#matching" className="btn btn-outline btn-lg">Find candidates</a>
-
-            <div
-              className="live-demo-control"
-              onClick={() => setDemoActive(v => !v)}
-              title="Click to see live matching in action"
-            >
-              <span>Live match preview</span>
-              <div className={`switch-track ${demoActive ? "active" : ""}`}>
-                <div className="switch-thumb" />
-              </div>
-            </div>
-          </div>
-
-          {/* ─── HERO DASHBOARD PREVIEW ─── */}
-          <div className="dashboard-preview">
-            <div className="dash-topbar">
-              <div className="window-pills">
-                <div className="w-dot" /><div className="w-dot" /><div className="w-dot" />
-              </div>
-              <div className="dash-status">Sourcing Desk · Live extraction active</div>
-            </div>
-
-            <div className="dash-body">
-              <div className="dash-sidebar">
-                <div className="role-header-badge">Active Job Query</div>
-                <div className="role-title">Staff Product Designer</div>
-                <div className="role-tags-list">
-                  <span className="tag-chip match">Figma</span>
-                  <span className="tag-chip match">Design Systems</span>
-                  <span className="tag-chip match">0→1 Products</span>
-                  <span className="tag-chip">B2B SaaS</span>
-                  <span className="tag-chip">Remote OK</span>
+              <div className="relative bg-[#1F2DE6] p-8 sm:p-12 overflow-hidden shadow-md">
+                <div className="absolute inset-0">
+                  <DitherEffect colorFront="#1F2DE6" colorBack="#ffffff" scale={0.8} className="dither-soft" />
                 </div>
 
-                <div className="sidebar-metric-box">
-                  <div className="metric-row"><span>Candidate Pool</span><b>96 verified</b></div>
-                  <div className="metric-row"><span>Hard Exclusions</span><b>12 applied</b></div>
-                  <div className="metric-row"><span>Ranking Mode</span><b>Evidence-weighted</b></div>
-                </div>
-              </div>
-
-              <div className="dash-content">
-                <div className="results-heading-row">
-                  <span><strong>Ranked Shortlist</strong> (3 top matches)</span>
-                  <span style={{ color: "var(--muted)", fontSize: "11.5px" }}>Click demo switch to test replay</span>
-                </div>
-
-                <div className="candidate-card-list">
-                  {CANDIDATES.map((c, i) => (
-                    <div className="candidate-mini-card" key={c.name}>
-                      <div className="cand-person">
-                        <img className="cand-img" src={c.img} alt={c.name} />
-                        <div>
-                          <div className="cand-name">{c.name}</div>
-                          <div className="cand-sub">{c.role}</div>
-                          <div className="cand-pills">
-                            {c.tags.map(t => (
-                              <span className="tag-chip match" key={t}>{t}</span>
-                            ))}
-                          </div>
+                <div className="relative rounded-lg bg-[#F4F5F7] shadow-lg px-6 py-6 sm:px-8 sm:py-7 border border-white/60">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mb-4 font-mono">
+                    <span>MATCHING YOUR BRIEF</span>
+                    <span className="text-[#1F2DE6] flex items-center gap-1.5 font-sans font-medium">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#1F2DE6] pulse-dot" /> Active query
+                    </span>
+                  </div>
+                  <div className="space-y-3">
+                    {CHECKLIST_STEPS.map((label, i) => {
+                      const s = statuses[i];
+                      return (
+                        <div key={label} className="flex items-center justify-between">
+                          <span className={`flex items-center gap-2.5 text-[13px] ${s === "queued" ? "text-slate-400" : "text-slate-800"}`}>
+                            {s === "done" ? (
+                              <Check className="w-3.5 h-3.5 text-[#1F2DE6]" aria-hidden="true" />
+                            ) : s === "running" ? (
+                              <span className="w-2 h-2 rounded-full bg-[#1F2DE6] pulse-dot inline-block" />
+                            ) : (
+                              <span className="w-2 h-2 rounded-full border border-slate-300 inline-block" />
+                            )}
+                            {label}
+                          </span>
+                          {s === "done" ? (
+                            <span className="font-mono text-[11px] text-slate-400">done</span>
+                          ) : s === "running" ? (
+                            <span className="font-mono text-[11px] text-[#1F2DE6]">running…</span>
+                          ) : (
+                            <span className="font-mono text-[11px] text-slate-300">queued</span>
+                          )}
                         </div>
-                      </div>
-                      <div className="cand-fit-score">
-                        {[hero1, hero2, hero3][i]}%
-                        <span>Fit Score</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── 01 THE PROBLEM ─── */}
-        <section className="section" id="problem">
-          <div className="section-head">
-            <div className="section-kicker">01 / The Problem</div>
-            <h2 className="section-title">Hiring runs on the wrong inputs.</h2>
-            <p className="section-desc">
-              Candidates spend hours rewriting resumes to pass keyword filters. Recruiters read rehearsed bullet points rather than verified project evidence.
-            </p>
-          </div>
-
-          <div className="problem-grid">
-            <div className="p-card">
-              <div className="p-tag">The Broken Loop</div>
-              <h3>Apply. Reformat. Disappear.</h3>
-              <p>Every job application demands a different format. Highly skilled builders get filtered out by naive text parsers before a human ever reviews their craft.</p>
-              <div className="app-preview-strip">
-                <div className="strip-row"><span>Application #184 · Staff Designer</span><span style={{ color: "var(--muted)" }}>Awaiting review</span></div>
-                <div className="strip-row" style={{ opacity: 0.7 }}><span>Application #183 · Systems Lead</span><span style={{ color: "var(--amber)" }}>Filtered out</span></div>
-                <div className="strip-row" style={{ opacity: 0.4 }}><span>Application #182 · Senior Designer</span><span style={{ color: "var(--muted)" }}>Unread</span></div>
-              </div>
-            </div>
-
-            <div className="p-card highlight">
-              <div className="p-tag">Tammy Engine</div>
-              <h3>Prove it once. Match repeatedly.</h3>
-              <p>One structured profile containing verifiable skills, actual project deliverables, and honest working styles becomes your single source of truth.</p>
-              <div className="app-preview-strip">
-                <div className="strip-row" style={{ background: "#fff" }}><span>Verified Craft Signals</span><b style={{ color: "var(--emerald)" }}>100% Extracted</b></div>
-                <div className="strip-row" style={{ background: "#fff" }}><span>Candidate Context Match</span><b style={{ color: "var(--emerald)" }}>Transparent</b></div>
-                <div className="strip-row" style={{ background: "#fff" }}><span>Direct Hiring Conversations</span><b style={{ color: "var(--emerald)" }}>Active</b></div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── 02 PROFILE STUDIO ─── */}
-        <section className="section" id="studio">
-          <div className="section-head">
-            <div className="section-kicker">02 / Profile Studio</div>
-            <h2 className="section-title">Fill it in once. Watch it render.</h2>
-            <p className="section-desc">
-              Answer a few structured prompts about your projects and conditions. Click tags below to toggle skills live in your public card:
-            </p>
-          </div>
-
-          <div className="studio-box">
-            <div className="studio-controls">
-              <label className="input-label">Role Title</label>
-              <div className="text-input-mock">Senior Product Designer</div>
-
-              <label className="input-label">Core Craft Strengths (Click to toggle)</label>
-              <div className="interactive-chips-cloud">
-                {STUDIO_CHIPS.map((chip, i) => (
-                  <button
-                    key={chip.label}
-                    className={`chip-btn ${studioChips[i] ? "active" : ""}`}
-                    onClick={() => toggleChip(i)}
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="studio-preview">
-              <div className="candidate-preview-hero">
-                <div className="preview-id">
-                  <img
-                    className="preview-pic"
-                    src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&q=80"
-                    alt="Maya"
-                  />
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>Maya Chen</h3>
-                    <div style={{ fontSize: 12, color: "var(--muted)" }}>Product Designer · 6 Yrs Exp · Berlin</div>
+                      );
+                    })}
                   </div>
                 </div>
-                <span className="tag-chip match" style={{ padding: "4px 10px" }}>Available Now</span>
+              </div>
+            </Reveal>
+
+            {/* Right column */}
+            <Reveal className="lg:col-span-2 lg:pt-1" stagger={2}>
+              <div className="match-controls">
+                <div className="match-mode-switcher">
+                  <button
+                    onClick={() => setMatchMode("describe")}
+                    className={`match-mode ${matchMode === "describe" ? "is-active" : ""}`}
+                    aria-pressed={matchMode === "describe"}
+                    style={{ position: "relative" }}
+                  >
+                    {matchMode === "describe" ? (
+                      <motion.span
+                        layoutId="match-mode-pill"
+                        className="match-mode-pill"
+                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                      />
+                    ) : null}
+                    <span style={{ position: "relative" }}>Describe role</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMatchMode("search");
+                      runChecklist();
+                    }}
+                    className={`match-mode ${matchMode === "search" ? "is-active" : ""}`}
+                    aria-pressed={matchMode === "search"}
+                    style={{ position: "relative" }}
+                  >
+                    {matchMode === "search" ? (
+                      <motion.span
+                        layoutId="match-mode-pill"
+                        className="match-mode-pill"
+                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                      />
+                    ) : null}
+                    <span style={{ position: "relative" }}>Search</span>
+                  </button>
+                  <button
+                    onClick={() => setMatchMode("deep")}
+                    className={`match-mode ${matchMode === "deep" ? "is-active" : ""}`}
+                    aria-pressed={matchMode === "deep"}
+                    style={{ position: "relative" }}
+                  >
+                    {matchMode === "deep" ? (
+                      <motion.span
+                        layoutId="match-mode-pill"
+                        className="match-mode-pill"
+                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                      />
+                    ) : null}
+                    <span style={{ position: "relative" }}>Deep Read</span>
+                  </button>
+                </div>
+                <button
+                  onClick={() => {
+                    if (matchMode !== "search") setMatchMode("search");
+                    runChecklist();
+                  }}
+                  title="Re-run matching query"
+                  className="match-run press"
+                >
+                  <ArrowRight className="w-4 h-4 text-ink" aria-hidden="true" />
+                </button>
               </div>
 
-              <p style={{ fontSize: 13, color: "var(--body)", lineHeight: 1.6, marginBottom: 18 }}>
-                Product designer dedicated to simplifying complicated architectures. Six years scaling B2B SaaS and early-stage platforms alongside engineering leads.
+              <div className="relative mt-10 min-h-[88px]">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={matchMode}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <h3 className="text-lg font-bold tracking-tight">{MATCH_COPY[matchMode].title}</h3>
+                    <p className="text-sm leading-relaxed text-slate-600 mt-2">{MATCH_COPY[matchMode].desc}</p>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= 01 — THE PROBLEM ================= */}
+      <section className="guide-h relative py-20">
+        <i className="g-handle pos-tl hidden lg:block" />
+        <i className="g-handle pos-tr hidden lg:block" />
+
+        <div className="max-w-[1160px] mx-auto px-6">
+          <Reveal>
+            <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
+              01 — The problem
+            </div>
+            <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight text-ink mb-3">
+              Hiring is backwards.
+            </h2>
+            <p className="text-[15px] text-slate-600 max-w-xl">
+              Candidates repeatedly rewrite the same story for hundreds of applications. Employers
+              receive stacks of resumes optimized for keywords, not evidence.
+            </p>
+          </Reveal>
+
+          <div className="border-b border-dashed border-[#C9CED6] mt-6 mb-12" />
+
+          <div className="grid md:grid-cols-2 gap-6">
+            <Reveal className="rounded-lg bg-white border border-slate-200 p-7 hover-lift card-shadow" stagger={1}>
+              <div className="text-[11px] font-mono font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                Candidate
+              </div>
+              <h3 className="text-xl font-bold tracking-tight mb-3">Apply. Rewrite. Repeat.</h3>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                The strongest candidates spend their time formatting applications instead of
+                building. Every company asks for the same information in a slightly different box.
               </p>
 
-              <label className="input-label">Live Active Profile Chips</label>
-              <div className="interactive-chips-cloud">
-                {STUDIO_CHIPS.map((chip, i) => (
-                  studioChips[i] ? (
-                    <span className="tag-chip match" key={chip.label}>{chip.label}</span>
-                  ) : null
-                ))}
+              <div className="mt-6 space-y-2">
+                <div className="h-10 border border-slate-200 rounded-md bg-slate-50 flex items-center justify-between px-3 text-xs text-slate-600">
+                  <span>Application #142 · Staff Engineer</span>
+                  <span className="text-slate-400 font-mono">Awaiting review</span>
+                </div>
+                <div className="h-10 border border-slate-200 rounded-md bg-slate-50 flex items-center justify-between px-3 text-xs text-slate-600 opacity-65">
+                  <span>Application #141 · Systems Engineer</span>
+                  <span className="text-orange-500 font-mono">Filtered</span>
+                </div>
+                <div className="h-10 border border-slate-200 rounded-md bg-slate-50 flex items-center justify-between px-3 text-xs text-slate-600 opacity-35">
+                  <span>Application #140 · Backend Lead</span>
+                  <span className="text-slate-400 font-mono">Unread</span>
+                </div>
+              </div>
+            </Reveal>
+
+            <Reveal className="rounded-lg bg-white border border-[#1F2DE6]/30 p-7 relative hover-lift card-shadow" stagger={2}>
+              <i className="g-handle -top-1 -left-1" />
+              <i className="g-handle -top-1 -right-1" />
+              <i className="g-handle -bottom-1 -left-1" />
+              <i className="g-handle -bottom-1 -right-1" />
+
+              <div className="text-[11px] font-mono font-semibold text-[#1F2DE6] uppercase tracking-wider mb-3">
+                Tammy
+              </div>
+              <h3 className="text-xl font-bold tracking-tight mb-3">Prove it once.</h3>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Candidates create one evidence-backed profile. Tammy turns projects, experience, and
+                proof into a structured talent signal employers can search.
+              </p>
+
+              <div className="flex flex-wrap gap-2 mt-6">
+                <span className="text-[11px] font-mono px-2 py-1 rounded bg-purple-50 text-purple-700 border border-purple-200">EXPERIENCE</span>
+                <span className="text-[11px] font-mono px-2 py-1 rounded bg-blue-50 text-[#1F2DE6] border border-blue-200">PROJECTS</span>
+                <span className="text-[11px] font-mono px-2 py-1 rounded bg-green-50 text-green-700 border border-green-200">PROOF</span>
+                <span className="text-[11px] font-mono px-2 py-1 rounded bg-orange-50 text-orange-700 border border-orange-200">TERMS</span>
+              </div>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= 02 — CANDIDATE WIZARD ================= */}
+      <section id="candidates" className="guide-h relative py-20">
+        <i className="g-handle pos-tl hidden lg:block" />
+        <i className="g-handle pos-tr hidden lg:block" />
+
+        <div className="max-w-[1160px] mx-auto px-6">
+          <Reveal>
+            <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
+              02 — Candidate
+            </div>
+            <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight mb-3">
+              Build your talent record once.
+            </h2>
+            <p className="text-[15px] text-slate-600 max-w-xl">
+              Four steps. Autosaved drafts. Real evidence. Your resume stays in your hands. Review
+              everything before your profile becomes discoverable.
+            </p>
+          </Reveal>
+
+          <div className="border-b border-dashed border-[#C9CED6] mt-6 mb-12" />
+
+          <Reveal className="grid md:grid-cols-[240px_1fr] border border-slate-200 rounded-lg bg-white overflow-hidden card-shadow" stagger={1}>
+            <div className="p-6 border-r border-slate-200 bg-slate-50">
+              <div className="text-sm font-bold mb-1">Your profile</div>
+              <div className="text-xs text-slate-500 mb-6 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Saved automatically
+              </div>
+
+              <div className="space-y-3">
+                {["Basics", "Profile & skills", "Proof", "Resume & terms"].map((label, i) => {
+                  const active = i === 2;
+                  return (
+                    <div
+                      key={label}
+                      className={`flex items-center gap-2 text-sm ${active ? "text-ink font-semibold" : "text-slate-600"}`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-mono ${
+                          active
+                            ? "bg-[#1F2DE6] text-white shadow-sm"
+                            : "bg-slate-100 border border-slate-300"
+                        }`}
+                      >
+                        {i + 1}
+                      </span>
+                      <span>{label}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </div>
-        </section>
 
-        {/* ─── 03 MATCH ENGINE ─── */}
-        <section className="section" id="matching">
-          <div className="section-head">
-            <div className="section-kicker">03 / Match Engine</div>
-            <h2 className="section-title">The score explains itself.</h2>
-            <p className="section-desc">
-              No black-box algorithms. We apply filters as strict exclusions, then calculate candidate scores across four inspectable signals:
-            </p>
-          </div>
+            <div className="p-6">
+              <h4 className="text-base font-bold mb-1">Show what you built.</h4>
+              <p className="text-xs text-slate-500 mb-5">Evidence makes the profile useful.</p>
 
-          <div className="engine-card">
-            <div className="pipeline-progress-grid">
-              {PIPELINE.map((s) => (
-                <div className="p-stage-item" key={s.stage}>
-                  <div className="p-stage-index">STAGE {s.stage} <span>{s.weight}</span></div>
-                  <div className="p-stage-name">{s.name}</div>
-                  <div className="p-stage-desc">{s.desc}</div>
-                  <div className="bar-track">
-                    <div
-                      className="bar-fill"
-                      style={{
-                        background: s.color,
-                        width: demoActive ? `${s.width}%` : "0%",
-                      }}
-                    />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="border border-slate-200 rounded-md p-3 bg-slate-50">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase mb-1">PROJECT</div>
+                  <div className="text-xs font-semibold">Distributed inference service</div>
+                </div>
+                <div className="border border-slate-200 rounded-md p-3 bg-slate-50">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase mb-1">ROLE</div>
+                  <div className="text-xs font-semibold">Lead Engineer</div>
+                </div>
+                <div className="col-span-2 border border-slate-200 rounded-md p-3 bg-slate-50">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase mb-1">
+                    WHAT DID YOU ACTUALLY DO?
                   </div>
+                  <div className="text-xs font-semibold">
+                    Reduced inference latency by 41% across production workloads.
+                  </div>
+                </div>
+                <div className="border border-slate-200 rounded-md p-3 bg-slate-50">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase mb-1">EVIDENCE</div>
+                  <div className="text-xs font-semibold">GitHub · Benchmarks</div>
+                </div>
+                <div className="border border-slate-200 rounded-md p-3 bg-slate-50">
+                  <div className="text-[10px] font-mono text-slate-400 uppercase mb-1">IMPACT</div>
+                  <div className="text-xs font-semibold">41% faster throughput</div>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ================= 03 — INTELLIGENCE PIPELINE ================= */}
+      <section id="engine" className="guide-h relative py-20">
+        <i className="g-handle pos-tl hidden lg:block" />
+        <i className="g-handle pos-tr hidden lg:block" />
+
+        <div className="max-w-[1160px] mx-auto px-6">
+          <Reveal>
+            <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
+              03 — Intelligence
+            </div>
+            <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight mb-3">
+              The pipeline reads like a hiring manager.
+            </h2>
+            <p className="text-[15px] text-slate-600 max-w-xl">
+              Tammy doesn&apos;t turn candidates into mysterious AI scores. It builds a factual,
+              evidence-linked representation of the work behind the resume.
+            </p>
+          </Reveal>
+
+          <div className="border-b border-dashed border-[#C9CED6] mt-6 mb-12" />
+
+          <Reveal className="border border-slate-200 rounded-lg bg-white p-6 card-shadow" stagger={1}>
+            <div className="flex flex-wrap justify-between items-center gap-2 pb-5 border-b border-slate-200 mb-5">
+              <div>
+                <div className="text-[10px] font-mono text-slate-400">LIVE SEARCH TRACE</div>
+                <div className="text-sm font-bold mt-0.5">
+                  Backend engineer · distributed systems
+                </div>
+              </div>
+              <span className="text-[11px] font-mono px-2 py-1 rounded bg-green-50 text-green-700 border border-green-200 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-600" /> 30 candidates found
+              </span>
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {PIPELINE.map((p) => (
+                <div key={p.n} className="p-2 rounded-md hover:bg-slate-50/60 transition-colors">
+                  <span className={`text-[11px] font-mono font-bold ${p.nClass}`}>{p.n}</span>
+                  <h5 className="text-sm font-bold mt-1.5 mb-1">{p.title}</h5>
+                  <p className="text-xs text-slate-600 leading-relaxed">{p.desc}</p>
+                  <TraceFill width={p.fill} bg={p.fillBg} />
                 </div>
               ))}
             </div>
+          </Reveal>
+        </div>
+      </section>
 
-            <div className="engine-match-details">
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Job Query Context</div>
-                <p style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.6 }}>
-                  Looking for a Staff Designer to oversee design tokens, component architecture, and customer workflow surfaces across our core web platform.
-                </p>
-              </div>
-              <div>
-                <div className="explanation-card">
-                  <div className="exp-head"><span>Maya Chen</span><span style={{ color: "var(--emerald)" }}>94% Match</span></div>
-                  <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Built multi-brand token system · Shipped two 0→1 web applications.</div>
-                </div>
-                <div className="explanation-card">
-                  <div className="exp-head"><span>Noah Williams</span><span style={{ color: "var(--emerald)" }}>89% Match</span></div>
-                  <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Strong design systems portfolio · 5 yrs fintech SaaS.</div>
-                </div>
-              </div>
+      {/* ================= 04 — DISCOVERY FLOW ================= */}
+      <section className="guide-h relative py-20">
+        <i className="g-handle pos-tl hidden lg:block" />
+        <i className="g-handle pos-tr hidden lg:block" />
+
+        <div className="max-w-[1160px] mx-auto px-6">
+          <Reveal>
+            <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
+              04 — Discovery
             </div>
-          </div>
-        </section>
-
-        {/* ─── 04 SOURCING FLOW ─── */}
-        <section className="section" id="desk">
-          <div className="section-head">
-            <div className="section-kicker">04 / Sourcing Workflow</div>
-            <h2 className="section-title">Paste the role. Read the shortlist.</h2>
-            <p className="section-desc">
-              No complicated Boolean search queries. Just paste plain role requirements and review candidates ranked by evidence:
+            <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight mb-3">
+              Describe the person. Don&apos;t write a Boolean query.
+            </h2>
+            <p className="text-[15px] text-slate-600 max-w-xl">
+              An employer describes the role in natural language. Tammy searches structured
+              experience, project evidence, and semantic representations.
             </p>
-          </div>
+          </Reveal>
 
-          <div className="flow-rail">
-            {[
-              { step: "01", title: "Paste Role", desc: "Drop your plain-text requirements into the desk." },
-              { step: "02", title: "Detect Signals", desc: "Skills, seniority floors, and styles extracted live." },
-              { step: "03", title: "Hard Exclusions", desc: "Missing non-negotiables are excluded immediately." },
-              { step: "04", title: "Rank Evidence", desc: "Inspectable breakdown of overlaps and missing items." },
-              { step: "05", title: "Export & Connect", desc: "Shortlist candidates to drawer and reach out with context." },
-            ].map((f) => (
-              <div className="flow-col" key={f.step}>
-                <span className="flow-step-num">STEP {f.step}</span>
-                <h4>{f.title}</h4>
-                <p>{f.desc}</p>
+          <div className="border-b border-dashed border-[#C9CED6] mt-6 mb-12" />
+
+          <Reveal
+            className="discovery-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 border border-slate-200 rounded-lg bg-white overflow-hidden card-shadow divide-y sm:divide-y-0 sm:divide-x divide-slate-200"
+            stagger={1}
+          >
+            {DISCOVERY.map((d) => (
+              <div key={d.n} className="discovery-card p-5 hover:bg-slate-50/50 transition-colors">
+                <span className="text-[10px] font-mono text-slate-400">{d.n}</span>
+                <div className="discovery-card-body">
+                  <div className={`discovery-dot ${d.dot}`} />
+                  <div>
+                    <h5 className="text-sm font-bold mb-1">{d.title}</h5>
+                    <p className="text-xs text-slate-600 leading-relaxed">{d.desc}</p>
+                  </div>
+                </div>
               </div>
             ))}
-          </div>
-        </section>
-
-        {/* ─── 05 DOSSIER ─── */}
-        <section className="section">
-          <div className="section-head">
-            <div className="section-kicker">05 / The Shortlist Output</div>
-            <h2 className="section-title">The first call starts with context.</h2>
-            <p className="section-desc">
-              Every profile breakdown shows exact skill intersections, verified achievements, and potential trade-offs before your first conversation:
-            </p>
-          </div>
-
-          <div className="dossier-card">
-            <div className="dossier-sidebar">
-              <div className="radial-gauge-row">
-                <div className="svg-ring-container">
-                  <svg viewBox="0 0 60 60">
-                    <circle className="track" cx="30" cy="30" r="26" />
-                    <circle className="fill" cx="30" cy="30" r="26" style={{ strokeDashoffset: ringOffset }} />
-                  </svg>
-                  <div className="ring-score-text">{dossierScore}%</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>Fit Score</div>
-                  <div style={{ fontSize: 11, color: "var(--muted)" }}>Rank #1 of 96</div>
-                </div>
-              </div>
-
-              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>Maya Chen</div>
-              <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 14 }}>Staff Product Designer · Berlin</div>
-              <div style={{ fontSize: 11.5, color: "var(--body)", lineHeight: 1.5 }}>Available Immediately · Remote OK · 6 Years Experience</div>
-            </div>
-
-            <div className="dossier-main">
-              <div className="evidence-item">
-                <div className="evidence-top"><span>Matched Core Signals</span><span className="tag-chip match">Verified Match</span></div>
-                <p>Directly verified craft experience: Figma design system management, 0→1 platform releases, user research protocols.</p>
-              </div>
-              <div className="evidence-item">
-                <div className="evidence-top"><span>Areas to Explore</span><span style={{ fontSize: 11, color: "var(--amber)", fontWeight: 600 }}>Trade-off</span></div>
-                <p>Primarily specialized in complex desktop web workflow tools rather than native mobile consumer design.</p>
-              </div>
-              <div className="evidence-item">
-                <div className="evidence-top"><span>Why Ranked #1</span><span style={{ fontSize: 11, color: "var(--blue)", fontWeight: 600 }}>Score: 94 / 100</span></div>
-                <p>Top decile in craft relevance, 6 years experience against a 5-year floor, and immediate start availability.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── 06 TRUST ─── */}
-        <section className="section" style={{ borderBottom: "none" }}>
-          <div className="section-head">
-            <div className="section-kicker">06 / Trust & Control</div>
-            <h2 className="section-title">Publishing requires protection.</h2>
-            <p className="section-desc">
-              Candidates only share honest details when they control visibility. We built these principles directly into the platform:
-            </p>
-          </div>
-
-          <div className="trust-grid">
-            <div className="trust-card">
-              <div className="trust-icon">🔒</div>
-              <h4>Private by Default</h4>
-              <p>No public searchable directory. Profiles are discoverable solely through targeted recruiter searches.</p>
-            </div>
-            <div className="trust-card">
-              <div className="trust-icon">⚡️</div>
-              <h4>Instant Revocation</h4>
-              <p>Unpublish or delete your profile at any time. Changes propagate across recruiter indexes immediately.</p>
-            </div>
-            <div className="trust-card">
-              <div className="trust-icon">📊</div>
-              <h4>Transparent Scoring</h4>
-              <p>Every match score shows what counted and what was missing. If a factor cannot be justified, it isn&apos;t scored.</p>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── QUOTE ─── */}
-        <div className="quote-banner">
-          <div className="quote-text">&ldquo;A candidate should look like a person before they look like an application.&rdquo;</div>
-          <div className="quote-sub">Living profiles for individuals. True context for recruiters. One shared layer.</div>
+          </Reveal>
         </div>
+      </section>
 
-        {/* ─── FINAL CTA ─── */}
-        <section className="final-cta">
-          <h2>Give talent a better first impression.</h2>
-          <p>Build your profile once and let verified matches come to you. Or bring your open role and find the people already doing the work.</p>
-          <div className="hero-actions">
-            <a href="#studio" className="btn btn-emerald btn-lg">Create candidate profile ↗</a>
-            <a href="#matching" className="btn btn-outline btn-lg">Open sourcing desk</a>
+      {/* ================= 05 — DOSSIER ================= */}
+      <section className="guide-h relative py-20">
+        <i className="g-handle pos-tl hidden lg:block" />
+        <i className="g-handle pos-tr hidden lg:block" />
+
+        <div className="max-w-[1160px] mx-auto px-6">
+          <Reveal>
+            <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
+              05 — The output
+            </div>
+            <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight mb-3">
+              Not another resume. A candidate dossier.
+            </h2>
+            <p className="text-[15px] text-slate-600 max-w-xl">
+              The result gives a hiring manager enough context to decide whether a conversation is
+              worth having—without pretending the system knows more than the evidence says.
+            </p>
+          </Reveal>
+
+          <div className="border-b border-dashed border-[#C9CED6] mt-6 mb-12" />
+
+          <Reveal className="grid md:grid-cols-[280px_1fr] border border-slate-200 rounded-lg bg-white overflow-hidden card-shadow" stagger={1}>
+            <div className="p-6 border-r border-slate-200 bg-slate-50">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-[#1F2DE6] text-white font-bold text-sm flex items-center justify-center mb-3 shadow-sm">
+                AK
+              </div>
+              <div className="text-base font-bold">Alex Kim</div>
+              <div className="text-xs text-slate-600 mt-0.5">Backend · Infrastructure · AI</div>
+
+              <div className="flex flex-wrap gap-1.5 mt-5">
+                {["Python", "Distributed Systems", "Kubernetes", "PostgreSQL"].map((s) => (
+                  <span
+                    key={s}
+                    className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-600"
+                  >
+                    {s}
+                  </span>
+                ))}
+              </div>
+
+              <div className="mt-5 pt-4 border-t border-slate-200">
+                <div className="text-[10px] font-mono text-slate-400">AVAILABILITY</div>
+                <div className="text-xs font-semibold mt-1 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> 30 days · Remote
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <div className="border border-slate-200 rounded-md p-4 bg-white hover-lift">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold">Distributed inference service</span>
+                  <span className="text-[10px] font-mono font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                    PROJECT
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Designed and shipped a production inference layer handling high-volume model
+                  requests with 41% latency reduction.
+                </p>
+              </div>
+
+              <div className="border border-slate-200 rounded-md p-4 bg-white hover-lift">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold">Why this candidate</span>
+                  <span className="text-[10px] font-mono font-bold text-[#1F2DE6] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                    JUDGE
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Strong overlap with distributed systems requirements. Evidence supports production
+                  ownership. Limited evidence of people management.
+                </p>
+              </div>
+
+              <div className="border border-slate-200 rounded-md p-4 bg-white hover-lift">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold">Suggested interview questions</span>
+                  <span className="text-[10px] font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-100">
+                    NEXT
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Ask how the inference architecture handled failure recovery and how the latency
+                  improvement was measured.
+                </p>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ================= 06 — TRUST ================= */}
+      <section className="guide-h relative py-20">
+        <i className="g-handle pos-tl hidden lg:block" />
+        <i className="g-handle pos-tr hidden lg:block" />
+
+        <div className="max-w-[1160px] mx-auto px-6">
+          <Reveal>
+            <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
+              06 — Trust
+            </div>
+            <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight mb-3">
+              Discovery without giving up control.
+            </h2>
+            <p className="text-[15px] text-slate-600 max-w-xl">
+              Talent discovery only works if candidates trust the system. Privacy, control, and
+              accountability are part of the product.
+            </p>
+          </Reveal>
+
+          <div className="border-b border-dashed border-[#C9CED6] mt-6 mb-12" />
+
+          <div className="grid md:grid-cols-3 gap-4">
+            <Reveal className="border border-slate-200 rounded-lg p-6 bg-white hover-lift card-shadow" stagger={1}>
+              <div className="text-xl mb-3 text-[#1F2DE6] font-mono">◇</div>
+              <h5 className="text-sm font-bold mb-2">Private by design</h5>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                No public candidate directory. Employers are verified before they can discover
+                talent.
+              </p>
+            </Reveal>
+
+            <Reveal className="border border-slate-200 rounded-lg p-6 bg-white hover-lift card-shadow" stagger={2}>
+              <div className="text-xl mb-3 text-purple-600 font-mono">◌</div>
+              <h5 className="text-sm font-bold mb-2">Candidate control</h5>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Candidates control visibility, portfolio links, and can delete or export their
+                profile at any time.
+              </p>
+            </Reveal>
+
+            <Reveal className="border border-slate-200 rounded-lg p-6 bg-white hover-lift card-shadow" stagger={3}>
+              <div className="text-xl mb-3 text-green-600 font-mono">✓</div>
+              <h5 className="text-sm font-bold mb-2">Accountable contact</h5>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Contact is direct for speed, while every profile view and inquiry is transparently
+                audit-logged.
+              </p>
+            </Reveal>
           </div>
-        </section>
-      </main>
+        </div>
+      </section>
 
-      {/* ─── FOOTER ─── */}
-      <footer>
-        <div className="page footer-inner">
-          <span>© 2026 Tammy Systems Inc. All rights reserved.</span>
-          <div className="footer-links">
-            <a href="#studio">For Candidates</a>
-            <a href="#desk">For Hiring Teams</a>
-            <a href="#matching">Match Engine</a>
+      {/* ================= 07 — FAQ ================= */}
+      <section id="faq" className="guide-h relative py-20">
+        <i className="g-handle pos-tl hidden lg:block" />
+        <i className="g-handle pos-tr hidden lg:block" />
+
+        <div className="max-w-[920px] mx-auto px-6">
+          <Reveal>
+            <div className="faq-heading text-center max-w-2xl mx-auto">
+            <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
+              07 — Clarity
+            </div>
+            <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight mb-3">
+              Frequently asked questions.
+            </h2>
+            <p className="text-[15px] text-slate-600 max-w-xl">
+              Everything you need to know about the reverse discovery model, privacy guarantees, and
+              evaluation pipeline.
+            </p>
+            </div>
+          </Reveal>
+
+          <div className="border-b border-dashed border-[#C9CED6] mt-8 mb-8 max-w-2xl mx-auto" />
+
+          <Reveal className="faq-list max-w-2xl mx-auto w-full" stagger={1}>
+            {FAQS.map((f, i) => {
+              const open = openFaq === i;
+              return (
+                <div
+                  key={i}
+                  className="faq-item"
+                >
+                  <button
+                    onClick={() => setOpenFaq(open ? null : i)}
+                    className="faq-trigger"
+                    aria-expanded={open}
+                  >
+                    <span>{f.q}</span>
+                    <span className="faq-trigger-ico">
+                      <ChevronDown
+                        className="w-4 h-4 shrink-0 transition-transform duration-200"
+                        style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+                        aria-hidden="true"
+                      />
+                    </span>
+                  </button>
+                  <div className={`faq-body ${open ? "open" : ""}`}>
+                    <div>
+                      <p>
+                        {f.a}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ================= FOOTER ================= */}
+      <footer id="start" className="footer-simple guide-h relative">
+        <div className="footer-simple-shell">
+          <div className="footer-simple-frame">
+            <i className="g-handle -top-1 -left-1" />
+            <i className="g-handle -top-1 -right-1" />
+            <i className="g-handle -bottom-1 -left-1" />
+            <i className="g-handle -bottom-1 -right-1" />
+          <div className="footer-simple-blue">
+            <div className="footer-simple-dither" aria-hidden="true">
+              <DitherEffect colorFront="#1F2DE6" colorBack="#ffffff" scale={0.8} className="dither-soft" />
+            </div>
+            <div className="footer-simple-card">
+              <div className="footer-simple-grid">
+                <div className="footer-simple-brandblock">
+                  <a href="#top" className="footer-simple-logo">Tammy</a>
+                  <div className="footer-simple-visit">
+                    <span className="footer-simple-pill">Start here</span>
+                    <Link href="/start" className="footer-simple-cta press">
+                      Build my page
+                    </Link>
+                    <a href="mailto:hiya@tammy.sh" className="footer-simple-mail">hiya@tammy.sh</a>
+                  </div>
+                </div>
+                <nav className="footer-simple-col" aria-label="Talent">
+                  <p className="footer-simple-h">Talent</p>
+                  <a href="#candidates">Candidates</a>
+                  <a href="#engine">How it works</a>
+                  <a href="#faq">FAQ</a>
+                </nav>
+                <nav className="footer-simple-col" aria-label="Hiring">
+                  <p className="footer-simple-h">Hiring</p>
+                  <Link href="/hire">Employers</Link>
+                  <a href="#engine">Search</a>
+                  <a href="#faq">Deep Read</a>
+                  <Link href="/start">Shop all</Link>
+                </nav>
+              </div>
+            </div>
+          </div>
+          </div>
+          <div className="footer-simple-bottom">
+            <span>© 2026 Tammy Technologies Inc.</span>
+            <nav aria-label="Legal"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Security</a></nav>
           </div>
         </div>
       </footer>
-    </>
-  )
+    </div>
+  );
 }

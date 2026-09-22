@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import CandidateForm from "@/components/CandidateForm";
+import AppNav from "@/components/AppNav";
+import { setOwnerSession } from "@/lib/session";
 
 export default function Start() {
   const router = useRouter();
@@ -26,10 +28,10 @@ export default function Start() {
         return { ok: false, error: first };
       }
       try {
-        localStorage.setItem(
-          "tammy_owner",
-          JSON.stringify({ id: j.candidateId, email: String(payload.email ?? "").toLowerCase() }),
-        );
+        setOwnerSession({
+          id: j.candidateId,
+          email: String(payload.email ?? "").toLowerCase(),
+        });
         if (Array.isArray(j.warnings) && j.warnings.length) {
           sessionStorage.setItem("tammy_warnings", JSON.stringify(j.warnings));
         } else {
@@ -46,24 +48,14 @@ export default function Start() {
   }
 
   return (
-    <div className="wrap">
-      <div className="topbar">
-        <Link className="brand" href="/">
-          Tammy <small>· Beta</small>
-        </Link>
-        <Link className="btn-plain" href="/">
-          ← Back
-        </Link>
+    <div className="onboard-page">
+      <AppNav />
+      <div className="onboard-backbar">
+        <Link className="onboard-backlink" href="/">← Back to Tammy</Link>
       </div>
-      <h1 style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 8 }}>
-        Build your page.
-      </h1>
-      <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 24, maxWidth: 560 }}>
-        This is your signup — everything you enter becomes your public
-        portfolio page. Salary, location prefs and availability stay private
-        and are only used for matching.
-      </p>
-      <CandidateForm submitLabel="Create my page →" onSubmit={create} />
+      <main className="onboard-main">
+        <CandidateForm submitLabel="Publish my page →" onSubmit={create} />
+      </main>
     </div>
   );
 }

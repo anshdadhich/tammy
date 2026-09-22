@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
 import SkillPicker from "./SkillPicker";
+import OnboardingStepper from "./OnboardingStepper";
+import GooeySlider from "./GooeySlider";
+import { LOCATIONS } from "@/lib/skills";
 
 export type FormState = {
   name: string;
@@ -60,6 +64,7 @@ export type FormState = {
   linkedin: string;
   portfolio: string;
   resume_url: string;
+  extraLinks: { heading: string; url: string }[];
   min_salary: number;
   currency: string;
   frequency: "hourly" | "monthly" | "yearly";
@@ -94,6 +99,7 @@ export function blankForm(): FormState {
     linkedin: "",
     portfolio: "",
     resume_url: "",
+    extraLinks: [],
     min_salary: 0,
     currency: "INR",
     frequency: "monthly",
@@ -199,6 +205,7 @@ export function demoForm(): FormState {
     linkedin: "https://linkedin.com/in/aaravdemo",
     portfolio: "https://aaravdemo.design",
     resume_url: "https://drive.google.com/file/d/1aaravDemoResume2024/view?usp=sharing",
+    extraLinks: [{ heading: "Twitter", url: "https://x.com/aaravdemo" }],
     min_salary: 120000,
     currency: "INR",
     frequency: "monthly",
@@ -363,6 +370,7 @@ export function formToPayload(f: FormState): Record<string, unknown> {
       linkedin: f.linkedin.trim(),
       portfolio: f.portfolio.trim(),
       resume_url: f.resume_url.trim(),
+      extraLinks: f.extraLinks.filter((l) => l.heading.trim() && l.url.trim()).map((l) => ({ heading: l.heading.trim(), url: l.url.trim() })),
     },
     min_salary: Number(f.min_salary) || 0,
     currency: (f.currency.trim() || "INR").toUpperCase().slice(0, 3),
@@ -407,26 +415,7 @@ function Slider({
   step: number;
   onChange: (v: number) => void;
 }) {
-  return (
-    <div className="field">
-      <label>
-        {label} <span className="sliderval">{display}</span>
-      </label>
-      <input
-        type="range"
-        className="slider"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-      <div className="slidermarks">
-        <span>{min}</span>
-        <span>{max >= 1000 ? `${Math.round(max / 1000)}k` : max}</span>
-      </div>
-    </div>
-  );
+  return <GooeySlider label={label} value={value} display={display} min={min} max={max} step={step} onChange={onChange} />;
 }
 
 function Seg<T extends string>({
@@ -440,20 +429,40 @@ function Seg<T extends string>({
   options: { v: T; t: string }[];
   onChange: (v: T) => void;
 }) {
+  const segId = useId();
   return (
     <div className="field">
       <label>{label}</label>
-      <div className="seg">
-        {options.map((o) => (
-          <button
-            key={o.v}
-            type="button"
-            className={value === o.v ? "on" : ""}
-            onClick={() => onChange(o.v)}
-          >
-            {o.t}
-          </button>
-        ))}
+      <div className="seg" style={{ position: "relative" }}>
+        {options.map((o) => {
+          const isActive = value === o.v;
+          return (
+            <button
+              key={o.v}
+              type="button"
+              className={isActive ? "on" : ""}
+              onClick={() => onChange(o.v)}
+              style={{ position: "relative", zIndex: 1, background: isActive ? "transparent" : undefined }}
+            >
+              {isActive ? (
+                <motion.div
+                  layoutId={`seg-${segId}`}
+                  className="seg-active-pill"
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "#fff",
+                    borderRadius: 6,
+                    boxShadow: "0 1px 3px rgba(15,23,42,0.08)",
+                    zIndex: -1,
+                  }}
+                />
+              ) : null}
+              <span style={{ position: "relative" }}>{o.t}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -623,60 +632,56 @@ export default function CandidateForm({
   ];
 
   return (
-    <div className="wiz">
-      <div className="wiz-top">
-        <div className="wiz-steps">
-          {STEPS.map((s, i) => (
-            <button
-              key={s.t}
-              type="button"
-              className={"wiz-dot" + (i === step ? " cur" : "") + (i < step ? " done" : "")}
-              onClick={() => go(i)}
-              title={s.d}
-            >
-              <span>{i < step ? "✓" : i + 1}</span>
-              <small>{s.t}</small>
-            </button>
-          ))}
-        </div>
-        <div className="wiz-bar">
-          <motion.div
-            className="wiz-fill"
-            animate={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
-            transition={{ duration: 0.35, ease: "easeOut" }}
-          />
-        </div>
-        <div className="wiz-row">
-          <button
-            type="button"
-            className="btn-frame"
-            onClick={() => {
-              setF(demoForm());
-              setError(null);
-            }}
-          >
-            <span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>
-            ✨ Autofill test data
-          </button>
-          {!isEdit && draftNote ? (
-            <span className="oknote">
-              {draftNote} <button type="button" className="btn-plain" onClick={clearDraft}>Discard</button>
+    <div className="onboard">
+      <OnboardingStepper
+        steps={STEPS.map((s) => ({ title: s.t, hint: s.d }))}
+        current={step}
+        onStep={go}
+        meta={
+          isEdit ? null : (
+            <span className="onboard-autosave">
+              <i />
+              {busy ? "Saving…" : "Autosaved"}
             </span>
-          ) : null}
-        </div>
+          )
+        }
+      />
+      <div className="onboard-helpers">
+        <button
+          type="button"
+          className="onboard-autofill"
+          onClick={() => {
+            setF(demoForm());
+            setError(null);
+          }}
+        >
+          <Sparkles />
+          Autofill test data
+        </button>
+        {!isEdit && draftNote ? (
+          <span className="onboard-draft">
+            {draftNote}{" "}
+            <button type="button" onClick={clearDraft}>
+              Discard
+            </button>
+          </span>
+        ) : null}
       </div>
 
       {error ? <p className="err" style={{ marginBottom: 12 }}>{error}</p> : null}
 
-      <AnimatePresence mode="wait" custom={dir}>
-        <motion.div
-          key={step}
-          custom={dir}
-          initial={{ opacity: 0, x: 40 * dir }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -40 * dir }}
-          transition={{ duration: 0.28, ease: "easeOut" }}
-        >
+      <div className="onboard-viewport">
+        <AnimatePresence mode="wait" custom={dir} initial={false}>
+          <motion.div
+            key={step}
+            custom={dir}
+            className="motion-step"
+            initial={{ opacity: 0, x: 8 * dir }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 * dir }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            style={{ willChange: "transform, opacity" }}
+          >
           {step === 0 && (
             <div className="form-card">
               <h3>Basics — who you are</h3>
@@ -701,12 +706,14 @@ export default function CandidateForm({
                 <div className="field"><label>Desired role *</label><input className="input" value={f.role} onChange={(e) => set("role", e.target.value)} placeholder="Product Designer" /></div>
                 <div className="field"><label>Current role</label><input className="input" value={f.current_role} onChange={(e) => set("current_role", e.target.value)} placeholder="Senior Product Designer" /></div>
               </div>
-              <div className="field"><label>Headline</label><input className="input" value={f.headline} onChange={(e) => set("headline", e.target.value)} placeholder="Product designer, building in code." /></div>
-              <div className="field"><label>Domain *</label><input className="input" value={f.domain} onChange={(e) => set("domain", e.target.value)} placeholder="Design" /></div>
+              <div className="grid2">
+                <div className="field"><label>Headline</label><input className="input" value={f.headline} onChange={(e) => set("headline", e.target.value)} placeholder="Product designer, building in code." /></div>
+                <div className="field" style={{ maxWidth: 280 }}><label>Domain *</label><input className="input" value={f.domain} onChange={(e) => set("domain", e.target.value)} placeholder="Design" /></div>
+              </div>
               <Slider label="Years of experience" value={f.exp} display={`${f.exp} yrs`} min={0} max={Math.max(30, f.exp)} step={1} onChange={(v) => set("exp", v)} />
               <div className="field">
                 <label>Skills * — recognized names only, so matching stays clean</label>
-                <SkillPicker value={f.skills} onChange={(v) => set("skills", v)} />
+                <SkillPicker value={f.skills} onChange={(v) => set("skills", v)} allowCustom />
               </div>
             </div>
           )}
@@ -844,6 +851,70 @@ export default function CandidateForm({
                   <div className="field"><label>Portfolio / website</label><input className="input" value={f.portfolio} onChange={(e) => set("portfolio", e.target.value)} placeholder="https://…" /></div>
                   <div className="field"><label>Resume link * <span className="hint">— Drive preferred</span></label><input className="input" value={f.resume_url} onChange={(e) => set("resume_url", e.target.value)} placeholder="https://drive.google.com/…" /></div>
                 </div>
+                <AnimatePresence>
+                  {f.extraLinks.map((lnk, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                      transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                      className="itembox"
+                      style={{ position: "relative", paddingTop: 14 }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => set("extraLinks", f.extraLinks.filter((_, j) => j !== i))}
+                        className="btn-plain"
+                        style={{ position: "absolute", top: 10, right: 12, fontSize: 11, color: "#8A96A8" }}
+                        aria-label="Remove link"
+                      >
+                        Remove ✕
+                      </button>
+                      <div className="grid2" style={{ gap: 12 }}>
+                        <div className="field" style={{ marginBottom: 0 }}>
+                          <label>Name</label>
+                          <input
+                            className="input"
+                            value={lnk.heading}
+                            onChange={(e) => {
+                              const a = [...f.extraLinks];
+                              a[i] = { ...lnk, heading: e.target.value };
+                              set("extraLinks", a);
+                            }}
+                            placeholder="e.g. Twitter, Behance"
+                          />
+                        </div>
+                        <div className="field" style={{ marginBottom: 0 }}>
+                          <label>Link</label>
+                          <input
+                            className="input"
+                            value={lnk.url}
+                            onChange={(e) => {
+                              const a = [...f.extraLinks];
+                              a[i] = { ...lnk, url: e.target.value };
+                              set("extraLinks", a);
+                            }}
+                            placeholder="https://…"
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+                <div style={{ marginTop: f.extraLinks.length ? 4 : 12 }}>
+                  <p className="hint" style={{ marginBottom: f.extraLinks.length ? 10 : 8 }}>
+                    {f.extraLinks.length ? "Add as many as you need — each shows as a pill on your page." : "Got a Behance, Dribbble, Twitter, or personal site? Add it here."}
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-frame"
+                    onClick={() => set("extraLinks", [...f.extraLinks, { heading: "", url: "" }])}
+                  >
+                    <span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>
+                    + Add link
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -852,34 +923,124 @@ export default function CandidateForm({
             <div className="form-card">
               <h3>Private — matching only</h3>
               <p>Never shown on your public page. Editable anytime.</p>
-              <Slider
-                label="Minimum expected salary"
-                value={f.min_salary}
-                display={f.min_salary > 0 ? `${Number(f.min_salary).toLocaleString()} ${f.currency}/${f.frequency}` : "Open / negotiable"}
-                min={0}
-                max={Math.max(1000000, f.min_salary)}
-                step={10000}
-                onChange={(v) => set("min_salary", v)}
-              />
-              <div className="grid2">
-                <div className="field"><label>Currency</label><input className="input" value={f.currency} onChange={(e) => set("currency", e.target.value)} placeholder="INR" /></div>
-                <div className="field"><label>Open to locations</label><input className="input" value={f.location_pref} onChange={(e) => set("location_pref", e.target.value)} placeholder="Remote, Bengaluru" /></div>
+              <div className="grid-pair">
+                <div className="field">
+                  <label>Currency</label>
+                  <select className="select" value={f.currency} onChange={(e) => set("currency", e.target.value)}>
+                    <option value="INR">INR — Indian Rupee</option>
+                    <option value="USD">USD — US Dollar</option>
+                    <option value="EUR">EUR — Euro</option>
+                    <option value="GBP">GBP — British Pound</option>
+                    <option value="JPY">JPY — Japanese Yen</option>
+                    <option value="AUD">AUD — Australian Dollar</option>
+                    <option value="CAD">CAD — Canadian Dollar</option>
+                    <option value="SGD">SGD — Singapore Dollar</option>
+                    <option value="AED">AED — UAE Dirham</option>
+                    <option value="CHF">CHF — Swiss Franc</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label>Amount</label>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="numeric"
+                    value={f.min_salary ? String(f.min_salary) : ""}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, "");
+                      set("min_salary", v ? Number(v) : 0);
+                    }}
+                    placeholder="e.g. 50000"
+                  />
+                </div>
               </div>
-              <Seg label="Pay frequency" value={f.frequency} options={[{ v: "monthly", t: "Monthly" }, { v: "yearly", t: "Yearly" }, { v: "hourly", t: "Hourly" }]} onChange={(v) => set("frequency", v)} />
+              <p className="hint" style={{ marginTop: 6 }}>Set your expected amount — choose currency first, then number.</p>
+              <div className="field">
+                <label>Open to locations</label>
+                <SkillPicker
+                  value={f.location_pref ? f.location_pref.split(",").map((s) => s.trim()).filter(Boolean) : []}
+                  onChange={(vals) => set("location_pref", vals.join(", "))}
+                  placeholder="Search locations…"
+                  options={[...LOCATIONS]}
+                  suggestions={[...LOCATIONS.slice(0, 10)]}
+                  allowCustom
+                />
+                <p className="hint">Pick one or more — like skills, searchable with chips. Type any city to add it as Other.</p>
+              </div>
               <Seg label="Work mode" value={f.remote_pref} options={[{ v: "remote", t: "Remote" }, { v: "hybrid", t: "Hybrid" }, { v: "onsite", t: "Onsite" }]} onChange={(v) => set("remote_pref", v)} />
               <div className="field">
-                <label>Availability</label>
-                <div className="chips" style={{ marginBottom: 8 }}>
+                <label>Notice period</label>
+                <div className="chips" style={{ marginBottom: 10 }}>
                   {AVAIL_PRESETS.map((a) => (
-                    <button key={a} type="button" className={"chipbtn" + (f.availability === a ? " on" : "")} onClick={() => set("availability", a)}>{a}</button>
+                    <motion.button
+                      key={a}
+                      type="button"
+                      className={"chipbtn" + (f.availability === a ? " on" : "")}
+                      onClick={() => set("availability", a)}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                    >
+                      {a}
+                    </motion.button>
                   ))}
                 </div>
-                <input className="input" value={f.availability} onChange={(e) => set("availability", e.target.value)} placeholder="Immediate" />
+                <div className="grid-pair-sm">
+                  <div className="field">
+                    <select
+                      className="select"
+                      aria-label="Notice period unit"
+                      value={(() => {
+                        const m = f.availability.match(/^\d+\s*(.*)/);
+                        if (m && m[1]) {
+                          const u = m[1].toLowerCase();
+                          if (u.includes("day")) return "days";
+                          if (u.includes("week")) return "weeks";
+                          if (u.includes("month")) return "months";
+                          if (u.includes("year")) return "years";
+                          return "days";
+                        }
+                        return "days";
+                      })()}
+                      onChange={(e) => {
+                        const numMatch = f.availability.match(/^(\d+)/);
+                        const num = numMatch ? numMatch[1] : "15";
+                        set("availability", `${num} ${e.target.value}`);
+                      }}
+                    >
+                      <option value="days">Days</option>
+                      <option value="weeks">Weeks</option>
+                      <option value="months">Months</option>
+                      <option value="years">Years</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      aria-label="Notice period number"
+                      value={(() => {
+                        const m = f.availability.match(/^(\d+)\s*(.*)/);
+                        return m ? m[1] : f.availability === "Immediate" || f.availability === "Inactive" ? "" : f.availability;
+                      })()}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^0-9]/g, "");
+                        const unitMatch = f.availability.match(/^\d+\s*(.*)/);
+                        const unit = unitMatch ? unitMatch[1] : "days";
+                        if (!v) {
+                          set("availability", unit ? `0 ${unit}` : "Immediate");
+                        } else {
+                          set("availability", `${v} ${unit || "days"}`);
+                        }
+                      }}
+                      placeholder="15"
+                    />
+                  </div>
+                </div>
+                <p className="hint" style={{ marginTop: 6 }}>Enter a number and pick the unit — e.g., 15 days, 2 months.</p>
               </div>
-              <div className="field"><label>Notice period</label><input className="input" value={f.notice_period} onChange={(e) => set("notice_period", e.target.value)} placeholder="30 days" /></div>
               <Seg label="Page visibility" value={f.visibility} options={[{ v: "visible", t: "Visible" }, { v: "hidden", t: "Hidden" }, { v: "inactive", t: "Inactive" }]} onChange={(v) => set("visibility", v)} />
-              <Toggle label="Salary negotiable" value={f.negotiable} onChange={(v) => set("negotiable", v)} />
-              <Toggle label="Open to relocation" value={f.relocation} onChange={(v) => set("relocation", v)} />
             </div>
           )}
 
@@ -901,26 +1062,26 @@ export default function CandidateForm({
               </label>
             </div>
           )}
-        </motion.div>
-      </AnimatePresence>
+          </motion.div>
+        </AnimatePresence>
+      </div>
 
-      <div className="wiz-nav">
+      <div className="onboard-nav">
         {step > 0 ? (
-          <button type="button" className="btn-frame" onClick={() => go(step - 1)}>
-            <span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>
-            ← Back
+          <button type="button" className="onboard-back" onClick={() => go(step - 1)}>
+            <ArrowLeft />
+            Back
           </button>
         ) : (
           <span />
         )}
         {step < STEPS.length - 1 ? (
-          <button type="button" className="btn-frame btn-green" onClick={() => go(step + 1)}>
-            <span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>
-            Continue →
+          <button type="button" className="onboard-next" onClick={() => go(step + 1)}>
+            Continue
+            <ArrowRight />
           </button>
         ) : (
-          <button type="button" className="btn-frame solid" onClick={submit} disabled={busy}>
-            <span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>
+          <button type="button" className="onboard-next onboard-publish" onClick={submit} disabled={busy}>
             {busy ? "Saving…" : submitLabel}
           </button>
         )}

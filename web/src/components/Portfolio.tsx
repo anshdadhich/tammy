@@ -287,10 +287,10 @@ export default function Portfolio({
   const name: string = c.full_name ?? "Candidate";
   const role: string = c.headline ?? c.current_position ?? "";
   const photo = useResolvedUrl("photos", c.photo_url);
-  const portfolioFile =
-    typeof c.portfolio_url === "string" && !isHttp(c.portfolio_url)
-      ? (useResolvedUrl("portfolios", c.portfolio_url) as string | null)
-      : null;
+  const portfolioFile = useResolvedUrl(
+    "portfolios",
+    typeof c.portfolio_url === "string" && !isHttp(c.portfolio_url) ? c.portfolio_url : null,
+  );
 
   const [openExp, setOpenExp] = useState<number | null>(0);
   const [visibility, setVisibility] = useState<string>(c.visibility_status ?? "visible");

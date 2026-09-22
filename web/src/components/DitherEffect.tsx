@@ -21,10 +21,7 @@ interface DitherEffectProps {
 /* ─── Shaders (WebGL1 / GLSL 100 — matches the reference exactly) ─── */
 
 const VERT = `attribute vec3 aPosition;
-attribute vec2 aTexCoord;
-varying vec2 vTexCoord;
 void main() {
-  vTexCoord = aTexCoord;
   vec4 pos = vec4(aPosition, 1.0);
   pos.xy = pos.xy * 2.0 - 1.0;
   gl_Position = pos;
@@ -32,7 +29,6 @@ void main() {
 
 const FRAG = `
 precision highp float;
-varying vec2 vTexCoord;
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform float uScale;
@@ -112,7 +108,7 @@ void main() {
   /* 32-step Bayer ordered dither */
   float d = step(Bayer32(gl_FragCoord.xy * uScale), gray);
 
-  vec3 finalColor = mix(u_colorBack, u_colorFront, d);
+  vec3 finalColor = mix(u_colorFront, u_colorBack, d);
   gl_FragColor = vec4(finalColor, 1.0);
 }`;
 
@@ -186,7 +182,7 @@ export default function DitherEffect({
     const prog = createProgram(gl, VERT, FRAG);
     if (!prog) return;
 
-    /* Full-screen quad: positions + texcoords interleaved */
+    /* Full-screen quad: 3-float positions, 12-byte stride */
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(
@@ -200,11 +196,7 @@ export default function DitherEffect({
 
     const aPos = gl.getAttribLocation(prog, "aPosition");
     gl.enableVertexAttribArray(aPos);
-    gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 20, 0);
-
-    const aTex = gl.getAttribLocation(prog, "aTexCoord");
-    gl.enableVertexAttribArray(aTex);
-    gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 20, 12);
+    gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 12, 0);
 
     /* Uniform locations */
     const uRes = gl.getUniformLocation(prog, "u_resolution");

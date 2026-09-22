@@ -2,9 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight, Check, ChevronDown, SearchX, SlidersHorizontal, Paperclip, Globe } from "lucide-react";
 import Portfolio, { type Bundle } from "@/components/Portfolio";
+import RangeSlider from "@/components/RangeSlider";
 import SkillPicker from "@/components/SkillPicker";
+import LocationPicker from "@/components/LocationPicker";
+import AppNav from "@/components/AppNav";
+import BeamButton from "@/components/BeamButton";
+import SearchOrb from "@/components/SearchOrb";
+import { SiriOrb } from "@/components/ui/siri-orb";
+import { CANONICAL_SKILLS } from "@/lib/skills";
+import { setHrSession } from "@/lib/session";
 
 type Result = Record<string, any>;
 
@@ -14,6 +23,7 @@ type SavedShort = { id: string; name: string };
 type PastSearch = { time: number; title: string; count: number; job: Record<string, any> };
 type PastContact = { candidate_id: string; name: string; channel: string; time: number };
 
+const SEARCH_STAGE_COUNT = 4;
 function loadJSON<T>(key: string, fallback: T): T {
   try {
     const v = JSON.parse(localStorage.getItem(key) ?? "null");
@@ -42,7 +52,8 @@ function loadHr(): Hr | null {
 }
 
 export default function Hire() {
-  const [hr, setHr] = useState<Hr | null>(null);
+  const [hr, setHr] = useState<Hr | null>(() => loadHr());
+  const [authReady, setAuthReady] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
 
@@ -54,14 +65,16 @@ export default function Hire() {
   const [nice, setNice] = useState("");
   const [location, setLocation] = useState("");
   const [mode, setMode] = useState("remote");
-  const [minExp, setMinExp] = useState(1);
-  const [maxExp, setMaxExp] = useState(5);
+  const [minExp, setMinExp] = useState(0);
   const [salMin, setSalMin] = useState(0);
-  const [salMax, setSalMax] = useState(0);
   const [empType, setEmpType] = useState("full-time");
   const [currency, setCurrency] = useState("INR");
   const [deep, setDeep] = useState(false);
   const [relocation, setRelocation] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [tagOpen, setTagOpen] = useState(false);
+  const [tagHl, setTagHl] = useState(0);
+  const jdFileRef = useRef<HTMLInputElement>(null);
 
   const SUGGESTIONS: { label: string; desc: string; title: string; domain: string; must: string; seniority: string; mode: string }[] = [
     {
@@ -93,7 +106,7 @@ export default function Hire() {
     },
   ];
 
-  function useSuggestion(s: (typeof SUGGESTIONS)[number]) {
+  function applySuggestion(s: (typeof SUGGESTIONS)[number]) {
     setDesc(s.desc);
     setTitle(s.title);
     setDomain(s.domain);
@@ -117,11 +130,15 @@ export default function Hire() {
   const [channel, setChannel] = useState("platform");
   const [contactState, setContactState] = useState<string | null>(null);
   const [shortlisted, setShortlisted] = useState<Set<string>>(new Set());
+  const [editingBrief, setEditingBrief] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [stage, setStage] = useState(0);
   const cache = useRef<Record<string, Bundle>>({});
   const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setHr(loadHr());
+    setAuthReady(true);
     try {
       const rerun = JSON.parse(sessionStorage.getItem("tammy_rerun") ?? "null");
       if (rerun?.job) {
@@ -136,7 +153,7 @@ export default function Hire() {
     try {
       const last = JSON.parse(sessionStorage.getItem("tammy_last_search") ?? "null");
       const rows = Array.isArray(last?.results)
-        ? (last.results as Result[]).filter((r) => r?.id && r?.full_name)
+        ? (last.results as Result[]).map(normalizeRow).filter((r) => r?.id && r?.full_name)
         : [];
       if (rows.length) {
         setResults(rows);
@@ -164,20 +181,59 @@ export default function Hire() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!contactFor) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setContactFor(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [contactFor]);
+
+  useEffect(() => {
+    if (!searching) return;
+    const t = setInterval(
+      () => setStage((s) => (s >= SEARCH_STAGE_COUNT - 1 ? s : s + 1)),
+      1400,
+    );
+    return () => clearInterval(t);
+  }, [searching]);
+
   function joinHr(e: React.FormEvent) {
     e.preventDefault();
     const h = { name: name.trim(), email: email.trim() };
     if (!h.name || !h.email) return;
-    try {
-      localStorage.setItem("tammy_hr", JSON.stringify(h));
-    } catch {
-      /* ignore */
-    }
+    setHrSession(h);
     setHr(h);
   }
 
   const csv = (s: string) =>
     s.split(",").map((x) => x.trim()).filter(Boolean);
+
+  // Defensive: flatten any nested cache-shaped row ({candidate_id, candidates:{...}})
+  // so the side list, profile pane, and session restore all see flat rows.
+  function normalizeRow(r: Result): Result {
+    const nested = (r as { candidates?: unknown })?.candidates;
+    if (nested && typeof nested === "object" && !r?.id) {
+      const n = nested as Record<string, unknown>;
+      const flat = r as { candidate_id?: unknown; score?: unknown };
+      return {
+        ...(n as object),
+        ...r,
+        id: n.id ?? flat.candidate_id,
+        overall_score: flat.score ?? n.overall_score ?? r?.overall_score,
+        candidates: undefined,
+      } as Result;
+    }
+    return r;
+  }
+
+  function note(msg: string) {
+    setFlash(msg);
+    window.setTimeout(() => {
+      setFlash((f) => (f === msg ? null : f));
+    }, 3200);
+  }
 
   function buildJob(description: string) {
     return {
@@ -187,9 +243,8 @@ export default function Hire() {
       must_have: csv(must),
       nice_to_have: csv(nice),
       min_exp: Number(minExp) || 0,
-      max_exp: Number(maxExp) || 0,
+      max_exp: 30, // single minimum slider; upper bound stays open
       salary_min: Number(salMin) || 0,
-      ...(Number(salMax) > 0 ? { salary_max: Number(salMax) } : {}),
       currency: (currency.trim() || "INR").toUpperCase().slice(0, 3),
       location: location.trim(),
       remote_policy: mode,
@@ -212,14 +267,19 @@ export default function Hire() {
     if (typeof job.currency === "string") setCurrency(job.currency);
     if (typeof job.relocation_allowed === "boolean") setRelocation(job.relocation_allowed);
     if (typeof job.min_exp === "number") setMinExp(job.min_exp);
-    if (typeof job.max_exp === "number") setMaxExp(job.max_exp);
     if (typeof job.salary_min === "number") setSalMin(job.salary_min);
-    if (typeof job.salary_max === "number") setSalMax(job.salary_max);
+  }
+
+  function scrollToBriefError() {
+    requestAnimationFrame(() => {
+      document.getElementById("brief-error")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   }
 
   async function runSearch(job: Record<string, any>, isDeep = false) {
     setBusy(true);
     setSearching(true);
+    setStage(0);
     setError(null);
     try {
       const r = await fetch("/api/search", {
@@ -234,9 +294,12 @@ export default function Hire() {
           ? Object.entries(errs).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).slice(0, 3).join(" · ")
           : (j?.error ?? "Search failed.");
         setError(first);
+        scrollToBriefError();
         return;
       }
-      const rows: Result[] = j.results ?? [];
+      const rows: Result[] = ((j.results ?? []) as Result[])
+        .map(normalizeRow)
+        .filter((r) => r?.id && r?.full_name);
       setResults(rows);
       setSearched(true);
       try {
@@ -262,6 +325,7 @@ export default function Hire() {
       }
     } catch (err) {
       setError((err as Error).message);
+      scrollToBriefError();
     } finally {
       setBusy(false);
       setSearching(false);
@@ -296,23 +360,30 @@ export default function Hire() {
     }
   }
 
+  function fail(msg: string) {
+    setError(msg);
+    setFiltersOpen(true);
+    scrollToBriefError();
+  }
+
   async function search(e?: React.FormEvent) {
     e?.preventDefault();
     setError(null);
     const description = desc.trim();
     if (description.length < 20) {
-      setError("Describe the role in a sentence or two (20+ characters) so matching has something to work with.");
+      fail("Describe the role in a sentence or two (20+ characters) so matching has something to work with.");
       return;
     }
     if (!title.trim() || !domain.trim()) {
-      setError("Role title and domain are required.");
+      fail("Role title and domain are required.");
       return;
     }
     if (!csv(must).length) {
-      setError("Add at least one must-have skill (comma separated).");
+      fail("Add at least one must-have skill (comma separated).");
       return;
     }
     await runSearch(buildJob(description), deep);
+    setEditingBrief(false);
   }
 
   async function select(id: string) {
@@ -392,8 +463,12 @@ export default function Hire() {
           notes: hr ? `Saved by ${hr.name} <${hr.email}>` : "Saved from search",
         }),
       });
-      if (!r.ok) return;
+      if (!r.ok) {
+        note("Couldn't save the shortlist — already saved, or the server is busy.");
+        return;
+      }
       setShortlisted((s) => new Set(s).add(String(cand.id)));
+      note(`Shortlisted ${String(cand.full_name ?? "candidate").split(" ")[0]}.`);
       const saved = loadJSON<SavedShort[]>("tammy_shortlist", []);
       if (!saved.some((x) => x.id === String(cand.id))) {
         saved.unshift({ id: String(cand.id), name: String(cand.full_name ?? "Candidate") });
@@ -442,206 +517,502 @@ export default function Hire() {
         {typeof c.overall_score === "number" ? (
           <span className="score">★ {Math.round(c.overall_score)}</span>
         ) : null}
+        {shortlisted.has(String(c.id)) ? (
+          <span className="rowstar" title="Shortlisted">★</span>
+        ) : null}
       </motion.button>
+    );
+  }
+
+  if (!authReady) {
+    return (
+      <div className="employer-search-page hire-shell">
+        <AppNav />
+        <div className="chat-hero" aria-busy="true" aria-label="Loading">
+          <div className="app-kicker">Employer search</div>
+          <h1>Who do you need?</h1>
+          <p>Loading your workspace…</p>
+        </div>
+      </div>
     );
   }
 
   if (!hr) {
     return (
-      <div className="wrap" style={{ maxWidth: 520 }}>
-        <div className="topbar">
-          <Link className="brand" href="/">
-            Tammy <small>· Beta</small>
-          </Link>
-        </div>
-        <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.03em", marginBottom: 8 }}>
-          Hire with proof.
-        </h1>
-        <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 20 }}>
-          Tell us who you are — no passwords. Your name travels with every
-          message you send a candidate.
-        </p>
-        <form onSubmit={joinHr} className="form-card">
-          <div className="field">
-            <label>Your name *</label>
-            <input className="input" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Priya Sharma" />
-          </div>
-          <div className="field">
-            <label>Work email *</label>
-            <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="priya@company.com" />
-          </div>
-          <div className="rowline" style={{ flexWrap: "wrap" }}>
-          <button className="btn-frame solid" type="submit">
-            <span className="h tl"></span>
-            <span className="h tr"></span>
-            <span className="h bl"></span>
-            <span className="h br"></span>
-            Start hiring →
-          </button>
-          <button
-            className="btn-frame"
-            type="button"
-            onClick={() => {
-              const h = { name: "Test Recruiter", email: "recruiter@test.local" };
-              try {
-                localStorage.setItem("tammy_hr", JSON.stringify(h));
-              } catch {
-                /* ignore */
-              }
-              setHr(h);
-            }}
-          >
-            <span className="h tl"></span>
-            <span className="h tr"></span>
-            <span className="h bl"></span>
-            <span className="h br"></span>
-            ⚡ Test login (skip form)
-          </button>
-          </div>
-        </form>
+      <div className="employer-login-page">
+        <AppNav />
+        <main className="employer-login-layout landing-workspace-main">
+          <i className="g-handle pos-tl hidden lg:block" />
+          <i className="g-handle pos-tr hidden lg:block" />
+          <aside className="employer-login-rail landing-workspace-intro">
+            <Link className="workspace-back" href="/">← Back to Tammy</Link>
+            <div className="entry-kicker">I&apos;M HIRING</div>
+            <h1>Discover the<br /><em>right work.</em></h1>
+            <p className="workspace-copy">Describe what you need in plain language. Tammy finds the evidence behind the title.</p>
+            <div className="workspace-note"><span className="workspace-note-dot" /><div><strong>Verified workspace</strong><small>Your identity travels with every message.</small></div></div>
+          </aside>
+          <section className="employer-login-panel landing-workspace-card">
+            <div className="build-panel-top"><div><span className="panel-eyebrow">Employer access</span><h2>Enter your details.</h2></div><span className="app-status"><span /> No password needed</span></div>
+            <form onSubmit={joinHr} className="form-card">
+              <div className="field"><label>Your name *</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Priya Sharma" /></div>
+              <div className="field"><label>Work email *</label><input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="priya@company.com" /></div>
+              <div className="rowline" style={{ flexWrap: "wrap" }}>
+                <button className="btn-frame solid" type="submit"><span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>Start hiring →</button>
+                <button
+                  className="btn-frame"
+                  type="button"
+                  onClick={() => {
+                    const test = { name: "Test Recruiter", email: "test@tammy.sh" };
+                    setHrSession(test);
+                    setHr(test);
+                  }}
+                ><span className="h tl"></span><span className="h tr"></span><span className="h bl"></span><span className="h br"></span>Use test login →</button>
+              </div>
+            </form>
+          </section>
+        </main>
       </div>
     );
   }
 
-  const selectedBundle = selected ? bundles[selected] : null;
-  const selectedRow = selected ? results.find((r) => String(r.id) === selected) : null;
+  const EXP_PILLS: { label: string; value: number }[] = [
+    { label: "Any", value: 0 },
+    { label: "1\u20133 years", value: 1 },
+    { label: "3\u20135 years", value: 3 },
+    { label: "5\u20138 years", value: 5 },
+    { label: "8+ years", value: 8 },
+  ];
 
-  return (
-    <div className={"hire-shell" + (searched || searching ? " wide" : "")}>
-      <div className="topbar">
-        <Link className="brand" href="/">
-          Tammy <small>· Beta</small>
-        </Link>
-        <span className="hrtaps">
-          <span className="on">Search</span>
-          <Link href="/hire/dash">Dashboard</Link>
-        </span>
-        <span className="who">
-          {hr.name} · {hr.email} ·{" "}
-          <button
-            className="btn-plain"
-            type="button"
-            onClick={() => {
-              try {
-                localStorage.removeItem("tammy_hr");
-              } catch {
-                /* ignore */
+  const mustList = csv(must);
+  const niceList = csv(nice);
+
+  function addTag(raw: string) {
+    const v = raw.trim().replace(/,+$/, "");
+    if (!v) return;
+    if ([...mustList, ...niceList].some((x) => x.toLowerCase() === v.toLowerCase())) return;
+    setMust([...mustList, v].join(", "));
+    setTagInput("");
+    setError(null);
+  }
+
+  function toggleTagRequired(skill: string) {
+    const lower = skill.toLowerCase();
+    if (mustList.some((x) => x.toLowerCase() === lower)) {
+      setMust(mustList.filter((x) => x.toLowerCase() !== lower).join(", "));
+      setNice([...niceList, skill].join(", "));
+    } else {
+      setNice(niceList.filter((x) => x.toLowerCase() !== lower).join(", "));
+      setMust([...mustList, skill].join(", "));
+    }
+  }
+
+  const tagQuery = tagInput.trim().toLowerCase();
+  const tagTrimmed = tagInput.trim();
+  const tagTaken = [...mustList, ...niceList];
+  const skillOpts = CANONICAL_SKILLS.filter(
+    (s) =>
+      !tagTaken.some((v) => v.toLowerCase() === s.toLowerCase()) &&
+      (!tagQuery || s.toLowerCase().includes(tagQuery)),
+  ).slice(0, tagQuery ? 12 : 200);
+  const tagExactHit = tagQuery
+    ? CANONICAL_SKILLS.some((s) => s.toLowerCase() === tagQuery)
+    : false;
+  const tagAlreadyAdded = tagQuery
+    ? tagTaken.some((v) => v.toLowerCase() === tagQuery)
+    : false;
+  const tagShowCustom = tagTrimmed.length > 0 && !tagExactHit && !tagAlreadyAdded;
+  const tagTotal = skillOpts.length + (tagShowCustom ? 1 : 0);
+  const tagHi = tagTotal ? Math.min(tagHl, tagTotal - 1) : 0;
+
+  function pickSkill(s: string) {
+    addTag(s);
+    setTagOpen(false);
+    setTagHl(0);
+  }
+
+  function removeTag(skill: string) {
+    const lower = skill.toLowerCase();
+    setMust(mustList.filter((x) => x.toLowerCase() !== lower).join(", "));
+    setNice(niceList.filter((x) => x.toLowerCase() !== lower).join(", "));
+  }
+
+  function attachJD(file: File | undefined) {
+    if (!file) return;
+    setDesc((d) => (d ? d.trim() + "\n\n[Attached JD: " + file.name + "]" : "[Attached JD: " + file.name + "]"));
+  }
+
+  const renderBriefForm = () => (
+    <motion.form
+      onSubmit={search}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
+    >
+      <div className="talent-hero-input">
+        <div className="talent-prompt-row">
+          <SiriOrb size="32px" animationDuration={24} />
+          <textarea
+            value={desc}
+            onChange={(e) => setDesc(e.target.value)}
+            rows={2}
+            className="talent-prompt"
+            placeholder="Describe the role you're hiring for…"
+            aria-label="Role description"
+            onKeyDown={(e) => {
+              if ((e.key === "Enter" && (e.metaKey || e.ctrlKey)) || (e.key === "Enter" && !e.shiftKey)) {
+                e.preventDefault();
+                void search();
               }
-              setHr(null);
             }}
-          >
-            switch
-          </button>
-        </span>
+          />
+        </div>
+        <div className="talent-prompt-foot">
+          <div className="talent-prompt-pills" role="group" aria-label="Quick actions">
+            <input
+              ref={jdFileRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.md"
+              className="sr-only"
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={(e) => {
+                attachJD(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+            <button type="button" className="talent-pill" onClick={() => jdFileRef.current?.click()}>
+              <Paperclip /> Attach
+            </button>
+            <button
+              type="button"
+              className={"talent-pill" + (deep ? " on" : "")}
+              onClick={() => setDeep(!deep)}
+              aria-pressed={deep}
+              title="Deep read: the judge reads top profiles fully. Slower, sharper."
+            >
+              <Globe /> Deep read
+            </button>
+          </div>
+          <div className="talent-foot-right">
+            <BeamButton>
+              <button className="talent-cta" type="submit" disabled={busy}>
+                {busy ? "Searching…" : "Find Candidates"}
+                <ArrowRight aria-hidden="true" />
+              </button>
+            </BeamButton>
+          </div>
+        </div>
       </div>
 
-      {!searched && !searching ? (
-        <div className="chat-hero">
-          <h1>Who do you need?</h1>
-          <p>Describe the role like you&apos;d say it. Tune the filters, press Enter.</p>
-          <div className="suggest-row">
-            {SUGGESTIONS.map((s) => (
-              <button key={s.label} type="button" className="chipbtn" onClick={() => useSuggestion(s)}>
-                ✦ {s.label}
+      <div className="filters talent-filters">
+        <button
+          type="button"
+          className="filters-head"
+          aria-expanded={filtersOpen}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          <span className="filters-ico"><SlidersHorizontal /></span>
+          <span className="filters-titles">
+            <strong>Refine Constraints</strong>
+            <small>Tune the match</small>
+          </span>
+          <span className="talent-collapse-label">{filtersOpen ? "Collapse" : "Expand"}</span>
+          <ChevronDown
+            className="filters-chev"
+            style={{ transform: filtersOpen ? "rotate(180deg)" : "rotate(0deg)" }}
+            aria-hidden="true"
+          />
+        </button>
+        <AnimatePresence initial={false}>
+          {filtersOpen ? (
+            <motion.div
+              key="fbody"
+              className="filters-body"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+              style={{ overflow: "hidden" }}
+            >
+        <div className="talent-grid-3">
+          <div className="field"><label>Role Title</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Product Designer" /></div>
+          <div className="field"><label>Domain / Industry</label><input className="input" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="Fintech, AI" /></div>
+          <div className="field"><label>Location</label><LocationPicker value={location} onChange={setLocation} placeholder="Search all locations…" /></div>
+        </div>
+        <div className="talent-div" />
+        <div className="talent-grid-2">
+          <div>
+            <label className="talent-lab">Seniority</label>
+            <div className="talent-seg" role="radiogroup" aria-label="Seniority level">
+              {(["junior", "mid", "senior", "lead", "staff"] as const).map((s) => {
+                const isActive = seniority === s;
+                return (
+                  <motion.button
+                    key={s}
+                    type="button"
+                    role="radio"
+                    aria-checked={isActive}
+                    className={"talent-segbtn" + (isActive ? " on" : "")}
+                    onClick={() => setSeniority(s)}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    style={{ position: "relative" }}
+                  >
+                    {isActive ? (
+                      <motion.span
+                        layoutId="hire-seniority-pill"
+                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background: "#fff",
+                          borderRadius: 6,
+                          boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
+                        }}
+                      />
+                    ) : null}
+                    <span style={{ position: "relative" }}>
+                      {s === "staff" ? "Staff+" : s[0].toUpperCase() + s.slice(1)}
+                    </span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="talent-lab">Work Mode</label>
+            <div className="talent-seg" role="radiogroup" aria-label="Work mode">
+              {(["remote", "hybrid", "onsite"] as const).map((m) => {
+                const isActive = mode === m;
+                return (
+                  <motion.button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={isActive}
+                    className={"talent-segbtn" + (isActive ? " on" : "")}
+                    onClick={() => setMode(m)}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    style={{ position: "relative" }}
+                  >
+                    {isActive ? (
+                      <motion.span
+                        layoutId="hire-workmode-pill"
+                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background: "#fff",
+                          borderRadius: 6,
+                          boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
+                        }}
+                      />
+                    ) : null}
+                    <span style={{ position: "relative" }}>{m[0].toUpperCase() + m.slice(1)}</span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+        <div className="talent-div" />
+        <div>
+          <label className="talent-lab">Experience Range</label>
+          <div className="talent-pills">
+            {EXP_PILLS.map((p) => (
+              <button key={p.label} type="button" className={"talent-expbtn" + (minExp === p.value ? " on" : "")} onClick={() => setMinExp(p.value)}>
+                {p.label}
               </button>
             ))}
           </div>
-          <form onSubmit={search}>
-            <div className="chat-box">
-              <textarea
-                value={desc}
-                onChange={(e) => setDesc(e.target.value)}
-                placeholder="Senior product designer for a fintech dashboard — owns flows end-to-end, works with React engineers, ships weekly…"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void search();
+        </div>
+        <div className="talent-div" />
+        <div>
+          <div className="talent-skills-head">
+            <label className="talent-lab">Skills &amp; Tech Stack</label>
+            <span className="talent-hint">Click a tag to toggle required</span>
+          </div>
+          <div className="talent-tagbox">
+            {mustList.map((s) => (
+              <span key={s} className="talent-tag req">
+                <span>{s}</span>
+                <span className="talent-tagreq">(Required)</span>
+                <button type="button" onClick={() => removeTag(s)} aria-label={`remove ${s}`}>&times;</button>
+              </span>
+            ))}
+            {niceList.map((s) => (
+              <button key={s} type="button" className="talent-tag nice" onClick={() => toggleTagRequired(s)} title="Click to mark required">
+                <span>{s}</span>
+                <span aria-hidden="true">&times;</span>
+              </button>
+            ))}
+            <div className="pick" style={{ flex: 1, minWidth: 110 }}>
+              <input
+                value={tagInput}
+                onChange={(e) => {
+                  setTagInput(e.target.value);
+                  setTagHl(0);
+                  setTagOpen(true);
                 }}
+                onFocus={() => setTagOpen(true)}
+                onBlur={() => setTimeout(() => setTagOpen(false), 120)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setTagOpen(true);
+                    if (tagTotal) setTagHl((h) => (h + 1) % tagTotal);
+                  } else if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    if (tagTotal) setTagHl((h) => (h - 1 + tagTotal) % tagTotal);
+                  } else if (e.key === "Enter" || e.key === ",") {
+                    if (tagOpen && tagHi < skillOpts.length && skillOpts[tagHi]) {
+                      e.preventDefault();
+                      pickSkill(skillOpts[tagHi]);
+                    } else if (tagOpen && tagShowCustom && tagHi === skillOpts.length) {
+                      e.preventDefault();
+                      pickSkill(tagTrimmed);
+                    } else if (e.key === "Enter" || e.key === ",") {
+                      e.preventDefault();
+                      addTag(tagInput);
+                    }
+                  } else if (e.key === "Escape") {
+                    setTagOpen(false);
+                  }
+                }}
+                placeholder="+ Add skill..."
+                aria-label="Add skill"
+                aria-expanded={tagOpen}
+                className="talent-taginput"
               />
-              <div className="chat-actions">
-                <span className="chat-count">{desc.trim().length}/20+ characters needed</span>
-                <span className="rowline">
-                  <button
-                    type="button"
-                    className="switchrow"
-                    style={{ width: "auto", gap: 8 }}
-                    onClick={() => setDeep(!deep)}
-                    title="Deep read: the judge reads top profiles fully. Slower, sharper."
-                  >
-                    <span style={{ fontSize: 12.5 }}>Deep read</span>
-                    <span className={"switch" + (deep ? " on" : "")}>
-                      <span className="thumb" />
-                    </span>
-                  </button>
-                  <button className="btn-frame solid" type="submit" disabled={busy}>
-                    <span className="h tl"></span>
-                    <span className="h tr"></span>
-                    <span className="h bl"></span>
-                    <span className="h br"></span>
-                    {busy ? "Searching…" : "Search →"}
-                  </button>
-                </span>
-              </div>
-            </div>
-            <div className="filters">
-              <div className="field"><label>Role title *</label><input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Product Designer" /></div>
-              <div className="field"><label>Domain *</label><input className="input" value={domain} onChange={(e) => setDomain(e.target.value)} placeholder="Design" /></div>
-              <div className="field"><label>Location</label><input className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Bengaluru" /></div>
-              <div className="field"><label>Employment</label><select className="select" value={empType} onChange={(e) => setEmpType(e.target.value)}><option value="full-time">Full-time</option><option value="part-time">Part-time</option><option value="contract">Contract</option><option value="internship">Internship</option><option value="freelance">Freelance</option></select></div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <label>Seniority</label>
-                <div className="seg">
-                  {(["intern", "junior", "mid", "senior", "lead"] as const).map((s) => (
-                    <button key={s} type="button" className={seniority === s ? "on" : ""} onClick={() => setSeniority(s)}>
-                      {s[0].toUpperCase() + s.slice(1)}
-                    </button>
+              {tagOpen ? (
+                <ul className="picklist" role="listbox" aria-label="Skill suggestions">
+                  {!tagQuery ? (
+                    <li className="pickcount" aria-hidden="true">
+                      {skillOpts.length} of {CANONICAL_SKILLS.length} skills — type to filter
+                    </li>
+                  ) : null}
+                  {skillOpts.map((s, i) => (
+                    <li key={s} role="option" aria-selected={i === tagHi}>
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        className={i === tagHi ? "pick-hl" : ""}
+                        onMouseEnter={() => setTagHl(i)}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          pickSkill(s);
+                        }}
+                      >
+                        {s}
+                      </button>
+                    </li>
                   ))}
-                </div>
-              </div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <label>Work mode</label>
-                <div className="seg">
-                  {(["remote", "hybrid", "onsite"] as const).map((m) => (
-                    <button key={m} type="button" className={mode === m ? "on" : ""} onClick={() => setMode(m)}>
-                      {m[0].toUpperCase() + m.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <label>Must-have skills * — recognized names, so ranking stays clean</label>
-                <SkillPicker value={csv(must)} onChange={(a) => setMust(a.join(", "))} placeholder="Search must-have skills…" />
-              </div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <label>Nice-to-have</label>
-                <SkillPicker value={csv(nice)} onChange={(a) => setNice(a.join(", "))} placeholder="Search nice-to-have skills…" />
-              </div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <div className="f-label"><span>Experience range</span><output>{minExp}–{maxExp} yrs</output></div>
-                <div className="dual"><span>Min</span><input type="range" className="slider" min={0} max={Math.max(30, minExp, maxExp)} step={1} value={Math.min(minExp, Math.max(30, minExp, maxExp))} onChange={(e) => setMinExp(Math.min(Number(e.target.value), maxExp))} aria-label="Minimum experience" /></div>
-                <div className="dual"><span>Max</span><input type="range" className="slider" min={0} max={Math.max(30, minExp, maxExp)} step={1} value={Math.min(maxExp, Math.max(30, minExp, maxExp))} onChange={(e) => setMaxExp(Math.max(Number(e.target.value), minExp))} aria-label="Maximum experience" /></div>
-              </div>
-              <div className="field" style={{ gridColumn: "1 / -1" }}>
-                <div className="f-label">
-                  <span>Salary range {salMax === 0 ? "(no max)" : ""}</span>
-                  <output>{Number(salMin).toLocaleString()} – {salMax === 0 ? "∞" : Number(salMax).toLocaleString()} {currency}</output>
-                </div>
-                <div className="dual"><span>Min</span><input type="range" className="slider" min={0} max={Math.max(1000000, salMin, salMax)} step={25000} value={Math.min(salMin, Math.max(1000000, salMin, salMax))} onChange={(e) => { const v = Number(e.target.value); setSalMin(v); if (salMax !== 0 && salMax < v) setSalMax(v); }} aria-label="Minimum salary" /></div>
-                <div className="dual"><span>Max</span><input type="range" className="slider" min={0} max={Math.max(1000000, salMin, salMax)} step={25000} value={Math.min(salMax, Math.max(1000000, salMin, salMax))} onChange={(e) => { const v = Number(e.target.value); setSalMax(salMax !== 0 && v < salMin ? salMin : v); }} aria-label="Maximum salary, 0 means any" /></div>
-                <div className="rowline" style={{ marginTop: 8 }}>
-                  <select className="select" value={currency} onChange={(e) => setCurrency(e.target.value)} style={{ maxWidth: 120 }}>
-                    <option value="INR">INR</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option><option value="AED">AED</option>
-                  </select>
-                  <label className="checkrow">
-                    <input type="checkbox" checked={relocation} onChange={(e) => setRelocation(e.target.checked)} />
-                    Open to relocation
-                  </label>
-                </div>
-              </div>
+                  {tagShowCustom ? (
+                    <li role="option" aria-selected={tagHi === skillOpts.length}>
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        className={tagHi === skillOpts.length ? "pick-hl" : ""}
+                        onMouseEnter={() => setTagHl(skillOpts.length)}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          pickSkill(tagTrimmed);
+                        }}
+                      >
+                        + Add &ldquo;{tagTrimmed}&rdquo; (Other)
+                      </button>
+                    </li>
+                  ) : null}
+                  {!skillOpts.length && !tagShowCustom ? (
+                    <li className="pickempty">No skills match — try another name.</li>
+                  ) : null}
+                </ul>
+              ) : null}
             </div>
-          </form>
-          {error ? <p className="err" style={{ marginTop: 12 }}>{error}</p> : null}
+          </div>
+          {(!mustList.length && !niceList.length) ? (
+            <div className="talent-sugg">
+              <span>Suggestions:</span>
+              {["Figma", "React", "TypeScript", "Node.js", "Go", "PostgreSQL", "Python", "Redis"].filter((s) => ![...mustList, ...niceList].some((x) => x.toLowerCase() === s.toLowerCase())).map((s) => (
+                <button key={s} type="button" onClick={() => addTag(s)}>+ {s}</button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        <div className="talent-div" />
+        <div>
+          <label className="talent-lab">Target Compensation (Annual)</label>
+          <div className="talent-comp">
+            <div className="field">
+              <label>Currency</label>
+              <select className="select" value={currency} onChange={(e) => setCurrency(e.target.value)} aria-label="Currency">
+                <option value="INR">INR (₹)</option><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option><option value="GBP">GBP (£)</option><option value="AED">AED</option>
+              </select>
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label>Amount</label>
+              <input className="input" inputMode="numeric" value={salMin === 0 ? "" : String(salMin)} onChange={(e) => setSalMin(numOnly(e.target.value))} placeholder="e.g. 50000" aria-label="Expected salary amount" />
+            </div>
+          </div>
+        </div>
+        <div className="talent-div" />
+        <div className="talent-grid-2">
+          <div className="field">
+            <label>Employment</label>
+            <select className="select" value={empType} onChange={(e) => setEmpType(e.target.value)}><option value="full-time">Full-time</option><option value="part-time">Part-time</option><option value="contract">Contract</option><option value="internship">Internship</option><option value="freelance">Freelance</option></select>
+            <label className="checkrow" style={{ marginTop: 8 }}>
+              <input type="checkbox" checked={relocation} onChange={(e) => setRelocation(e.target.checked)} />
+              Must be open to relocation
+            </label>
+          </div>
+        </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
+      {error ? <p id="brief-error" role="alert" className="err" style={{ marginTop: 12 }}>{error}</p> : null}
+    </motion.form>
+  );
+
+  const selectedBundle = selected ? bundles[selected] : null;
+  const selectedRow = selected ? results.find((r) => String(r.id) === selected) : null;
+  const mustTop = csv(must).slice(0, 4).join(", ");
+  const numOnly = (s: string) => Number(s.replace(/[^0-9]/g, "")) || 0;
+  const searchStages = [
+    { t: "Parsing must-haves", sub: mustTop || "reading the brief" },
+    { t: "Embedding the role", sub: "turning the brief into a search vector" },
+    { t: "Scanning evidence", sub: `${location.trim() || "anywhere"} · ${mode} · ${minExp === 0 ? "any exp" : `${minExp}+ yrs`}` },
+    deep
+      ? { t: "Deep reading top profiles", sub: "judge reads full profiles — slower, sharper" }
+      : { t: "Ranking best fits", sub: "by evidence depth, not keywords" },
+  ];
+
+  return (
+    <div className={"employer-search-page hire-shell" + (searched || searching ? " wide" : "")}>
+      <AppNav />
+
+      {!searched && !searching ? (
+        <div className="chat-hero talent-wrap">
+          <i className="g-handle pos-tl hidden lg:block" />
+          <i className="g-handle pos-tr hidden lg:block" />
+          <header className="talent-head">
+            <h1>Who do you need?</h1>
+            <p>Describe your target role in plain English. We&apos;ll automatically parse requirements and match verified candidates.</p>
+          </header>
+          <div className="talent-try">
+            <span className="talent-try-label">Try:</span>
+            {SUGGESTIONS.map((s) => (
+              <button key={s.label} type="button" className="talent-trybtn" onClick={() => applySuggestion(s)}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+          {renderBriefForm()}
         </div>
       ) : searching ? (
         <div className="searching">
+          <SearchOrb searching />
           <motion.div
             className="search-pulse"
             animate={{ opacity: [0.35, 1, 0.35], scale: [0.97, 1, 0.97] }}
@@ -651,35 +1022,71 @@ export default function Hire() {
           </motion.div>
           <h2>Reading your brief…</h2>
           <p>Embedding the role, matching evidence across profiles, ranking the best fits.</p>
-          <ul>
-            <li>Parsing must-haves{csv(must).length ? `: ${csv(must).slice(0, 4).join(", ")}` : ""}</li>
-            <li>Filtering {location.trim() || "anywhere"} · {mode} · {minExp}–{maxExp} yrs</li>
-          </ul>
+          <ol className="stages">
+            {searchStages.map((s, i) => (
+              <motion.li
+                key={s.t}
+                className={"stage" + (i < stage ? " done" : "") + (i === stage ? " active" : "")}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3, delay: i * 0.08 }}
+              >
+                <span className="st-ic" aria-hidden="true">
+                  {i < stage ? <Check /> : i === stage ? <i /> : null}
+                </span>
+                <span>
+                  {s.t}
+                  <small>{s.sub}</small>
+                </span>
+              </motion.li>
+            ))}
+          </ol>
         </div>
       ) : results.length ? (
-        <div ref={resultsRef} style={{ scrollMarginTop: 12 }}>
-          <div className="rowline" style={{ marginBottom: 12, justifyContent: "space-between" }}>
-            <span className="results-head" style={{ margin: 0 }}>
-              <strong>
-                {results.length} match{results.length === 1 ? "" : "es"}
-              </strong>
-              {" "}— top fit opened for you
+        <div ref={resultsRef} className="results-wrap" style={{ scrollMarginTop: 12 }}>
+          <div className="results-top">
+            <div className="results-headings">
+              <span className="results-count">
+                {results.length} match{results.length === 1 ? "" : "es"} · top fits
+              </span>
+              <h2>{title.trim() ? title.trim() : "Top matches"}</h2>
+            </div>
+            <span className="rowline results-actions">
+              <button
+                className="btn-frame"
+                type="button"
+                aria-expanded={editingBrief}
+                onClick={() => {
+                  setEditingBrief((v) => !v);
+                  setFiltersOpen(true);
+                }}
+              >
+                <span className="h tl"></span>
+                <span className="h tr"></span>
+                <span className="h bl"></span>
+                <span className="h br"></span>
+                {editingBrief ? "Close brief" : "Edit brief"}
+              </button>
+              <button
+                className="btn-frame"
+                type="button"
+                onClick={() => {
+                  setSearched(false);
+                  setSelected(null);
+                }}
+              >
+                <span className="h tl"></span>
+                <span className="h tr"></span>
+                <span className="h bl"></span>
+                <span className="h br"></span>
+                New search
+              </button>
             </span>
-            <button
-              className="btn-frame"
-              type="button"
-              onClick={() => {
-                setSearched(false);
-                setSelected(null);
-              }}
-            >
-              <span className="h tl"></span>
-              <span className="h tr"></span>
-              <span className="h bl"></span>
-              <span className="h br"></span>
-              New search
-            </button>
           </div>
+          {flash ? (
+            <p className="flash-note" role="status">{flash}</p>
+          ) : null}
+          {editingBrief ? <div className="brief-panel">{renderBriefForm()}</div> : null}
           <div className="two-pane">
             <div className="side-list">{results.map((c, i) => rowCard(c, i))}</div>
             <motion.div
@@ -753,8 +1160,15 @@ export default function Hire() {
         </div>
       ) : (
         <div className="chat-hero center">
+          <SearchX className="empty-icon" aria-hidden="true" />
           <h2>No visible profiles matched.</h2>
-          <p>Loosen a filter — wider location, broader salary, fewer must-haves — and search again.</p>
+          <p>
+            {[title.trim(), domain.trim(), `${mode} · ${minExp === 0 ? "any exp" : `${minExp}+ yrs`}`]
+              .filter(Boolean)
+              .join(" · ")}
+            <br />
+            Loosen a filter — wider location, broader salary, fewer must-haves — and search again.
+          </p>
           <button
             className="btn-frame"
             type="button"
@@ -769,48 +1183,68 @@ export default function Hire() {
         </div>
       )}
 
-      {contactFor ? (
-        <div className="modal-veil" onClick={() => setContactFor(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Message {String(contactFor.full_name).split(" ")[0]}</h3>
-            <p>
-              As {hr.name} ({hr.email}). Logged in the open-contact record and
-              emailed to the candidate.
-            </p>
-            <div className="field">
-              <label>Channel</label>
-              <select className="select" value={channel} onChange={(e) => setChannel(e.target.value)}>
-                <option value="platform">Platform</option>
-                <option value="email">Email</option>
-                <option value="phone">Phone</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Message</label>
-              <textarea
-                className="textarea"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Hi — we're hiring a … and your work on … stood out. Open to a 20-min chat this week?"
-              />
-            </div>
-            {contactState ? <p className="oknote">{contactState}</p> : null}
-            <div className="modal-actions">
-              <button className="btn-plain" type="button" onClick={() => setContactFor(null)}>
-                Cancel
-              </button>
-              <button className="btn-frame solid" type="button" onClick={sendContact} disabled={!message.trim()}>
-                <span className="h tl"></span>
-                <span className="h tr"></span>
-                <span className="h bl"></span>
-                <span className="h br"></span>
-                Send →
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <AnimatePresence>
+        {contactFor ? (
+          <motion.div
+            className="modal-veil"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={() => setContactFor(null)}
+          >
+            <motion.div
+              className="modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Message ${String(contactFor.full_name).split(" ")[0]}`}
+              initial={{ opacity: 0, y: 16, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3>Message {String(contactFor.full_name).split(" ")[0]}</h3>
+              <p>
+                As {hr.name} ({hr.email}). Logged in the open-contact record and
+                emailed to the candidate.
+              </p>
+              <div className="field">
+                <label>Channel</label>
+                <select className="select" value={channel} onChange={(e) => setChannel(e.target.value)}>
+                  <option value="platform">Platform</option>
+                  <option value="email">Email</option>
+                  <option value="phone">Phone</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="field">
+                <label>Message</label>
+                <textarea
+                  className="textarea"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Hi — we're hiring a … and your work on … stood out. Open to a 20-min chat this week?"
+                  autoFocus
+                />
+              </div>
+              {contactState ? <p className="oknote">{contactState}</p> : null}
+              <div className="modal-actions">
+                <button className="btn-plain" type="button" onClick={() => setContactFor(null)}>
+                  Cancel
+                </button>
+                <button className="btn-frame solid" type="button" onClick={sendContact} disabled={!message.trim()}>
+                  <span className="h tl"></span>
+                  <span className="h tr"></span>
+                  <span className="h bl"></span>
+                  <span className="h br"></span>
+                  Send →
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

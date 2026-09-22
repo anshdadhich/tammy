@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Portfolio, { type Bundle } from "@/components/Portfolio";
+import AppNav from "@/components/AppNav";
 
 type Hr = { name: string; email: string };
 type SavedShort = { id: string; name: string };
@@ -220,15 +221,20 @@ export default function HireDashboard() {
 
   if (!hr) {
     return (
-      <div className="wrap center" style={{ maxWidth: 480 }}>
-        <p style={{ marginBottom: 16 }}>Join as HR first — it takes ten seconds.</p>
-        <Link className="btn-frame btn-green" href="/hire">
-          <span className="h tl"></span>
-          <span className="h tr"></span>
-          <span className="h bl"></span>
-          <span className="h br"></span>
-          Go to hiring →
-        </Link>
+      <div className="employer-dashboard-page">
+        <AppNav />
+        <main className="employer-dashboard-empty">
+          <span className="workspace-label">EMPLOYER DESK / 00</span>
+          <h1>Make your first shortlist.</h1>
+          <p>Join the hiring workspace to search evidence-backed profiles and keep the strongest conversations in one place.</p>
+          <Link className="btn-frame solid" href="/hire">
+            <span className="h tl"></span>
+            <span className="h tr"></span>
+            <span className="h bl"></span>
+            <span className="h br"></span>
+            Go to hiring →
+          </Link>
+        </main>
       </div>
     );
   }
@@ -237,19 +243,8 @@ export default function HireDashboard() {
   const selectedBundle = selected ? bundles[selected] ?? null : null;
 
   return (
-    <div className="hire-shell wide">
-      <div className="topbar">
-        <Link className="brand" href="/">
-          Tammy <small>· Beta</small>
-        </Link>
-        <span className="hrtaps">
-          <Link href="/hire">Search</Link>
-          <span className="on">Dashboard</span>
-        </span>
-        <span className="who">
-          {hr.name} · {hr.email}
-        </span>
-      </div>
+    <div className="employer-dashboard-page hire-shell wide">
+      <AppNav />
 
       <div className="dash-hero">
         <div>

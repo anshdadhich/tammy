@@ -12,7 +12,7 @@ function loadEnv(path) {
 const env = loadEnv(new URL("../.env.local", import.meta.url));
 const BASE = process.env.BASE_URL || "http://localhost:3000";
 let pass = 0, fail = 0;
-const ok = (name, cond, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "PASS" : "FAIL"} ${name} ${extra}`); };
+const ok = (name, cond, extra = "") => { if (cond) { pass++; } else { fail++; } console.log(`${cond ? "PASS" : "FAIL"} ${name} ${extra}`); };
 
 // 1. Fast search finds seeded candidate
 const job = {

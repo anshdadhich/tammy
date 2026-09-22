@@ -43,13 +43,13 @@ for (const a of ACCOUNTS) {
 }
 // 4. Employer (verified) + job.
 const { data: emp } = await db.from("employers").insert({ company_name: "Test Labs", company_email: "employer@test.com", verification_status: "verified" }).select("id").single();
-const { data: job } = await db.from("jobs").insert({
+await db.from("jobs").insert({
   employer_id: emp.id, title: "Backend Developer (Node/Postgres)", domain: "Software Development",
   seniority: "mid", description: "Build logistics APIs with Node.js and PostgreSQL. Realtime tracking with WebSockets and Redis a plus. Must own auth, schema design, deployment.",
   must_have_skills: ["Node.js", "PostgreSQL"], nice_to_have_skills: ["Redis"],
   min_experience: 1, max_experience: 4, salary_min: 40000, salary_max: 80000,
   salary_currency: "INR", location: "Remote", remote_policy: "remote", employment_type: "full-time", status: "active",
-}).select("id").single();
+});
 // 5. Candidate with project + skills + chunks (zero vectors = searchable fallback).
 const { data: cand } = await db.from("candidates").insert({
   full_name: "Test Candidate", headline: "Node/Postgres APIs, auth + caching, 2y",

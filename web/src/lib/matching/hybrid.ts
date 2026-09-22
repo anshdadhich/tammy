@@ -196,7 +196,8 @@ export function combineRanks(
   keywordRanks: RankedChunk[],
   topN = 30,
 ): HybridHit[] {
-  const byCandidate = new Map<string, HybridHit & { chunkSet: Set<string> }>();
+  const byCandidate = new Map<string, HybridHit>();
+  const chunkSets = new Map<string, Set<string>>();
 
   const acc = (
     r: RankedChunk,
@@ -212,9 +213,9 @@ export function combineRanks(
         vector_distance: null,
         keyword_score: null,
         chunk_ids: [],
-        chunkSet: new Set<string>(),
       };
       byCandidate.set(r.candidate_id, e);
+      chunkSets.set(r.candidate_id, new Set<string>());
     }
     e.rrf_score += rrf(r.rank);
     if (arm === "vector") {
@@ -228,8 +229,9 @@ export function combineRanks(
         e.keyword_score = r.kw_score ?? null;
       }
     }
-    if (!e.chunkSet.has(r.id)) {
-      e.chunkSet.add(r.id);
+    const seen = chunkSets.get(r.candidate_id)!;
+    if (!seen.has(r.id)) {
+      seen.add(r.id);
       e.chunk_ids.push(r.id);
     }
   };
@@ -238,7 +240,6 @@ export function combineRanks(
   keywordRanks.forEach((r) => acc(r, "keyword"));
 
   return Array.from(byCandidate.values())
-    .map(({ chunkSet: _omit, ...rest }) => rest as HybridHit)
     .sort((a, b) => b.rrf_score - a.rrf_score)
     .slice(0, topN);
 }

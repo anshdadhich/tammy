@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   // Attach account emails (best-effort).
   const rows = (data ?? []) as Record<string, unknown>[];
   const userIds = [...new Set(rows.map((r) => String(r.user_id ?? "")).filter(Boolean))];
-  let emailByUser: Record<string, string> = {};
+  const emailByUser: Record<string, string> = {};
   if (userIds.length) {
     const { data: users } = await db.from("users").select("id, email").in("id", userIds);
     for (const u of (users ?? []) as { id: string; email: string }[]) {

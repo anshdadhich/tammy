@@ -77,16 +77,36 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
         if (!changed?.length) {
           const { data: cached } = await db
             .from("candidate_matches")
-            .select("candidate_id, score, match_reasons_json, candidates(id, full_name, headline, domain, total_experience_years, min_salary, contact_email, contact_phone, linkedin_url, github_url, portfolio_url, resume_url, photo_url)")
+            .select("candidate_id, score, match_reasons_json, candidates(id, full_name, headline, domain, total_experience_years, min_salary, contact_email, contact_phone, linkedin_url, github_url, portfolio_url, resume_url, photo_url, location_city)")
             .eq("search_id", rs.id)
             .limit(limit);
           if (cached?.length) {
-            const filtered = (cached as Record<string, unknown>[]).map((m) => {
-              const c = (m as { candidates?: Record<string, unknown> | null }).candidates;
-              return c ? { ...m, candidates: applyContactPrefs(c as Parameters<typeof applyContactPrefs>[0]) } : m;
-            });
-            wev.add({ cached: true, result_count: cached.length, search_id: rs.id });
-            return Response.json({ results: filtered, queryText, searchId: rs.id, cached: true });
+            // Flatten to the exact shape the live path returns (flat candidate
+            // fields + overall_score), so list rendering and caching behave
+            // identically on cache hits and live searches.
+            const flattened: Record<string, unknown>[] = (cached as Record<string, unknown>[])
+              .map((m): Record<string, unknown> | null => {
+                const mm = m as {
+                  candidates?: Record<string, unknown> | null;
+                  candidate_id?: unknown;
+                  score?: unknown;
+                  match_reasons_json?: unknown;
+                };
+                const c = mm.candidates;
+                if (!c || typeof c !== "object") return null;
+                const clean = applyContactPrefs(c as Parameters<typeof applyContactPrefs>[0]) as unknown as Record<string, unknown>;
+                return {
+                  ...clean,
+                  id: c.id ?? mm.candidate_id,
+                  overall_score: typeof mm.score === "number" ? mm.score : null,
+                  sub_scores: (mm.match_reasons_json as Record<string, unknown> | null) ?? {},
+                };
+              })
+              .filter((r): r is Record<string, unknown> => !!r?.id);
+            if (flattened.length) {
+              wev.add({ cached: true, result_count: flattened.length, search_id: rs.id });
+              return Response.json({ results: flattened, queryText, searchId: rs.id, cached: true });
+            }
           }
         }
       }
@@ -114,7 +134,10 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       const g = byCand.get(c.candidate_id) ?? { best: Infinity, hits: [] };
       const d = typeof c.distance === "number" ? c.distance : Infinity;
       if (d < g.best) g.best = d;
-      if (g.hits.length < 3) g.hits.push(c); // cap: one candidate can't dominate via chunk count
+      // One candidate can't dominate via chunk count: keep its 3 nearest chunks.
+      g.hits.push(c);
+      g.hits.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+      if (g.hits.length > 3) g.hits.length = 3;
       byCand.set(c.candidate_id, g);
     }
     const ranked = [...byCand.entries()].sort((a, b) => a[1].best - b[1].best).slice(0, limit);

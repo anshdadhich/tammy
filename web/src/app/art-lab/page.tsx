@@ -80,7 +80,7 @@ export default function ArtLab() {
   return (
     <div className="wrap" style={{ maxWidth: 1180 }}>
       <div className="topbar">
-        <Link className="brand" href="/">
+        <Link className="brand" href="/hire">
           Tammy <small>· art lab</small>
         </Link>
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
