@@ -33,7 +33,17 @@ export async function analyzeProjectDepth(p: {
   try {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
-    if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+    if (start < 0 || end <= start) return null;
+    const parsed = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
+    // Clamp/allowlist model output so prompt-injected junk can't poison ranking.
+    const complexity = Math.min(10, Math.max(1, Math.round(Number(parsed.complexity_score) || 5)));
+    const tech = ["low", "medium", "high", "very_high"].includes(String(parsed.technical_complexity))
+      ? String(parsed.technical_complexity) : "medium";
+    const evidence = ["weak", "moderate", "strong"].includes(String(parsed.evidence_quality))
+      ? String(parsed.evidence_quality) : "moderate";
+    const autonomy = ["solo", "contributed", "led", "unknown"].includes(String(parsed.autonomy_level))
+      ? String(parsed.autonomy_level) : "unknown";
+    return { ...parsed, complexity_score: complexity, technical_complexity: tech, evidence_quality: evidence, autonomy_level: autonomy };
   } catch { /* fall through */ }
   return null;
 }

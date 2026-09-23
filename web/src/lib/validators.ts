@@ -30,6 +30,7 @@ export const senioritySchema = z.enum([
   "mid",
   "senior",
   "lead",
+  "staff",
 ]);
 export const employmentTypeSchema = z.enum([
   "full-time",
@@ -166,6 +167,16 @@ export const candidateSchema = z.object({
   ),
 
   visibility: visibilitySchema,
+  // Public contact opt-ins — all default false (privacy by default).
+  // Persisted as boolean columns on candidates when the migration lands;
+  // harmless no-ops until then.
+  show_email: z.boolean().default(false),
+  show_phone: z.boolean().default(false),
+  show_linkedin: z.boolean().default(false),
+  show_github: z.boolean().default(false),
+  show_resume: z.boolean().default(false),
+  show_portfolio: z.boolean().default(false),
+  show_photo: z.boolean().default(false),
   consent: z.literal(true, {
     message: "You must consent to processing to join",
   }),

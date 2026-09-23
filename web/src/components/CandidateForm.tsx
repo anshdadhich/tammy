@@ -76,6 +76,14 @@ export type FormState = {
   notice_period: string;
   visibility: "visible" | "hidden" | "inactive";
   consent: boolean;
+  /** Public contact opt-ins — every channel defaults OFF (privacy by default). */
+  show_email: boolean;
+  show_phone: boolean;
+  show_linkedin: boolean;
+  show_github: boolean;
+  show_resume: boolean;
+  show_portfolio: boolean;
+  show_photo: boolean;
 };
 
 export function blankForm(): FormState {
@@ -111,6 +119,13 @@ export function blankForm(): FormState {
     notice_period: "",
     visibility: "visible",
     consent: false,
+    show_email: false,
+    show_phone: false,
+    show_linkedin: false,
+    show_github: false,
+    show_resume: false,
+    show_portfolio: false,
+    show_photo: false,
   };
 }
 
@@ -217,6 +232,13 @@ export function demoForm(): FormState {
     notice_period: "",
     visibility: "visible",
     consent: true,
+    show_email: true,
+    show_phone: false,
+    show_linkedin: true,
+    show_github: true,
+    show_resume: false,
+    show_portfolio: false,
+    show_photo: true,
   };
 }
 
@@ -301,6 +323,14 @@ export function bundleToForm(bundle: {
     c.availability_status === "immediate" ? "Immediate" : c.availability_status === "inactive" ? "Inactive" : "Notice period";
   f.visibility = (c.visibility_status ?? "visible") as FormState["visibility"];
   f.consent = true;
+  // Contact opt-ins: absent flags mean OFF (privacy by default).
+  f.show_email = c.show_email === true;
+  f.show_phone = c.show_phone === true;
+  f.show_linkedin = c.show_linkedin === true;
+  f.show_github = c.show_github === true;
+  f.show_resume = c.show_resume === true;
+  f.show_portfolio = c.show_portfolio === true;
+  f.show_photo = c.show_photo === true;
   return f;
 }
 
@@ -383,6 +413,13 @@ export function formToPayload(f: FormState): Record<string, unknown> {
     notice_period: f.notice_period.trim(),
     visibility: f.visibility,
     consent: true,
+    show_email: f.show_email,
+    show_phone: f.show_phone,
+    show_linkedin: f.show_linkedin,
+    show_github: f.show_github,
+    show_resume: f.show_resume,
+    show_portfolio: f.show_portfolio,
+    show_photo: f.show_photo,
   };
 }
 
@@ -770,7 +807,7 @@ export default function CandidateForm({
                     </div>
                     <div className="grid2">
                       <div className="field"><label>Impact</label><input className="input" value={p.impact} onChange={(ev) => { const a = [...f.projects]; a[i] = { ...p, impact: ev.target.value }; set("projects", a); }} /></div>
-                      <div className="field"><label>Type</label><select className="select" value={p.project_type} onChange={(ev) => { const a = [...f.projects]; a[i] = { ...p, project_type: ev.target.value }; set("projects", a); }}><option value="">—</option><option value="personal">Personal</option><option value="academic">Academic</option><option value="freelance">Freelance</option><option value="production">Production</option><option value="open_source">Open source</option><option value="prototype">Prototype</option></select></div>
+                      <div className="field"><label>Type</label><select className="select" aria-label="Project type" value={p.project_type} onChange={(ev) => { const a = [...f.projects]; a[i] = { ...p, project_type: ev.target.value }; set("projects", a); }}><option value="">—</option><option value="personal">Personal</option><option value="academic">Academic</option><option value="freelance">Freelance</option><option value="production">Production</option><option value="open_source">Open source</option><option value="prototype">Prototype</option></select></div>
                     </div>
                     <button type="button" className="btn-plain" onClick={() => set("projects", f.projects.filter((_, j) => j !== i))}>Remove</button>
                   </div>
@@ -926,7 +963,7 @@ export default function CandidateForm({
               <div className="grid-pair">
                 <div className="field">
                   <label>Currency</label>
-                  <select className="select" value={f.currency} onChange={(e) => set("currency", e.target.value)}>
+                  <select className="select" aria-label="Currency" value={f.currency} onChange={(e) => set("currency", e.target.value)}>
                     <option value="INR">INR — Indian Rupee</option>
                     <option value="USD">USD — US Dollar</option>
                     <option value="EUR">EUR — Euro</option>
@@ -1041,6 +1078,22 @@ export default function CandidateForm({
                 <p className="hint" style={{ marginTop: 6 }}>Enter a number and pick the unit — e.g., 15 days, 2 months.</p>
               </div>
               <Seg label="Page visibility" value={f.visibility} options={[{ v: "visible", t: "Visible" }, { v: "hidden", t: "Hidden" }, { v: "inactive", t: "Inactive" }]} onChange={(v) => set("visibility", v)} />
+              <div className="field" style={{ marginTop: 18 }}>
+                <label>Public contact channels</label>
+                <p className="hint" style={{ marginBottom: 10 }}>
+                  Everything is private by default. Switch on what visitors may see —
+                  employers in a search always see your full dossier.
+                </p>
+                <div className="privacy-grid">
+                  <Toggle label="Email" value={f.show_email} onChange={(v) => set("show_email", v)} />
+                  <Toggle label="Phone" value={f.show_phone} onChange={(v) => set("show_phone", v)} />
+                  <Toggle label="LinkedIn" value={f.show_linkedin} onChange={(v) => set("show_linkedin", v)} />
+                  <Toggle label="GitHub" value={f.show_github} onChange={(v) => set("show_github", v)} />
+                  <Toggle label="Resume" value={f.show_resume} onChange={(v) => set("show_resume", v)} />
+                  <Toggle label="Portfolio file" value={f.show_portfolio} onChange={(v) => set("show_portfolio", v)} />
+                  <Toggle label="Photo" value={f.show_photo} onChange={(v) => set("show_photo", v)} />
+                </div>
+              </div>
             </div>
           )}
 

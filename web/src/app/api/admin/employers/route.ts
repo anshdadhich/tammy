@@ -1,5 +1,9 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { AuthError, requireRole } from "@/lib/auth";
+import { z } from "zod";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const STATUS_VALUES = ["pending", "verified", "rejected", "suspended", "all"] as const;
 
 // GET /api/admin/employers?status=pending — list employers (default pending).
 // Admin-only (users.role === 'admin').
@@ -11,7 +15,10 @@ export async function GET(request: Request) {
     return Response.json({ error: (e as Error).message }, { status });
   }
   const url = new URL(request.url);
-  const statusFilter = url.searchParams.get("status") ?? "pending";
+  const rawStatus = url.searchParams.get("status") ?? "pending";
+  const statusFilter = (STATUS_VALUES as readonly string[]).includes(rawStatus) ? rawStatus : "pending";
+  const rawLimit = Number(url.searchParams.get("limit") ?? 100);
+  const pageLimit = Math.min(Math.max(Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 100, 1), 100);
   const db = supabaseAdmin();
   let query = db
     .from("employers")
@@ -19,12 +26,15 @@ export async function GET(request: Request) {
       "id, user_id, company_name, company_email, website, company_size, industry, verification_status, created_at, updated_at",
     )
     .order("created_at", { ascending: true })
-    .limit(100);
+    .limit(pageLimit);
   if (statusFilter !== "all") {
     query = query.eq("verification_status", statusFilter);
   }
   const { data, error } = await query;
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[admin] employers list failed");
+    return Response.json({ error: "employers list failed" }, { status: 500 });
+  }
 
   // Attach account emails (best-effort).
   const rows = (data ?? []) as Record<string, unknown>[];
@@ -54,17 +64,11 @@ export async function POST(request: Request) {
     return Response.json({ error: (e as Error).message }, { status });
   }
   const body = await request.json().catch(() => null);
-  const employerId = String(body?.employerId ?? "");
-  const action = String(body?.action ?? "");
-  if (!employerId) {
-    return Response.json({ error: "employerId required" }, { status: 400 });
+  const parsed = z.object({ employerId: z.string().regex(UUID_RE), action: z.enum(["verify", "reject"]) }).safeParse(body);
+  if (!parsed.success) {
+    return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
   }
-  if (action !== "verify" && action !== "reject") {
-    return Response.json(
-      { error: "action must be 'verify' or 'reject'" },
-      { status: 400 },
-    );
-  }
+  const { employerId, action } = parsed.data;
   const db = supabaseAdmin();
   const { data, error } = await db
     .from("employers")
@@ -74,7 +78,10 @@ export async function POST(request: Request) {
     .eq("id", employerId)
     .select("id, company_name, verification_status")
     .single();
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error || !data) {
+    console.error("[admin] employer update failed");
+    return Response.json({ error: "employer not found" }, { status: 404 });
+  }
 
   try {
     await db.from("audit_logs").insert({

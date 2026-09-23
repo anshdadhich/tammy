@@ -12,13 +12,14 @@ npm run dev     # http://localhost:3000
 ## Pages
 
 - `/` — landing (candidate path / HR path / find-your-page lookup)
-- `/start` — candidate signup: one structured form → mints `/u/[id]`
-- `/u/[id]` — public portfolio (private salary/prefs never render) + ✎ edit link
-- `/u/[id]/edit` — owner edit (signup-email gate), photo upload, delete
-- `/hire` — HR: name+email join → big search box + filters → minimal results →
-  click → two-pane (results sidebar + full portfolio), contact + shortlist
+- `/join` — candidate signup: one structured form → mints `/talent/[id]` (legacy `/start` redirects)
+- `/talent/[id]` — public dossier (only opted-in contact channels render) + ✎ edit link (legacy `/u/*` redirects)
+- `/talent/[id]/edit` — owner edit (signup-email gate), photo upload, delete
+- `/hire` — HR gateway (redirects to search or login) → `/hire/search`: brief + filters → ranked results →
+  click → two-pane (results sidebar + full dossier), contact + shortlist
+- `/hire/dashboard` — shortlist + outreach tracker
 
-## Profile page anatomy (`/u/[id]`, shared with HR view)
+## Profile page anatomy (`/talent/[id]`, shared with HR view)
 
 - Header: rounded-square photo, name, headline, chips (domain · YoE · location ·
   availability · visibility), salary line (min expected + currency/frequency · current position)
@@ -36,12 +37,12 @@ npm run dev     # http://localhost:3000
 
 - `POST /api/candidates` → 202 `{ candidateId, status: "processing" }`
 - `PUT /api/candidates` `{ id, ...fields }` → 202 (edit, replaces child rows)
-- `GET /api/candidates?id=...` (or `?email=...`) → full bundle for the portfolio
+- `GET /api/candidates?id=...` → full dossier bundle (email lookup is `POST /api/candidates/lookup`)
 - `POST /api/search` `{ job, limit? }` → `{ results, queryText, searchId }`
 - `POST /api/shortlists` / `GET /api/shortlists?candidate_id=...`
 - `POST /api/contacts` (HR outreach, audit + best-effort email)
 - `POST /api/uploads` (photo/resume, after the candidate row exists)
-- `POST /api/inngest` (background worker)
+- `POST /api/webhooks/inngest` (background worker endpoint)
 
 ## Smoke
 

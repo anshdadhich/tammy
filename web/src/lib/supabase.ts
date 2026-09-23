@@ -14,6 +14,10 @@ export function supabasePublic() {
 
 // Service-role client (bypasses RLS) — route handlers / Inngest only, never browser.
 export function supabaseAdmin() {
+  // Hard guard: importing this module client-side would bundle the service key.
+  if (typeof window !== "undefined") {
+    throw new Error("supabaseAdmin() must only run on the server");
+  }
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

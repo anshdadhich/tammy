@@ -16,6 +16,7 @@ export interface ScoreContext {
   skillProjects: Map<string, number>; // lowercase skill -> # projects using it
   depths: { complexity: number; evidence: string }[]; // per-project depth
   minSalary: number | null;
+  salaryFreq: string | null; // candidate's frequency: employer budgets compare annualised
   totalExp: number | null;
   remotePref: string | null;
   locationCity: string | null;
@@ -24,6 +25,14 @@ export interface ScoreContext {
 }
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+
+/** Employer budgets are annual; candidate expectations carry their own frequency. */
+export function annualize(amount: number, freq: string | null | undefined): number {
+  const f = (freq ?? "").toLowerCase();
+  if (f === "monthly") return amount * 12;
+  if (f === "hourly") return amount * 2080;
+  return amount; // yearly or unknown — compare as-is
+}
 
 export function semanticFromDistance(distance: number | null | undefined): number {
   if (distance == null || !isFinite(distance)) return 0.5;
@@ -67,9 +76,10 @@ export function depthScore(ctx: ScoreContext): number {
 
 export function constraintsScore(job: JobReq, ctx: ScoreContext): number {
   let salary = 0.5;
-  if (job.salary_max != null && ctx.minSalary != null) {
-    salary = ctx.minSalary <= job.salary_max ? 1 : ctx.minSalary <= job.salary_max * 1.2 ? 0.4 : 0;
-  } else if (ctx.minSalary != null) salary = 0.7;
+  const want = ctx.minSalary != null ? annualize(ctx.minSalary, ctx.salaryFreq) : null;
+  if (job.salary_max != null && want != null) {
+    salary = want <= job.salary_max ? 1 : want <= job.salary_max * 1.2 ? 0.4 : 0;
+  } else if (want != null) salary = 0.7;
   let location = 0.5;
   const remoteOk = job.remote_allowed || ctx.remotePref === "remote_only" || ctx.remotePref === "flexible";
   if (job.remote_allowed && (ctx.remotePref === "remote_only" || ctx.remotePref === "flexible")) location = 1;

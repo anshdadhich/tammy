@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -22,25 +22,32 @@ const LANDING_NAV = [
 ] as const;
 
 const HIRE_NAV = [
-  { label: "New Search", href: "/hire" },
-  { label: "Dashboard", href: "/hire/dash" },
-  { label: "Match engine", href: "/#engine" },
+  { label: "Search", href: "/hire/search" },
+  { label: "Dashboard", href: "/hire/dashboard" },
 ] as const;
 
 const DASH_NAV = [
-  { label: "Search", href: "/hire" },
-  { label: "Dashboard", href: "/hire/dash" },
+  { label: "Search", href: "/hire/search" },
+  { label: "Dashboard", href: "/hire/dashboard" },
 ] as const;
 
 const START_NAV = [
-  { label: "How it works", href: "/#engine" },
-  { label: "FAQ", href: "/#faq" },
-  { label: "For Employers", href: "/hire" },
+  { label: "Home", href: "/" },
+  { label: "Build my page", href: "/join" },
+] as const;
+
+const LOGIN_NAV = [
+  { label: "Home", href: "/" },
+  { label: "Login", href: "/hire/login" },
 ] as const;
 
 const DEFAULT_NAV = [
   { label: "Home", href: "/" },
   { label: "For Employers", href: "/hire" },
+  { label: "FAQ", href: "/#faq" },
+] as const;
+
+const CANDIDATE_EXTRA = [
   { label: "FAQ", href: "/#faq" },
 ] as const;
 
@@ -50,14 +57,42 @@ const EMPTY_SESSION: SessionInfo = { kind: null, label: "" };
 
 function navForPath(pathname: string | null): NavItem[] {
   if (pathname === "/") return [...LANDING_NAV];
-  if (pathname === "/hire") return [...HIRE_NAV];
-  if (pathname?.startsWith("/hire/dash")) return [...DASH_NAV];
-  if (pathname?.startsWith("/start")) return [...START_NAV];
+  if (pathname === "/hire" || pathname === "/hire/search") return [...HIRE_NAV];
+  if (pathname === "/hire/login") return [...LOGIN_NAV];
+  if (pathname?.startsWith("/hire/dashboard")) return [...DASH_NAV];
+  if (pathname?.startsWith("/join")) return [...START_NAV];
+  if (pathname?.startsWith("/talent/")) return [...LANDING_NAV];
   return [...DEFAULT_NAV];
 }
 
 function hrefKey(href: string) {
   return href;
+}
+
+/** Role-aware items: candidates never see employer options and vice versa. */
+function itemsForSession(pathname: string | null, session: SessionInfo): NavItem[] {
+  if (session.kind === "owner") {
+    const mine = session.ownerId ? `/talent/${session.ownerId}` : "/join";
+    return [
+      { label: "My page", href: mine },
+      ...CANDIDATE_EXTRA.map((n) => ({ ...n })),
+    ];
+  }
+  if (session.kind === "hr") {
+    if (pathname === "/hire" || pathname === "/hire/search" || pathname?.startsWith("/hire/dashboard")) {
+      return [...HIRE_NAV];
+    }
+    if (pathname === "/hire/login") return [...LOGIN_NAV];
+    return [...LANDING_NAV];
+  }
+  return navForPath(pathname);
+}
+
+function initialsFor(label: string): string {
+  const head = label.split("·")[0]?.trim() ?? "";
+  if (head.includes("@")) return head.slice(0, 2).toUpperCase();
+  const parts = head.split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
 export default function AppNav({ rightContent }: { rightContent?: ReactNode }) {
@@ -68,9 +103,30 @@ export default function AppNav({ rightContent }: { rightContent?: ReactNode }) {
     getSessionSnapshot,
     () => EMPTY_SESSION,
   );
-  const NAV_ITEMS = useMemo(() => navForPath(pathname), [pathname]);
+  const NAV_ITEMS = useMemo(() => itemsForSession(pathname, session), [pathname, session]);
   const [active, setActive] = useState<string>(NAV_ITEMS[0]?.href ?? "/");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hideNav, setHideNav] = useState(false);
+  // Theme toggle intentionally hidden for now: dark mode still applies via
+  // the OS-preference pre-paint script in layout.tsx, users just can't
+  // switch manually. Re-add a toggle button here to restore control.
+
+  // Opaque blur bar once scrolled; hide on scroll down, reveal on scroll up.
+  const lastY = useRef(0);
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      setScrolled(y > 8);
+      if (y > 140 && y > lastY.current + 2) setHideNav(true);
+      else if (y < lastY.current - 2) setHideNav(false);
+      lastY.current = y;
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   // Keep the sliding pill in sync with route + hash (reset when nav set changes).
   useEffect(() => {
@@ -85,12 +141,12 @@ export default function AppNav({ rightContent }: { rightContent?: ReactNode }) {
         setActive(exact.href);
         return;
       }
-      if (pathname === "/hire/dash" || pathname === "/hire") {
-        const dash = NAV_ITEMS.find((n) => n.href === "/hire/dash" || n.href === "/hire");
+      if (pathname === "/hire/dashboard" || pathname === "/hire" || pathname === "/hire/search") {
+        const dash = NAV_ITEMS.find((n) => n.href === "/hire/dashboard" || n.href === "/hire/search");
         if (dash) setActive(dash.href);
         return;
       }
-      if (pathname === "/start") {
+      if (pathname === "/join") {
         const fb = NAV_ITEMS.find((n) => n.href === "/#candidates") ?? NAV_ITEMS[0];
         if (fb) setActive(fb.href);
         return;
@@ -105,17 +161,38 @@ export default function AppNav({ rightContent }: { rightContent?: ReactNode }) {
   function handleLogout() {
     clearSession();
     setMobileOpen(false);
-    router.push("/");
-    router.refresh();
+    setMenuOpen(false);
+    // NOTE: no router.refresh() here — refresh() right after push() can
+    // supersede the pending navigation and strand the user on this page.
+    // Replace, not push: back button must not resurrect the gated page.
+    if (pathname?.startsWith("/hire") || pathname?.startsWith("/talent/")) {
+      router.replace("/");
+    } else {
+      router.push("/");
+    }
+  }
+
+  function closeMenu() {
+    setMenuOpen(false);
+    setMobileOpen(false);
   }
 
   const loggedIn = session.kind !== null;
+  // App pages paint the navbar edge-to-edge; only the landing keeps it
+  // inside the centered content guides.
+  const fullBleed = pathname !== "/";
+  // The top-bar Dashboard shortcut only renders for employers, and only where
+  // the center pill doesn't already link Dashboard.
+  const showDashLink = session.kind === "hr" && loggedIn && !NAV_ITEMS.some((n) => n.label === "Dashboard");
+  // Remount the sliding pill when the nav SET changes so it never morphs
+  // across differently-shaped menus (that cross-set morph reads as a glitch).
+  const setKey = NAV_ITEMS.map((n) => n.href).join("|");
 
   return (
     <motion.header
-      className="site-navbar-wrap"
+      className={`site-navbar-wrap${scrolled ? " is-scrolled" : ""}${fullBleed ? " full-bleed" : ""}`}
       initial={{ y: -18, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
+      animate={{ y: hideNav ? "-110%" : 0, opacity: 1 }}
       transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="site-navbar">
@@ -157,8 +234,10 @@ export default function AppNav({ rightContent }: { rightContent?: ReactNode }) {
                 >
                   {isActive ? (
                     <motion.span
+                      key={setKey}
                       layoutId="site-nav-pill"
                       className="site-nav-pill"
+                      initial={false}
                       transition={{ type: "spring", stiffness: 500, damping: 35 }}
                     />
                   ) : null}
@@ -179,29 +258,73 @@ export default function AppNav({ rightContent }: { rightContent?: ReactNode }) {
           {rightContent ? <span className="site-nav-extra">{rightContent}</span> : null}
           {loggedIn ? (
             <>
-              <span className="site-user-pill" title={session.label}>
-                {session.label}
-              </span>
-              <Link
-                href="/hire/dash"
-                className="site-login hidden lg:inline-flex"
-                onClick={() => setMobileOpen(false)}
+              <div
+                className="site-actor"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setMenuOpen(false);
+                }}
               >
-                Dashboard
-              </Link>
-              <motion.button
-                onClick={handleLogout}
-                className="site-nav-cta site-nav-cta-dark press"
-                aria-label="Logout"
-                whileTap={{ scale: 0.96 }}
-              >
-                Logout
-              </motion.button>
+                <button
+                  type="button"
+                  className="site-avatar"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  aria-label="Account"
+                  title={session.label}
+                  onClick={() => setMenuOpen((v) => !v)}
+                >
+                  {initialsFor(session.label)}
+                </button>
+                <AnimatePresence>
+                  {menuOpen ? (
+                    <motion.div
+                      key="site-menu"
+                      role="menu"
+                      aria-label="Account"
+                      className="site-menu"
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.16 }}
+                    >
+                      {session.kind === "owner" ? (
+                        <>
+                          <Link role="menuitem" className="site-menu-link" href={session.ownerId ? `/talent/${session.ownerId}` : "/join"} onClick={closeMenu}>
+                            My page
+                          </Link>
+                          <Link role="menuitem" className="site-menu-link" href={session.ownerId ? `/talent/${session.ownerId}/edit` : "/join"} onClick={closeMenu}>
+                            Edit profile
+                          </Link>
+                        </>
+                      ) : (
+                        <Link role="menuitem" className="site-menu-link" href="/hire/dashboard" onClick={closeMenu}>
+                          Dashboard
+                        </Link>
+                      )}
+                      <button role="menuitem" type="button" className="site-menu-link site-menu-danger" onClick={handleLogout}>
+                        Logout
+                      </button>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              </div>
+              {menuOpen ? (
+                <button aria-hidden="true" tabIndex={-1} className="site-menu-veil" onClick={() => setMenuOpen(false)} />
+              ) : null}
+              {showDashLink ? (
+                <Link
+                  href="/hire/dashboard"
+                  className="site-login site-nav-dashlink press"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Dashboard
+                </Link>
+              ) : null}
             </>
           ) : (
             <>
               <Link
-                href="/start"
+                href="/join"
                 className="site-login press"
                 onClick={() => setMobileOpen(false)}
               >
@@ -273,18 +396,21 @@ export default function AppNav({ rightContent }: { rightContent?: ReactNode }) {
                 {loggedIn ? (
                   <>
                     <span className="site-mobile-user">{session.label}</span>
-                    <button
-                      onClick={handleLogout}
-                      className="site-nav-cta site-nav-cta-dark press"
-                      style={{ width: "100%", justifyContent: "center" }}
-                    >
-                      Logout
-                    </button>
+                    {session.kind === "owner" ? (
+                      <Link
+                        href={session.ownerId ? `/talent/${session.ownerId}/edit` : "/join"}
+                        className="site-login press"
+                        style={{ justifyContent: "center" }}
+                        onClick={() => setMobileOpen(false)}
+                      >
+                        Edit profile
+                      </Link>
+                    ) : null}
                   </>
                 ) : (
                   <>
                     <Link
-                      href="/start"
+                      href="/join"
                       className="site-login press"
                       style={{ justifyContent: "center" }}
                       onClick={() => setMobileOpen(false)}

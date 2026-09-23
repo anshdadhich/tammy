@@ -2,45 +2,84 @@ import { z } from "zod";
 import { inngest } from "@/lib/inngest";
 import { supabaseAdmin } from "@/lib/supabase";
 import { candidateSchema } from "@/lib/validators";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import {
+  bundleForViewer,
+  guardOwner,
+  getViewer,
+  verifyOwnerEmail,
+} from "@/lib/api-auth";
 
 const uuid = z.string().uuid("Must be a valid UUID");
 
-// GET /api/candidates?id=<candidate uuid>  OR  ?email=<contact email>
-// Returns own profile: candidate row + generated summary + who viewed/contacted me.
+// Public-contact opt-in columns (show_*) may not exist yet in every
+// environment (migration pending). PostgREST returns PGRST204 / "could not
+// find the column" — retry without those keys instead of hard-failing.
+const SHOW_FLAGS = [
+  "show_email",
+  "show_phone",
+  "show_linkedin",
+  "show_github",
+  "show_resume",
+  "show_portfolio",
+  "show_photo",
+] as const;
+
+function isMissingColumnErr(err: { message?: string; code?: string } | null | undefined): boolean {
+  if (!err) return false;
+  if (err.code === "PGRST204") return true;
+  return /could not find the|column .* does not exist/i.test(err.message ?? "");
+}
+
+function stripShowFlags(obj: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...obj };
+  for (const f of SHOW_FLAGS) delete out[f];
+  return out;
+}
+
+// GET /api/candidates?id=<candidate uuid>
+// Returns the dossier bundle: candidate row + summary + private activity
+// (contact_log / matches / shortlists only for verified owner-of or HR).
+// Email lookup lives at POST /api/candidates/lookup (rate-limited) so this
+// endpoint is never an enumeration oracle.
 export async function GET(request: Request) {
+  const rl = rateLimit(request, { key: "candidates-get", limit: 120, windowMs: 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const url = new URL(request.url);
   const id = url.searchParams.get("id") ?? undefined;
-  const email = url.searchParams.get("email")?.toLowerCase().trim() || undefined;
-  if (!id && !email) {
-    return Response.json({ error: "provide ?id= or ?email=" }, { status: 400 });
+  if (!id) {
+    return Response.json({ error: "provide ?id=<candidate uuid>" }, { status: 400 });
   }
-  if (id && !uuid.safeParse(id).success) {
+  const viewer = getViewer(request);
+  if (!uuid.safeParse(id).success) {
     return Response.json({ error: "id must be a valid UUID" }, { status: 400 });
   }
   const db = supabaseAdmin();
 
-  let candidate: Record<string, unknown> | null = null;
-  if (id) {
-    const { data } = await db.from("candidates").select("*").eq("id", id).maybeSingle();
-    candidate = (data as Record<string, unknown> | null) ?? null;
-  } else {
-    const { data } = await db
-      .from("candidates")
-      .select("*")
-      .ilike("contact_email", email as string)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    candidate = (data as Record<string, unknown> | null) ?? null;
-  }
+  const { data } = await db.from("candidates").select("*").eq("id", id).maybeSingle();
+  const candidate = (data as Record<string, unknown> | null) ?? null;
   if (!candidate) return Response.json({ error: "candidate not found" }, { status: 404 });
-
   const cid = candidate.id as string;
+
+  // Viewer resolved FIRST: hidden profiles 404 before any child queries run,
+  // and anonymous viewers never pay for the three private-activity queries
+  // (contact_log / matches / shortlists) whose results are discarded anyway.
+  // Private activity is owner-verified or HR only: a forged owner cookie for
+  // another id must not receive contact_log / matches / shortlists.
+  const privilegedLogs =
+    viewer.kind === "hr" ||
+    (viewer.kind === "owner" && viewer.id === cid
+      ? await verifyOwnerEmail(cid, viewer.email)
+      : false);
+  if (viewer.kind === "anon" && String(candidate.visibility_status ?? "visible") === "hidden") {
+    return Response.json({ error: "candidate not found" }, { status: 404 });
+  }
+
   const [{ data: profile }, { data: views }, { data: matches }, { data: shortlisted }, { data: projects }, { data: experiences }, { data: education }, { data: skillRows }] = await Promise.all([
     db.from("candidate_profiles").select("summary_markdown, summary_json, updated_at").eq("candidate_id", cid).maybeSingle(),
-    db.from("contact_log").select("id, channel, message, job_id, employer_id, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50),
-    db.from("candidate_matches").select("id, search_id, job_id, score, status, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50),
-    db.from("shortlists").select("id, job_id, status, notes, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50),
+    privilegedLogs ? db.from("contact_log").select("id, channel, message, job_id, employer_id, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] }),
+    privilegedLogs ? db.from("candidate_matches").select("id, search_id, job_id, score, status, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] }),
+    privilegedLogs ? db.from("shortlists").select("id, job_id, status, notes, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] }),
     db.from("projects").select("id, title, description, problem_statement, tech_stack, role_in_project, project_link, repo_link, deployment_link, impact_summary, project_type").eq("candidate_id", cid),
     db.from("work_experiences").select("company_name, job_title, start_date, end_date, is_current, description, achievements, tech_stack").eq("candidate_id", cid),
     db.from("education").select("institution, degree, field_of_study, start_year, end_year, achievements").eq("candidate_id", cid),
@@ -73,24 +112,39 @@ export async function GET(request: Request) {
     }
   }
 
-  return Response.json({
-    candidate,
-    profile: profile ?? null,
-    contact_log: views ?? [],
-    matches: matches ?? [],
-    shortlists: shortlisted ?? [],
-    projects: projects ?? [],
-    oss,
-    experiences: experiences ?? [],
-    education: education ?? [],
-    skills: skillRows ?? [],
-    depths,
-  });
+  // Viewer-scoped response: only verified owner-of or HR see private
+  // activity; everyone else gets the PII-stripped row with empty logs.
+  // (PII stripping itself is deny-by-default for all viewers.)
+  return Response.json(
+    bundleForViewer(privilegedLogs ? viewer : { kind: "anon" }, candidate, {
+      profile: profile ?? null,
+      contact_log: views ?? [],
+      matches: matches ?? [],
+      shortlists: shortlisted ?? [],
+      projects: projects ?? [],
+      oss,
+      experiences: experiences ?? [],
+      education: education ?? [],
+      skills: skillRows ?? [],
+      depths,
+    }),
+  );
+}
+
+// Accepts YYYY, YYYY-MM or YYYY-MM-DD (year-only input used to vanish silently).
+function toDateInput(v: unknown): string | null {
+  const s = String(v ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}$/.test(s)) return `${s}-01`;
+  if (/^\d{4}$/.test(s)) return `${s}-01-01`;
+  return null;
 }
 
 // POST /api/candidates — validate, save raw, trigger background processing.
 // Heavy AI (summary/depth/embed) runs in Inngest, not in this request.
 export async function POST(request: Request) {
+  const rl = rateLimit(request, { key: "candidates-post", limit: 10, windowMs: 10 * 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const body = await request.json().catch(() => null);
   const parsed = candidateSchema.safeParse(body);
   if (!parsed.success) {
@@ -100,55 +154,88 @@ export async function POST(request: Request) {
   const c = parsed.data;
   const email = String(c.email ?? "").toLowerCase().trim();
 
+  // Duplicate guard: one visible profile per contact email. Prevents
+  // spam farms filling the DB with identical rows.
+  const { data: dupe } = await db
+    .from("candidates")
+    .select("id")
+    .ilike("contact_email", email)
+    .eq("visibility_status", "visible")
+    .limit(1)
+    .maybeSingle();
+  if ((dupe as { id: string } | null)?.id) {
+    return Response.json(
+      { error: "A visible profile already exists for this email.", candidateId: (dupe as { id: string }).id },
+      { status: 409 },
+    );
+  }
+
   // Reuse existing user on retry (unique email), else create.
   let userId: string | null = null;
   const existing = await db.from("users").select("id").eq("email", email).maybeSingle();
   if (existing.data) {
     userId = (existing.data as { id: string }).id;
   } else {
-    const { data: user, error: userErr } = await db
+    const { data: user } = await db
       .from("users")
       .insert({ email, role: "candidate" })
       .select("id")
       .single();
     if (!user) {
-      return Response.json({ error: "user create failed", detail: userErr?.message ?? null }, { status: 500 });
+      console.error("[candidates] user create failed");
+      return Response.json({ error: "user create failed" }, { status: 500 });
     }
     userId = (user as { id: string }).id;
   }
 
   const remoteMap: Record<string, string> = { remote: "remote_only", hybrid: "hybrid", onsite: "onsite" };
   const avail = /immedi/i.test(c.availability ?? "") ? "immediate" : /inactive/i.test(c.availability ?? "") ? "inactive" : "notice";
-  const { data: cand, error: candErr } = await db
-    .from("candidates")
-    .insert({
-      user_id: userId,
-      full_name: c.name,
-      headline: c.headline || `${c.role} — ${c.domain}`,
-      domain: c.domain,
-      current_position: c.current_role || c.role,
-      total_experience_years: c.exp ?? 0,
-      location_city: c.location_pref || c.location,
-      remote_preference: remoteMap[c.remote_pref] ?? "flexible",
-      open_to_relocation: c.relocation ?? false,
-      min_salary: c.min_salary ?? 0,
-      salary_currency: (c.currency ?? "INR").toUpperCase(),
-      salary_frequency: c.frequency ?? "monthly",
-      salary_negotiable: c.negotiable ?? true,
-      availability_status: avail,
-      visibility_status: c.visibility ?? "visible",
-      consent_status: "granted",
-      contact_email: email,
-      contact_phone: c.phone || null,
-      github_url: c.links?.github || null,
-      linkedin_url: c.links?.linkedin || null,
-      portfolio_url: c.links?.portfolio || null,
-      resume_url: c.links?.resume_url || null,
-      photo_url: c.photo_url || null,
-    })
-    .select("id")
-    .single();
-  if (!cand) return Response.json({ error: "candidate create failed", detail: candErr?.message ?? null }, { status: 500 });
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    full_name: c.name,
+    headline: c.headline || `${c.role} — ${c.domain}`,
+    domain: c.domain,
+    current_position: c.current_role || c.role,
+    total_experience_years: c.exp ?? 0,
+    location_city: c.location_pref || c.location,
+    remote_preference: remoteMap[c.remote_pref] ?? "flexible",
+    open_to_relocation: c.relocation ?? false,
+    min_salary: c.min_salary ?? 0,
+    salary_currency: (c.currency ?? "INR").toUpperCase(),
+    salary_frequency: c.frequency ?? "monthly",
+    salary_negotiable: c.negotiable ?? true,
+    availability_status: avail,
+    visibility_status: c.visibility ?? "visible",
+    consent_status: "granted",
+    // Public contact opt-ins (privacy by default). Stripped + retried below
+    // when the migration hasn't run yet.
+    ...(c.show_email !== undefined ? { show_email: c.show_email } : {}),
+    ...(c.show_phone !== undefined ? { show_phone: c.show_phone } : {}),
+    ...(c.show_linkedin !== undefined ? { show_linkedin: c.show_linkedin } : {}),
+    ...(c.show_github !== undefined ? { show_github: c.show_github } : {}),
+    ...(c.show_resume !== undefined ? { show_resume: c.show_resume } : {}),
+    ...(c.show_portfolio !== undefined ? { show_portfolio: c.show_portfolio } : {}),
+    ...(c.show_photo !== undefined ? { show_photo: c.show_photo } : {}),
+    contact_email: email,
+    contact_phone: c.phone || null,
+    github_url: c.links?.github || null,
+    linkedin_url: c.links?.linkedin || null,
+    portfolio_url: c.links?.portfolio || null,
+    resume_url: c.links?.resume_url || null,
+    photo_url: c.photo_url || null,
+  };
+  let { data: cand, error: candErr } = await db.from("candidates").insert(row).select("id").single();
+  if (!cand && isMissingColumnErr(candErr)) {
+    ({ data: cand, error: candErr } = await db
+      .from("candidates")
+      .insert(stripShowFlags(row))
+      .select("id")
+      .single());
+  }
+  if (!cand) {
+    console.error("[candidates] create failed");
+    return Response.json({ error: "candidate create failed" }, { status: 500 });
+  }
   const candidateId = (cand as { id: string }).id;
 
   // Child rows: each section saves in isolation so one bad section can never
@@ -167,8 +254,8 @@ export async function POST(request: Request) {
         candidate_id: candidateId,
         company_name: x.company,
         job_title: x.title,
-        start_date: /^\d{4}-\d{2}/.test(x.start_date || "") ? `${x.start_date}-01` : null,
-        end_date: /^\d{4}-\d{2}/.test(x.end_date || "") ? `${x.end_date}-01` : null,
+        start_date: toDateInput(x.start_date),
+        end_date: toDateInput(x.end_date),
         is_current: x.current ?? false,
         description: x.description || null,
         achievements: x.achievements || null,
@@ -268,8 +355,10 @@ export async function POST(request: Request) {
   return Response.json({ candidateId, status: "processing", warnings }, { status: 202 });
 }
 
-// PATCH /api/candidates { id, visibility_status } — visibility toggle.
+// PATCH /api/candidates { id, visibility_status } — visibility toggle (owner only).
 export async function PATCH(request: Request) {
+  const rl = rateLimit(request, { key: "candidates-patch", limit: 30, windowMs: 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const body = await request.json().catch(() => null);
   const parsed = z
     .object({ id: uuid, visibility_status: z.enum(["visible", "hidden", "inactive"]) })
@@ -277,14 +366,16 @@ export async function PATCH(request: Request) {
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
   }
+  const denied = await guardOwner(request, parsed.data.id);
+  if (denied) return denied;
   const db = supabaseAdmin();
-  const { data, error } = await db
+  const { data } = await db
     .from("candidates")
     .update({ visibility_status: parsed.data.visibility_status })
     .eq("id", parsed.data.id)
     .select("id, visibility_status")
     .single();
-  if (!data) return Response.json({ error: "candidate not found", detail: error?.message ?? null }, { status: 404 });
+  if (!data) return Response.json({ error: "candidate not found" }, { status: 404 });
   return Response.json({ candidate: data });
 }
 
@@ -294,12 +385,17 @@ export async function PATCH(request: Request) {
 // education / skills arrays are present they replace existing child rows.
 // Re-fires the background pipeline so search vectors refresh.
 export async function PUT(request: Request) {
+  const rl = rateLimit(request, { key: "candidates-put", limit: 20, windowMs: 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const body = await request.json().catch(() => null);
   const idParsed = z.object({ id: uuid }).safeParse(body);
   if (!idParsed.success) {
     return Response.json({ errors: idParsed.error.flatten() }, { status: 400 });
   }
   const id = idParsed.data.id;
+  // Ownership: only the candidate's own session may edit this profile.
+  const denied = await guardOwner(request, id);
+  if (denied) return denied;
   const rest = { ...(body as Record<string, unknown>) };
   delete rest.id;
   if (Object.keys(rest).length === 0) {
@@ -354,6 +450,17 @@ export async function PUT(request: Request) {
     patch.availability_status = /immedi/i.test(a) ? "immediate" : /inactive/i.test(a) ? "inactive" : "notice";
   }
   if (present.has("visibility")) patch.visibility_status = c.visibility ?? "visible";
+  for (const flag of [
+    "show_email",
+    "show_phone",
+    "show_linkedin",
+    "show_github",
+    "show_resume",
+    "show_portfolio",
+    "show_photo",
+  ] as const) {
+    if (present.has(flag)) patch[flag] = c[flag] === true;
+  }
   if (present.has("phone")) patch.contact_phone = c.phone || null;
   // Link/file columns: empty string means "no change" (forms can't round-trip
   // storage paths), so an edit never wipes an uploaded photo/resume/portfolio.
@@ -367,26 +474,36 @@ export async function PUT(request: Request) {
   if (present.has("email") && c.email) {
     const email = String(c.email).toLowerCase().trim();
     if (email && email !== prev.contact_email) {
-      let userId: string | null = null;
+      // Never steal another account's users row: only create a fresh row
+      // when the address is unused. Taking over an existing user_id would
+      // merge two identities without a verification link.
       const found = await db.from("users").select("id").eq("email", email).maybeSingle();
       if (found.data) {
-        userId = (found.data as { id: string }).id;
-      } else {
-        const { data: user } = await db
-          .from("users")
-          .insert({ email, role: "candidate" })
-          .select("id")
-          .single();
-        userId = (user as { id: string } | null)?.id ?? null;
+        return Response.json(
+          { error: "That email is already in use. Verify ownership first." },
+          { status: 409 },
+        );
       }
+      const { data: user } = await db
+        .from("users")
+        .insert({ email, role: "candidate" })
+        .select("id")
+        .single();
+      const newUserId = (user as { id: string } | null)?.id ?? null;
       patch.contact_email = email;
-      if (userId) patch.user_id = userId;
+      if (newUserId) patch.user_id = newUserId;
     }
   }
 
   if (Object.keys(patch).length > 0) {
-    const { error } = await db.from("candidates").update(patch).eq("id", id);
-    if (error) return Response.json({ error: "candidate update failed", detail: error.message }, { status: 500 });
+    let { error } = await db.from("candidates").update(patch).eq("id", id);
+    if (error && isMissingColumnErr(error)) {
+      ({ error } = await db.from("candidates").update(stripShowFlags(patch)).eq("id", id));
+    }
+    if (error) {
+      console.error("[candidates] update failed", id);
+      return Response.json({ error: "candidate update failed" }, { status: 500 });
+    }
   }
 
   const putWarnings: string[] = [];
@@ -405,8 +522,8 @@ export async function PUT(request: Request) {
           candidate_id: id,
           company_name: x.company,
           job_title: x.title,
-          start_date: /^\d{4}-\d{2}/.test(x.start_date || "") ? `${x.start_date}-01` : null,
-          end_date: /^\d{4}-\d{2}/.test(x.end_date || "") ? `${x.end_date}-01` : null,
+          start_date: toDateInput(x.start_date),
+          end_date: toDateInput(x.end_date),
           is_current: x.current ?? false,
           description: x.description || null,
           achievements: x.achievements || null,
@@ -522,14 +639,45 @@ export async function PUT(request: Request) {
 
 // DELETE /api/candidates?id=<candidate uuid> — delete own profile (cascades).
 export async function DELETE(request: Request) {
+  const rl = rateLimit(request, { key: "candidates-delete", limit: 10, windowMs: 10 * 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const url = new URL(request.url);
   const body = await request.json().catch(() => null);
   const id = url.searchParams.get("id") ?? body?.id ?? undefined;
   if (!uuid.safeParse(id).success) {
     return Response.json({ error: "provide ?id=<candidate uuid>" }, { status: 400 });
   }
+  // Ownership: only the candidate's own session may delete this profile.
+  const denied = await guardOwner(request, id as string);
+  if (denied) return denied;
   const db = supabaseAdmin();
+  // Capture storage paths first so files don't orphan in private buckets.
+  const { data: doomed } = await db
+    .from("candidates")
+    .select("resume_url, photo_url, portfolio_url")
+    .eq("id", id as string)
+    .maybeSingle();
   const { error } = await db.from("candidates").delete().eq("id", id as string);
-  if (error) return Response.json({ error: "candidate delete failed", detail: error.message }, { status: 500 });
+  if (error) {
+    console.error("[candidates] delete failed");
+    return Response.json({ error: "candidate delete failed" }, { status: 500 });
+  }
+  // Best-effort storage cleanup (never blocks the response).
+  try {
+    const paths = doomed as { resume_url?: string | null; photo_url?: string | null; portfolio_url?: string | null } | null;
+    const jobs: Promise<unknown>[] = [];
+    if (paths?.resume_url && !/^https?:\/\//i.test(paths.resume_url)) {
+      jobs.push(db.storage.from("resumes").remove([paths.resume_url]));
+    }
+    if (paths?.photo_url && !/^https?:\/\//i.test(paths.photo_url)) {
+      jobs.push(db.storage.from("photos").remove([paths.photo_url]));
+    }
+    if (paths?.portfolio_url && !/^https?:\/\//i.test(paths.portfolio_url)) {
+      jobs.push(db.storage.from("portfolios").remove([paths.portfolio_url]));
+    }
+    if (jobs.length) await Promise.all(jobs);
+  } catch {
+    /* orphan cleanup is best-effort */
+  }
   return Response.json({ ok: true });
 }

@@ -28,6 +28,26 @@ function apiKey(): string {
   return key;
 }
 
+// Retry 429/5xx with exponential backoff (Voyage rate limits bursts).
+async function fetchWithRetry(url: string, init: RequestInit, tries = 3): Promise<Response> {
+  let last: Response | null = null;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    const res = await fetch(url, init);
+    if (res.ok) return res;
+    last = res;
+    if (res.status !== 429 && res.status < 500) break;
+    if (attempt < tries - 1) {
+      await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+    }
+  }
+  return last as Response;
+}
+
+// Short-lived in-memory cache for identical job query texts (5 min).
+// Stops paying Voyage twice for re-runs / double-submits.
+const queryCache = new Map<string, { vec: number[]; at: number }>();
+const QUERY_CACHE_TTL = 5 * 60 * 1000;
+
 /**
  * Embed a batch of texts. Returns one vector per input, in order.
  * Throws on auth/rate-limit/network errors with status context.
@@ -39,13 +59,16 @@ export async function embedTexts(
   if (texts.length === 0) return [];
   const { input_type = "document", model = VOYAGE_DEFAULT_MODEL } = opts;
 
-  const res = await fetch(VOYAGE_URL, {
+  // Truncate runaway inputs before paying Voyage per token (8k chars ≈ 2k tokens).
+  const clipped = texts.map((t) => (t.length > 8000 ? t.slice(0, 8000) : t));
+
+  const res = await fetchWithRetry(VOYAGE_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${apiKey()}`,
     },
-    body: JSON.stringify({ input: texts, model, input_type }),
+    body: JSON.stringify({ input: clipped, model, input_type }),
   });
 
   if (!res.ok) {
@@ -79,7 +102,16 @@ export async function embedQuery(
   text: string,
   model = VOYAGE_DEFAULT_MODEL,
 ): Promise<number[]> {
+  const key = `${model}:${text.slice(0, 8000)}`;
+  const hit = queryCache.get(key);
+  if (hit && Date.now() - hit.at < QUERY_CACHE_TTL) return hit.vec;
   const [vec] = await embedTexts([text], { input_type: "query", model });
+  queryCache.set(key, { vec, at: Date.now() });
+  // Bound memory: drop oldest when over 200 entries.
+  if (queryCache.size > 200) {
+    const oldest = queryCache.keys().next().value;
+    if (oldest) queryCache.delete(oldest);
+  }
   return vec;
 }
 

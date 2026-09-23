@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * WebGL Dither Effect — ported from the Originkit / reference HTML shader.
@@ -171,6 +171,36 @@ export default function DitherEffect({
 }: DitherEffectProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
+  // Theme-aware: swap to a neutral dark pair when data-theme="dark" so the
+  // animated dither never glares on dark surfaces (brand colors stay for light).
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    const read = () => {
+      try {
+        setDark(document.documentElement.getAttribute("data-theme") === "dark");
+      } catch {
+        /* ignore */
+      }
+    };
+    read();
+    const mo = new MutationObserver(read);
+    try {
+      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    } catch {
+      /* ignore */
+    }
+    return () => mo.disconnect();
+  }, []);
+
+  const front = dark ? "#3A3A42" : colorFront;
+  const back = dark ? "#17171C" : colorBack;
+
+  // Colors ride in a ref so theme flips only update uniforms — the GL
+  // program, buffers and rAF loop are created once and never torn down
+  // (teardown flashes a black frame, which reads as a broken transition).
+  const colorRef = useRef({ front: hexToRgb(front), back: hexToRgb(back) });
+  colorRef.current = { front: hexToRgb(front), back: hexToRgb(back) };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -205,9 +235,6 @@ export default function DitherEffect({
     const uFront = gl.getUniformLocation(prog, "u_colorFront");
     const uBack = gl.getUniformLocation(prog, "u_colorBack");
 
-    const front = hexToRgb(colorFront);
-    const back = hexToRgb(colorBack);
-
     const startTime = performance.now();
 
     /* Resize — downscale for chunky retro matrix feel */
@@ -221,22 +248,23 @@ export default function DitherEffect({
     window.addEventListener("resize", resize);
 
     let paused = false;
+    let disposed = false;
     const onVis = () => {
       paused = document.hidden;
-      if (!paused) requestAnimationFrame(render);
+      if (!paused && !disposed) requestAnimationFrame(render);
     };
     document.addEventListener("visibilitychange", onVis);
 
     function render(now: number) {
-      if (paused) return;
+      if (paused || disposed) return;
       const t = ((now - startTime) / 1000) * speed;
 
       gl!.useProgram(prog);
       gl!.uniform2f(uRes, canvas!.width, canvas!.height);
       gl!.uniform1f(uTime, t);
       gl!.uniform1f(uScale, scale);
-      gl!.uniform3fv(uFront, front);
-      gl!.uniform3fv(uBack, back);
+      gl!.uniform3fv(uFront, colorRef.current.front);
+      gl!.uniform3fv(uBack, colorRef.current.back);
 
       gl!.drawArrays(gl!.TRIANGLES, 0, 6);
       rafRef.current = requestAnimationFrame(render);
@@ -245,13 +273,18 @@ export default function DitherEffect({
     rafRef.current = requestAnimationFrame(render);
 
     return () => {
+      // Halt the loop FIRST. The visibilitychange handler schedules new
+      // frames independently of rafRef, so cancelling the id alone left a
+      // zombie loop drawing a deleted program+buffer every frame — the
+      // "no buffer is bound / attempt to use a deleted object" spam.
+      disposed = true;
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVis);
       if (prog) gl!.deleteProgram(prog);
       if (buf) gl!.deleteBuffer(buf);
     };
-  }, [colorFront, colorBack, scale, speed]);
+  }, [scale, speed]);
 
   return (
     <canvas

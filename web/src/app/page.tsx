@@ -1,29 +1,11 @@
-"use client";
-
-import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import {
-  ArrowRight,
-  Check,
-  ChevronDown,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import DitherEffect from "@/components/DitherEffect";
 import AppNav from "@/components/AppNav";
 import BeamButton from "@/components/BeamButton";
-import { AnimatePresence, motion } from "motion/react";
-import { getSession } from "@/lib/session";
+import { FaqList, HeroDemo, Reveal, TraceFill } from "@/components/landing-client";
 
-/* ─── Data ─── */
-
-const CHECKLIST_STEPS = [
-  "Parse brief",
-  "Embed query",
-  "Hybrid retrieval",
-  "Score 5 dimensions",
-  "Deep Read judge",
-  "Unlock contact",
-];
+/* ─── Static copy (server-rendered, SEO-visible) ─── */
 
 const FAQS = [
   {
@@ -112,129 +94,7 @@ const DISCOVERY = [
   },
 ];
 
-/* ─── Scroll-reveal wrapper ─── */
-
-function Reveal({
-  className = "",
-  stagger = 0,
-  children,
-}: {
-  className?: string;
-  stagger?: number;
-  children: React.ReactNode;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-            obs.unobserve(entry.target);
-          }
-        });
-      },
-      { root: null, rootMargin: "0px 0px -70px 0px", threshold: 0.1 },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  return (
-    <div ref={ref} className={`reveal-blur ${stagger ? `stagger-${stagger}` : ""} ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-/* ─── Trace fill bar (animates when visible) ─── */
-
-function TraceFill({ width, bg }: { width: string; bg: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const fill = entry.target.querySelector(".trace-fill") as HTMLElement | null;
-            if (fill) setTimeout(() => (fill.style.width = width), 120);
-            obs.unobserve(entry.target);
-          }
-        });
-      },
-      { root: null, rootMargin: "0px 0px -70px 0px", threshold: 0.1 },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [width]);
-
-  return (
-    <div ref={ref} className="trace-rule">
-      <div className="trace-fill" style={{ background: bg }} />
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════ */
-
 export default function Landing() {
-  const router = useRouter();
-  const [statuses, setStatuses] = useState<string[]>(() =>
-    CHECKLIST_STEPS.map((_, i) => (i < 3 ? "done" : i === 3 ? "running" : "queued")),
-  );
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [matchMode, setMatchMode] = useState<"describe" | "search" | "deep">("search");
-  const runningRef = useRef(false);
-
-  // Recruiter home is /hire — logged-in employers skip the landing page.
-  useEffect(() => {
-    try {
-      if (getSession().kind === "hr") router.replace("/hire");
-    } catch {
-      /* ignore */
-    }
-  }, [router]);
-
-  const MATCH_COPY = {
-    describe: {
-      title: "Describe the role, not a query.",
-      desc: "Write how you'd brief a teammate — stack, scope, constraints, and seniority. No Boolean gymnastics. Tammy parses intent, not keywords, and surfaces evidence that matches meaning.",
-    },
-    search: {
-      title: "It explains every score.",
-      desc: "Semantic fit, skill evidence, project depth, constraints and seniority — each weighed from what people actually built, not what they claimed. Every value is real and inspectable, so what lands is a shortlist, not a guess.",
-    },
-    deep: {
-      title: "Deep Read judges the evidence.",
-      desc: "For the top profiles, the judge reads full context — written exhibits, gaps, and risks — then calibrates interview questions. Slower, sharper, and audit-logged so hiring stays accountable.",
-    },
-  } as const;
-
-  const runChecklist = useCallback(() => {
-    if (runningRef.current) return;
-    runningRef.current = true;
-    setStatuses(CHECKLIST_STEPS.map(() => "queued"));
-    let i = 0;
-    const timer = setInterval(() => {
-      i++;
-      setStatuses(
-        CHECKLIST_STEPS.map((_, j) =>
-          j < i ? "done" : j === i ? "running" : "queued",
-        ),
-      );
-      if (i >= CHECKLIST_STEPS.length) {
-        clearInterval(timer);
-        runningRef.current = false;
-      }
-    }, 380);
-  }, []);
-
   return (
     <div className="relative min-h-screen bg-paper text-ink antialiased selection:bg-[#1F2DE6] selection:text-white">
       {/* Vertical guidelines */}
@@ -246,9 +106,6 @@ export default function Landing() {
 
       {/* ================= HERO ================= */}
       <section id="top" className="relative pt-16 pb-20 overflow-hidden">
-        <i className="g-handle pos-tl hidden lg:block" />
-        <i className="g-handle pos-tr hidden lg:block" />
-
         <div className="max-w-[1160px] mx-auto px-6">
           <Reveal className="mb-14">
             <h1 className="text-4xl sm:text-5xl font-bold tracking-tight leading-[1.06] text-ink">
@@ -259,7 +116,7 @@ export default function Landing() {
             <div className="flex flex-wrap items-center gap-3 mt-7">
               <BeamButton>
                 <Link
-                  href="/start"
+                  href="/join"
                   className="press rounded-lg bg-[#1F2DE6] hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 shadow-sm inline-block"
                 >
                   Build my page
@@ -274,137 +131,11 @@ export default function Landing() {
             </div>
           </Reveal>
 
-          <div className="grid lg:grid-cols-5 gap-10 lg:gap-14 items-start">
-            {/* Dither panel with checklist */}
-            <Reveal className="lg:col-span-3 relative" stagger={1}>
-              <i className="g-handle -top-1 -left-1" />
-              <i className="g-handle -top-1 -right-1" />
-              <i className="g-handle -bottom-1 -left-1" />
-              <i className="g-handle -bottom-1 -right-1" />
-
-              <div className="relative bg-[#1F2DE6] p-8 sm:p-12 overflow-hidden shadow-md">
-                <div className="absolute inset-0">
-                  <DitherEffect colorFront="#1F2DE6" colorBack="#ffffff" scale={0.8} className="dither-soft" />
-                </div>
-
-                <div className="relative rounded-lg bg-[#F4F5F7] shadow-lg px-6 py-6 sm:px-8 sm:py-7 border border-white/60">
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 mb-4 font-mono">
-                    <span>MATCHING YOUR BRIEF</span>
-                    <span className="text-[#1F2DE6] flex items-center gap-1.5 font-sans font-medium">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#1F2DE6] pulse-dot" /> Active query
-                    </span>
-                  </div>
-                  <div className="space-y-3">
-                    {CHECKLIST_STEPS.map((label, i) => {
-                      const s = statuses[i];
-                      return (
-                        <div key={label} className="flex items-center justify-between">
-                          <span className={`flex items-center gap-2.5 text-[13px] ${s === "queued" ? "text-slate-400" : "text-slate-800"}`}>
-                            {s === "done" ? (
-                              <Check className="w-3.5 h-3.5 text-[#1F2DE6]" aria-hidden="true" />
-                            ) : s === "running" ? (
-                              <span className="w-2 h-2 rounded-full bg-[#1F2DE6] pulse-dot inline-block" />
-                            ) : (
-                              <span className="w-2 h-2 rounded-full border border-slate-300 inline-block" />
-                            )}
-                            {label}
-                          </span>
-                          {s === "done" ? (
-                            <span className="font-mono text-[11px] text-slate-400">done</span>
-                          ) : s === "running" ? (
-                            <span className="font-mono text-[11px] text-[#1F2DE6]">running…</span>
-                          ) : (
-                            <span className="font-mono text-[11px] text-slate-300">queued</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </Reveal>
-
-            {/* Right column */}
-            <Reveal className="lg:col-span-2 lg:pt-1" stagger={2}>
-              <div className="match-controls">
-                <div className="match-mode-switcher">
-                  <button
-                    onClick={() => setMatchMode("describe")}
-                    className={`match-mode ${matchMode === "describe" ? "is-active" : ""}`}
-                    aria-pressed={matchMode === "describe"}
-                    style={{ position: "relative" }}
-                  >
-                    {matchMode === "describe" ? (
-                      <motion.span
-                        layoutId="match-mode-pill"
-                        className="match-mode-pill"
-                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                      />
-                    ) : null}
-                    <span style={{ position: "relative" }}>Describe role</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMatchMode("search");
-                      runChecklist();
-                    }}
-                    className={`match-mode ${matchMode === "search" ? "is-active" : ""}`}
-                    aria-pressed={matchMode === "search"}
-                    style={{ position: "relative" }}
-                  >
-                    {matchMode === "search" ? (
-                      <motion.span
-                        layoutId="match-mode-pill"
-                        className="match-mode-pill"
-                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                      />
-                    ) : null}
-                    <span style={{ position: "relative" }}>Search</span>
-                  </button>
-                  <button
-                    onClick={() => setMatchMode("deep")}
-                    className={`match-mode ${matchMode === "deep" ? "is-active" : ""}`}
-                    aria-pressed={matchMode === "deep"}
-                    style={{ position: "relative" }}
-                  >
-                    {matchMode === "deep" ? (
-                      <motion.span
-                        layoutId="match-mode-pill"
-                        className="match-mode-pill"
-                        transition={{ type: "spring", stiffness: 500, damping: 35 }}
-                      />
-                    ) : null}
-                    <span style={{ position: "relative" }}>Deep Read</span>
-                  </button>
-                </div>
-                <button
-                  onClick={() => {
-                    if (matchMode !== "search") setMatchMode("search");
-                    runChecklist();
-                  }}
-                  title="Re-run matching query"
-                  className="match-run press"
-                >
-                  <ArrowRight className="w-4 h-4 text-ink" aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className="relative mt-10 min-h-[88px]">
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={matchMode}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-                  >
-                    <h3 className="text-lg font-bold tracking-tight">{MATCH_COPY[matchMode].title}</h3>
-                    <p className="text-sm leading-relaxed text-slate-600 mt-2">{MATCH_COPY[matchMode].desc}</p>
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-            </Reveal>
-          </div>
+          <HeroDemo
+            dither={
+              <DitherEffect colorFront="#1F2DE6" colorBack="#ffffff" scale={0.8} className="dither-soft" />
+            }
+          />
         </div>
       </section>
 
@@ -535,7 +266,7 @@ export default function Landing() {
             </div>
 
             <div className="p-6">
-              <h4 className="text-base font-bold mb-1">Show what you built.</h4>
+              <h3 className="text-base font-bold mb-1">Show what you built.</h3>
               <p className="text-xs text-slate-500 mb-5">Evidence makes the profile useful.</p>
 
               <div className="grid grid-cols-2 gap-3">
@@ -607,7 +338,7 @@ export default function Landing() {
               {PIPELINE.map((p) => (
                 <div key={p.n} className="p-2 rounded-md hover:bg-slate-50/60 transition-colors">
                   <span className={`text-[11px] font-mono font-bold ${p.nClass}`}>{p.n}</span>
-                  <h5 className="text-sm font-bold mt-1.5 mb-1">{p.title}</h5>
+                  <h3 className="text-sm font-bold mt-1.5 mb-1">{p.title}</h3>
                   <p className="text-xs text-slate-600 leading-relaxed">{p.desc}</p>
                   <TraceFill width={p.fill} bg={p.fillBg} />
                 </div>
@@ -639,7 +370,7 @@ export default function Landing() {
           <div className="border-b border-dashed border-[#C9CED6] mt-6 mb-12" />
 
           <Reveal
-            className="discovery-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 border border-slate-200 rounded-lg bg-white overflow-hidden card-shadow divide-y sm:divide-y-0 sm:divide-x divide-slate-200"
+            className="discovery-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 border border-slate-200 rounded-lg bg-white overflow-hidden card-shadow divide-y sm:divide-y-0 xl:divide-x divide-slate-200"
             stagger={1}
           >
             {DISCOVERY.map((d) => (
@@ -648,7 +379,7 @@ export default function Landing() {
                 <div className="discovery-card-body">
                   <div className={`discovery-dot ${d.dot}`} />
                   <div>
-                    <h5 className="text-sm font-bold mb-1">{d.title}</h5>
+                    <h3 className="text-sm font-bold mb-1">{d.title}</h3>
                     <p className="text-xs text-slate-600 leading-relaxed">{d.desc}</p>
                   </div>
                 </div>
@@ -674,13 +405,14 @@ export default function Landing() {
             <p className="text-[15px] text-slate-600 max-w-xl">
               The result gives a hiring manager enough context to decide whether a conversation is
               worth having—without pretending the system knows more than the evidence says.
+              Illustrative example below; live dossiers render from real profiles.
             </p>
           </Reveal>
 
           <div className="border-b border-dashed border-[#C9CED6] mt-6 mb-12" />
 
           <Reveal className="grid md:grid-cols-[280px_1fr] border border-slate-200 rounded-lg bg-white overflow-hidden card-shadow" stagger={1}>
-            <div className="p-6 border-r border-slate-200 bg-slate-50">
+            <div className="p-6 border-r border-slate-200 bg-slate-50 xl:border-r-0">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-[#1F2DE6] text-white font-bold text-sm flex items-center justify-center mb-3 shadow-sm">
                 AK
               </div>
@@ -774,7 +506,7 @@ export default function Landing() {
           <div className="grid md:grid-cols-3 gap-4">
             <Reveal className="border border-slate-200 rounded-lg p-6 bg-white hover-lift card-shadow" stagger={1}>
               <div className="text-xl mb-3 text-[#1F2DE6] font-mono">◇</div>
-              <h5 className="text-sm font-bold mb-2">Private by design</h5>
+              <h3 className="text-sm font-bold mb-2">Private by design</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 No public candidate directory. Employers are verified before they can discover
                 talent.
@@ -783,7 +515,7 @@ export default function Landing() {
 
             <Reveal className="border border-slate-200 rounded-lg p-6 bg-white hover-lift card-shadow" stagger={2}>
               <div className="text-xl mb-3 text-purple-600 font-mono">◌</div>
-              <h5 className="text-sm font-bold mb-2">Candidate control</h5>
+              <h3 className="text-sm font-bold mb-2">Candidate control</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 Candidates control visibility, portfolio links, and can delete or export their
                 profile at any time.
@@ -792,7 +524,7 @@ export default function Landing() {
 
             <Reveal className="border border-slate-200 rounded-lg p-6 bg-white hover-lift card-shadow" stagger={3}>
               <div className="text-xl mb-3 text-green-600 font-mono">✓</div>
-              <h5 className="text-sm font-bold mb-2">Accountable contact</h5>
+              <h3 className="text-sm font-bold mb-2">Accountable contact</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 Contact is direct for speed, while every profile view and inquiry is transparently
                 audit-logged.
@@ -810,53 +542,23 @@ export default function Landing() {
         <div className="max-w-[920px] mx-auto px-6">
           <Reveal>
             <div className="faq-heading text-center max-w-2xl mx-auto">
-            <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
-              07 — Clarity
-            </div>
-            <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight mb-3">
-              Frequently asked questions.
-            </h2>
-            <p className="text-[15px] text-slate-600 max-w-xl">
-              Everything you need to know about the reverse discovery model, privacy guarantees, and
-              evaluation pipeline.
-            </p>
+              <div className="text-[11px] font-mono text-[#1F2DE6] uppercase tracking-wider mb-3">
+                07 — Clarity
+              </div>
+              <h2 className="text-3xl sm:text-[34px] font-bold tracking-tight mb-3">
+                Frequently asked questions.
+              </h2>
+              <p className="text-[15px] text-slate-600 max-w-xl">
+                Everything you need to know about the reverse discovery model, privacy guarantees, and
+                evaluation pipeline.
+              </p>
             </div>
           </Reveal>
 
           <div className="border-b border-dashed border-[#C9CED6] mt-8 mb-8 max-w-2xl mx-auto" />
 
-          <Reveal className="faq-list max-w-2xl mx-auto w-full" stagger={1}>
-            {FAQS.map((f, i) => {
-              const open = openFaq === i;
-              return (
-                <div
-                  key={i}
-                  className="faq-item"
-                >
-                  <button
-                    onClick={() => setOpenFaq(open ? null : i)}
-                    className="faq-trigger"
-                    aria-expanded={open}
-                  >
-                    <span>{f.q}</span>
-                    <span className="faq-trigger-ico">
-                      <ChevronDown
-                        className="w-4 h-4 shrink-0 transition-transform duration-200"
-                        style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
-                        aria-hidden="true"
-                      />
-                    </span>
-                  </button>
-                  <div className={`faq-body ${open ? "open" : ""}`}>
-                    <div>
-                      <p>
-                        {f.a}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <Reveal className="max-w-2xl mx-auto w-full" stagger={1}>
+            <FaqList faqs={FAQS} />
           </Reveal>
         </div>
       </section>
@@ -869,42 +571,46 @@ export default function Landing() {
             <i className="g-handle -top-1 -right-1" />
             <i className="g-handle -bottom-1 -left-1" />
             <i className="g-handle -bottom-1 -right-1" />
-          <div className="footer-simple-blue">
-            <div className="footer-simple-dither" aria-hidden="true">
-              <DitherEffect colorFront="#1F2DE6" colorBack="#ffffff" scale={0.8} className="dither-soft" />
-            </div>
-            <div className="footer-simple-card">
-              <div className="footer-simple-grid">
-                <div className="footer-simple-brandblock">
-                  <a href="#top" className="footer-simple-logo">Tammy</a>
-                  <div className="footer-simple-visit">
-                    <span className="footer-simple-pill">Start here</span>
-                    <Link href="/start" className="footer-simple-cta press">
-                      Build my page
-                    </Link>
-                    <a href="mailto:hiya@tammy.sh" className="footer-simple-mail">hiya@tammy.sh</a>
+            <div className="footer-simple-blue">
+              <div className="footer-simple-dither" aria-hidden="true">
+                <DitherEffect colorFront="#1F2DE6" colorBack="#ffffff" scale={0.8} className="dither-soft" />
+              </div>
+              <div className="footer-simple-card">
+                <div className="footer-simple-grid">
+                  <div className="footer-simple-brandblock">
+                    <a href="#top" className="footer-simple-logo">Tammy</a>
+                    <div className="footer-simple-visit">
+                      <span className="footer-simple-pill">Start here</span>
+                      <Link href="/join" className="footer-simple-cta press">
+                        Build my page
+                      </Link>
+                      <a href="mailto:hiya@tammy.sh" className="footer-simple-mail">hiya@tammy.sh</a>
+                    </div>
                   </div>
+                  <nav className="footer-simple-col" aria-label="Talent">
+                    <p className="footer-simple-h">Talent</p>
+                    <a href="#candidates">Candidates</a>
+                    <a href="#engine">How it works</a>
+                    <a href="#faq">FAQ</a>
+                  </nav>
+                  <nav className="footer-simple-col" aria-label="Hiring">
+                    <p className="footer-simple-h">Hiring</p>
+                    <Link href="/hire">Employers</Link>
+                    <Link href="/hire/search">Search</Link>
+                    <Link href="/hire/login">Employer login</Link>
+                    <Link href="/join">For candidates</Link>
+                  </nav>
                 </div>
-                <nav className="footer-simple-col" aria-label="Talent">
-                  <p className="footer-simple-h">Talent</p>
-                  <a href="#candidates">Candidates</a>
-                  <a href="#engine">How it works</a>
-                  <a href="#faq">FAQ</a>
-                </nav>
-                <nav className="footer-simple-col" aria-label="Hiring">
-                  <p className="footer-simple-h">Hiring</p>
-                  <Link href="/hire">Employers</Link>
-                  <a href="#engine">Search</a>
-                  <a href="#faq">Deep Read</a>
-                  <Link href="/start">Shop all</Link>
-                </nav>
               </div>
             </div>
           </div>
-          </div>
           <div className="footer-simple-bottom">
             <span>© 2026 Tammy Technologies Inc.</span>
-            <nav aria-label="Legal"><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Security</a></nav>
+            <nav aria-label="Legal">
+              <a href="mailto:hiya@tammy.sh?subject=Privacy">Privacy</a>
+              <a href="mailto:hiya@tammy.sh?subject=Terms">Terms</a>
+              <a href="mailto:hiya@tammy.sh?subject=Security">Security</a>
+            </nav>
           </div>
         </div>
       </footer>

@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase";
+import { getViewer, requireHr, requireVerifiedHr } from "@/lib/api-auth";
 import { jobSchema } from "@/lib/validators";
 import type { JobReq } from "@/lib/matching/types";
 import { buildJobQueryText, embedQuery } from "@/lib/matching/voyage";
@@ -6,14 +7,29 @@ import { applyContactPrefs } from "@/lib/contact-prefs";
 import { defaultOpenAIProvider, judgeTop, type JudgeInput } from "@/lib/matching/judge";
 import { blendWithJudge, scoreCandidate, type ScoreContext } from "@/lib/scoring-live";
 import { withWideEvent } from "@/lib/observe";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 // POST /api/search { job, limit=30, deep=false }
 // Qwen fixes: group chunks BY CANDIDATE (cap 3/candidate, best-distance wins),
 // cache invalidated when candidate data changes after the cached search.
 export const POST = withWideEvent("/api/search", async (request, wev) => {
+  // Search results carry candidate contact info: employer session required.
+  const viewer = getViewer(request);
+  const deniedHr = requireHr(viewer);
+  if (deniedHr) return deniedHr;
+  const deniedVerified = await requireVerifiedHr(viewer);
+  if (deniedVerified) return deniedVerified;
   const body = await request.json().catch(() => null);
-  const limit = Math.min(Math.max(body?.limit ?? 30, 1), 30);
   const deep = body?.deep === true;
+  // Deep judge costs ~10 LLM calls: throttle harder than shallow search.
+  const rl = rateLimit(request, {
+    key: deep ? "search-deep" : "search",
+    limit: deep ? 10 : 60,
+    windowMs: deep ? 10 * 60_000 : 60_000,
+  });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
+  const rawLimit = typeof body?.limit === "number" && Number.isFinite(body.limit) ? body.limit : 30;
+  const limit = Math.min(Math.max(Math.floor(rawLimit), 1), deep ? 10 : 30);
   const parsed = jobSchema.safeParse(body?.job);
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
@@ -125,7 +141,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
     if (!error && data) chunks = data as Chunk[];
   } catch { /* fall back below */ }
 
-  const CAND_COLS = "id, full_name, headline, domain, total_experience_years, min_salary, contact_email, contact_phone, linkedin_url, github_url, portfolio_url, resume_url, photo_url, profile_strength, remote_preference, location_city, availability_status";
+  const CAND_COLS = "id, full_name, headline, domain, total_experience_years, min_salary, salary_frequency, contact_email, contact_phone, linkedin_url, github_url, portfolio_url, resume_url, photo_url, profile_strength, remote_preference, location_city, availability_status";
   let rows: Record<string, unknown>[] = [];
   if (chunks.length) {
     const byCand = new Map<string, { best: number; hits: Chunk[] }>();
@@ -203,6 +219,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
             skillProjects,
             depths: projs.map((p) => depthByProj.get(p.id) ?? { complexity: 5, evidence: "moderate" as const }),
             minSalary: typeof r.min_salary === "number" ? r.min_salary : null,
+            salaryFreq: typeof r.salary_frequency === "string" ? r.salary_frequency : null,
             totalExp: typeof r.total_experience_years === "number" ? r.total_experience_years : null,
             remotePref: typeof r.remote_preference === "string" ? r.remote_preference : null,
             locationCity: typeof r.location_city === "string" ? r.location_city : null,
@@ -211,7 +228,13 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
           };
           const dist = typeof r.best_distance === "number" ? r.best_distance : null;
           const { sub, total, level } = scoreCandidate(jobReq, dist, ctx);
-          return { ...r, overall_score: total, match_level: level, sub_scores: sub };
+          return {
+            ...r,
+            overall_score: total,
+            match_level: level,
+            sub_scores: sub,
+            top_skills: (skillsByCand.get(cid) ?? []).slice(0, 4),
+          };
         })
         .sort((a, b) => (Number(b.overall_score) || 0) - (Number(a.overall_score) || 0));
     } catch { /* scoring never blocks results */ }
@@ -230,6 +253,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   wev.add({ result_count: rows.length, chunk_hits: chunks.length });
 
   // Persist search + per-candidate matches (best-effort).
+  // Skip null-score rows so the cache table doesn't fill with unscored junk.
   let searchId: string | null = null;
   try {
     const { data: s } = await db.from("searches").insert({
@@ -241,15 +265,18 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   } catch { /* ignore */ }
   if (searchId && !deep) {
     try {
-      await db.from("candidate_matches").insert(
-        rows.map((r) => ({
-          search_id: searchId,
-          candidate_id: String(r.id ?? ""),
-          score: typeof r.overall_score === "number" ? r.overall_score : null,
-          match_reasons_json: (r.sub_scores ?? {}) as Record<string, unknown>,
-          status: "shown",
-        })),
-      );
+      const scored = rows.filter((r) => typeof r.overall_score === "number");
+      if (scored.length) {
+        await db.from("candidate_matches").insert(
+          scored.map((r) => ({
+            search_id: searchId,
+            candidate_id: String(r.id ?? ""),
+            score: r.overall_score as number,
+            match_reasons_json: (r.sub_scores ?? {}) as Record<string, unknown>,
+            status: "shown",
+          })),
+        );
+      }
     } catch { /* cache seed optional */ }
   }
   if (!deep) return Response.json({ results: rows, queryText, searchId });
@@ -260,7 +287,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
     const inputs: JudgeInput[] = await Promise.all(top.map(async (r) => {
       const cid = String(r.id ?? "");
       const [{ data: cand }, { data: projs }] = await Promise.all([
-        db.from("candidates").select("*").eq("id", cid).single(),
+        db.from("candidates").select("id, full_name, headline, domain, total_experience_years, min_salary, location_city, remote_preference, availability_status").eq("id", cid).single(),
         db.from("projects").select("title, description, tech_stack, impact_summary").eq("candidate_id", cid),
       ]);
       return { candidate_id: cid, job: jobReq, candidateJson: { candidate: cand, projects: projs } };
@@ -290,7 +317,8 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
     }
     wev.add({ judged: merged.length, deep: true });
     return Response.json({ results: merged, queryText, searchId, deep: true });
-  } catch (e) {
-    return Response.json({ results: rows, queryText, searchId, deepError: (e as Error).message });
+  } catch {
+    console.error("[search] deep judge failed");
+    return Response.json({ results: rows, queryText, searchId, deepError: "Deep read unavailable. Showing rule-ranked results." });
   }
 });

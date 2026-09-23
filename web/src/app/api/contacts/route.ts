@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
 import { contactLoggedEmail, sendEmail } from "@/lib/email";
+import { getViewer, requireHr, verifyOwnerEmail } from "@/lib/api-auth";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 // POST /api/contacts — audit-log an outreach (OPEN-CONTACT: audit, not a gate).
 // Body: { candidate_id (uuid), job_id? (uuid|null), employer_id? (uuid|null),
@@ -17,15 +19,20 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const rl = rateLimit(request, { key: "contacts-post", limit: 20, windowMs: 10 * 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const body = await request.json().catch(() => null);
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
   }
+  // Outreach writes audit rows + emails candidates: employer session required.
+  const denied = requireHr(getViewer(request));
+  if (denied) return denied;
   const db = supabaseAdmin();
   const { candidate_id, job_id, employer_id, channel, message } = parsed.data;
 
-  const { data, error } = await db
+  const { data } = await db
     .from("contact_log")
     .insert({
       employer_id: employer_id ?? null,
@@ -38,8 +45,9 @@ export async function POST(request: Request) {
     .single();
 
   if (!data) {
+    console.error("[contacts] log failed");
     return Response.json(
-      { error: "contact log failed", detail: error?.message ?? null },
+      { error: "contact log failed" },
       { status: 500 },
     );
   }
@@ -89,21 +97,39 @@ export async function POST(request: Request) {
 }
 
 // GET /api/contacts?candidate_id=&limit=50 — recent contact_log rows.
+// Requires candidate_id: unfiltered dumps across tenants are forbidden.
+// Owner must match own id (DB-verified); HR allowed.
 export async function GET(request: Request) {
+  const rl = rateLimit(request, { key: "contacts-get", limit: 60, windowMs: 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
+  const viewer = getViewer(request);
+  if (viewer.kind === "anon") {
+    return Response.json({ error: "Sign in to view contact logs." }, { status: 401 });
+  }
   const url = new URL(request.url);
   const candidate_id = url.searchParams.get("candidate_id");
+  if (!candidate_id) {
+    return Response.json({ error: "candidate_id is required." }, { status: 400 });
+  }
+  if (viewer.kind === "owner") {
+    const ok =
+      viewer.id === candidate_id && (await verifyOwnerEmail(candidate_id, viewer.email));
+    if (!ok) return Response.json({ error: "You can only view your own contact logs." }, { status: 403 });
+  }
   const limit = Math.min(
     Math.max(Number(url.searchParams.get("limit")) || 50, 1),
     100,
   );
   const db = supabaseAdmin();
-  let q = db
+  const { data, error } = await db
     .from("contact_log")
-    .select("id, employer_id, candidate_id, job_id, channel, created_at")
+    .select("id, employer_id, candidate_id, job_id, channel, message, created_at")
+    .eq("candidate_id", candidate_id)
     .order("created_at", { ascending: false })
     .limit(limit);
-  if (candidate_id) q = q.eq("candidate_id", candidate_id);
-  const { data, error } = await q;
-  if (error) return Response.json({ error: error.message }, { status: 500 });
+  if (error) {
+    console.error("[contacts] list failed");
+    return Response.json({ error: "contact list failed" }, { status: 500 });
+  }
   return Response.json({ results: data ?? [] });
 }

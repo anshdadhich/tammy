@@ -30,6 +30,11 @@ export async function sendEmail(
     console.warn("[email] invalid recipient — skipping send:", to);
     return { skipped: true, reason: "invalid recipient" };
   }
+  // Header-injection guard: subjects become SMTP headers.
+  const safeSubject = subject.replace(/[\r\n]+/g, " ").slice(0, 200);
+  if (!safeSubject.trim()) {
+    return { skipped: true, reason: "empty subject" };
+  }
   try {
     const resend = new Resend(apiKey);
     const from =
@@ -37,7 +42,7 @@ export async function sendEmail(
     const { data, error } = await resend.emails.send({
       from,
       to,
-      subject,
+      subject: safeSubject,
       html,
     });
     if (error) {
@@ -63,18 +68,20 @@ function shell(title: string, body: string): string {
 }
 
 /** Candidate finished onboarding / pipeline marked profile visible. */
-export function profileReadyEmail(name: string): {
+export function profileReadyEmail(name: string, candidateId?: string): {
   subject: string;
   html: string;
 } {
   const safe = escapeHtml(name || "there");
+  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const profilePath = candidateId ? `/talent/${encodeURIComponent(candidateId)}` : "/join";
   return {
     subject: "Your Reverse Hiring profile is live",
     html: shell(
       `Hi ${safe}, your profile is ready 🎉`,
       `<p>Your deep profile is now visible to verified employers. You don't need to apply anywhere — employers search the talent database and contact you directly (email/phone shown on match, open-contact model).</p>`
         + `<p>Tip: keep achievements and project evidence specific — that's what ranks you higher.</p>`
-        + `<p><a href="${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/candidate">View / update your profile</a></p>`,
+        + `<p><a href="${site}${profilePath}">View / update your profile</a></p>`,
     ),
   };
 }

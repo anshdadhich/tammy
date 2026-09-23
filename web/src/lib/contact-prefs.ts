@@ -12,12 +12,14 @@ export type ContactPrefs = {
 
 export function applyContactPrefs<T extends ContactPrefs>(c: T): T {
   const out = { ...c };
-  if (c.show_email === false) { out.contact_email = null; }
-  if (c.show_phone === false) { out.contact_phone = null; }
-  if (c.show_linkedin === false) { out.linkedin_url = null; }
-  if (c.show_github === false) { out.github_url = null; }
-  if (c.show_portfolio === false) { out.portfolio_url = null; }
-  if (c.show_resume === false) { out.resume_url = null; }
-  if (c.show_photo === false) { out.photo_url = null; }
+  // Deny-by-default: any non-true (false, null, undefined, missing column)
+  // hides the channel. Matches stripCandidatePii in api-auth.ts.
+  if (c.show_email !== true) { out.contact_email = null; }
+  if (c.show_phone !== true) { out.contact_phone = null; }
+  if (c.show_linkedin !== true) { out.linkedin_url = null; }
+  if (c.show_github !== true) { out.github_url = null; }
+  if (c.show_portfolio !== true) { out.portfolio_url = null; }
+  if (c.show_resume !== true) { out.resume_url = null; }
+  if (c.show_photo !== true) { out.photo_url = null; }
   return out;
 }

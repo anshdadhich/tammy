@@ -49,43 +49,45 @@ ON CONFLICT (id) DO UPDATE SET
   status = 'active';
 
 -- ---------- 2. demo candidates (varied domains/exp/salary/remote) ----------
+-- Demo rows explicitly opt into contact channels (fake @demo.local data).
 INSERT INTO public.candidates
   (id, full_name, headline, domain, current_position, total_experience_years,
    location_city, location_country, remote_preference, open_to_relocation,
    min_salary, salary_currency, salary_frequency, salary_negotiable,
    availability_status, contact_email, contact_phone, linkedin_url, github_url,
-   visibility_status, consent_status, profile_strength)
+   visibility_status, consent_status, profile_strength,
+   show_email, show_phone, show_linkedin, show_github, show_resume, show_portfolio, show_photo)
 VALUES
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1', 'Asha Sharma', 'Node/Postgres APIs, auth + caching, 2y',
    'backend', 'SDE-1 @ Acme', 2, 'Pune', 'India', 'remote_only', false,
    45000, 'INR', 'monthly', true, 'immediate',
    'asha.backend@demo.local', '+91 98765 00001', 'https://linkedin.com/in/demo-asha', 'https://github.com/demo-asha',
-   'visible', 'granted', 82),
+   'visible', 'granted', 82, true, true, true, true, true, true, true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2', 'Rohan Mehta', 'React dashboards, design systems, 4y',
    'frontend', 'Frontend Dev @ BrightUI', 4, 'Bengaluru', 'India', 'hybrid', true,
    80000, 'INR', 'monthly', true, 'notice',
    'rohan.frontend@demo.local', '+91 98765 00002', 'https://linkedin.com/in/demo-rohan', 'https://github.com/demo-rohan',
-   'visible', 'granted', 78),
+   'visible', 'granted', 78, true, true, true, true, true, true, true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa3', 'Priya Nair', 'ML pipelines, churn + forecasting, 5y',
    'data', 'Data Scientist @ Insightful', 5, 'Remote', 'India', 'remote_only', false,
    120000, 'INR', 'monthly', true, 'immediate',
    'priya.data@demo.local', '+91 98765 00003', 'https://linkedin.com/in/demo-priya', 'https://github.com/demo-priya',
-   'visible', 'granted', 85),
+   'visible', 'granted', 85, true, true, true, true, true, true, true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa4', 'Karan Patel', 'Flutter apps, 100k installs, 1y',
    'mobile', 'Junior Mobile Dev @ AppWorks', 1, 'Ahmedabad', 'India', 'onsite', false,
    35000, 'INR', 'monthly', true, 'immediate',
    'karan.mobile@demo.local', '+91 98765 00004', 'https://linkedin.com/in/demo-karan', 'https://github.com/demo-karan',
-   'visible', 'granted', 64),
+   'visible', 'granted', 64, true, true, true, true, true, true, true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa5', 'Sneha Kulkarni', 'K8s + AWS cost cuts, platform, 7y',
    'devops', 'Senior DevOps @ CloudNine', 7, 'Hyderabad', 'India', 'flexible', true,
    150000, 'INR', 'monthly', false, 'notice',
    'sneha.devops@demo.local', '+91 98765 00005', 'https://linkedin.com/in/demo-sneha', 'https://github.com/demo-sneha',
-   'visible', 'granted', 90),
+   'visible', 'granted', 90, true, true, true, true, true, true, true),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6', 'Vikram Singh', 'Next.js + Supabase SaaS, solo-built, 3y',
    'fullstack', 'Full-stack Dev @ IndieHack', 3, 'Delhi', 'India', 'hybrid', true,
    70000, 'INR', 'monthly', true, 'immediate',
    'vikram.fullstack@demo.local', '+91 98765 00006', 'https://linkedin.com/in/demo-vikram', 'https://github.com/demo-vikram',
-   'visible', 'granted', 76)
+   'visible', 'granted', 76, true, true, true, true, true, true, true)
 ON CONFLICT (id) DO UPDATE SET
   full_name = EXCLUDED.full_name,
   headline = EXCLUDED.headline,
@@ -93,6 +95,13 @@ ON CONFLICT (id) DO UPDATE SET
   total_experience_years = EXCLUDED.total_experience_years,
   remote_preference = EXCLUDED.remote_preference,
   min_salary = EXCLUDED.min_salary,
+  show_email = true,
+  show_phone = true,
+  show_linkedin = true,
+  show_github = true,
+  show_resume = true,
+  show_portfolio = true,
+  show_photo = true,
   visibility_status = 'visible';
 
 -- ---------- 3. demo skills links (best-effort; skipped silently if skill missing) ----------

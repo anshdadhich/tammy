@@ -6,7 +6,7 @@ no unlock gate; `contact_log` is audit-only).
 
 Monorepo layout: `web/` (Next.js app: portfolio pages + HR search + JSON API) + `supabase/` (SQL) + `docs/` (blueprint).
 
-Flow: landing `/` → candidate fills `/start` once → public portfolio `/u/[id]` (✎ edit at `/u/[id]/edit`) → HR searches at `/hire` (chat box + filters → minimal list → two-pane profile view with sidebar).
+Flow: landing `/` → candidate joins at `/join` once → public dossier `/talent/[id]` (✎ edit at `/talent/[id]/edit`) → HR searches at `/hire/search` (brief + filters → ranked list → two-pane dossier with sidebar) and tracks in `/hire/dashboard`.
 
 ## Quickstart
 
@@ -44,13 +44,13 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-Pages: `/` (landing) · `/start` (candidate signup → portfolio) · `/u/[id]` (public portfolio + ✎ edit) · `/hire` (HR chat search → results → two-pane profile).
+Pages: `/` (landing) · `/join` (candidate signup → dossier) · `/talent/[id]` (public dossier + ✎ edit) · `/hire/search` (HR search → results → two-pane dossier) · `/hire/dashboard` (shortlist + outreach). Legacy `/start`, `/u/*`, `/hire/dash` redirect.
 
 ### 4. Inngest dev (background pipeline: normalize → summary → depth → chunks → embed)
 
 ```bash
 cd web
-npx inngest-cli@latest dev   # serves local worker; app endpoint is /api/inngest
+npx inngest-cli@latest dev   # serves local worker; app endpoint is /api/webhooks/inngest
 ```
 
 If Inngest is offline, `POST /api/candidates` still saves the profile (202) and
@@ -72,13 +72,14 @@ Checks `GET /` → 200 (JSON index) and `POST /api/search` with `{}` → 400.
 - `PUT /api/candidates` `{ id, ...fields }` → 202 (owner edit, replaces child rows)
 - `POST /api/search` `{ job, limit?, deep? }` → `{ results, queryText, searchId }`
 - `POST /api/shortlists` `{ candidate_id, job_id?, employer_id?, status?, notes? }` → emails candidate (best-effort)
+- `POST /api/candidates/lookup` `{ email }` → `{ exists, id? }` (rate-limited existence check; full bundles only via `GET /api/candidates?id=`)
 - `POST /api/contacts` `{ candidate_id, job_id?, employer_id?, channel?, message? }` → audit-logs + emails candidate (best-effort)
 
 All email sends are wrapped in try/catch — missing `RESEND_API_KEY` never breaks an API response.
 
 ## Deploy notes (Vercel + Supabase)
 
-- Supabase: create project → run the 4 SQL files in order → enable Auth → add Storage bucket for resumes/photos if needed.
-- Vercel: import `web/` as the project root, set all env vars above (server: `SUPABASE_SERVICE_ROLE_KEY`, `VOYAGE_API_KEY`, `OPENROUTER_API_KEY`, `RESEND_API_KEY`; public: `NEXT_PUBLIC_SUPABASE_*`), deploy.
-- Inngest: create an Inngest project, set `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` in Vercel, point Inngest to `https://<app>/api/inngest` as the serving endpoint.
+- Supabase: create project → run SQL in order: `schema.sql` → `storage.sql` → `contact_prefs.sql` → `match_chunks.sql` → `migrations/20260923_hardening.sql` → enable Auth → add Storage buckets if needed.
+- Vercel: import `web/` as the project root, set all env vars above (server: `SUPABASE_SERVICE_ROLE_KEY`, `VOYAGE_API_KEY`, `OPENROUTER_API_KEY`, `RESEND_API_KEY`; public: `NEXT_PUBLIC_SUPABASE_*`), deploy. Prod hardening: set `STRICT_HR_VERIFY=1` + `BOOTSTRAP_SECRET` (locks `/api/admin/bootstrap`).
+- Inngest: create an Inngest project, set `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` in Vercel, point Inngest to `https://<app>/api/webhooks/inngest` as the serving endpoint.
 - Post-deploy: re-run `seed_demo.sql` only for staging; never on prod (demo `@demo.local` rows).

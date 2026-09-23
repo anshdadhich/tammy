@@ -1,4 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase";
+import { getViewer, isHr, verifyOwnerEmail } from "@/lib/api-auth";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 // File uploads via service_role (bypasses RLS) + 1h signed URLs.
 // Buckets are private; browsers never touch Storage directly.
@@ -63,6 +65,8 @@ function sanitizeFilename(name: string): string {
 }
 
 export async function POST(request: Request) {
+  const rl = rateLimit(request, { key: "uploads-post", limit: 20, windowMs: 10 * 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   let form: FormData;
   try {
     form = await request.formData();
@@ -70,6 +74,9 @@ export async function POST(request: Request) {
     return err("expected multipart/form-data", 400);
   }
 
+  // Uploads write files into private buckets: owner or HR only, and the
+  // owner may only upload into their own folder.
+  const viewer = getViewer(request);
   const kindRaw = form.get("kind");
   const candidateIdRaw = form.get("candidate_id");
   const file = form.get("file");
@@ -82,6 +89,18 @@ export async function POST(request: Request) {
     typeof candidateIdRaw === "string" ? candidateIdRaw.trim() : "";
   if (!UUID_RE.test(candidateId)) {
     return err("candidate_id must be a valid uuid");
+  }
+  if (viewer.kind === "anon") {
+    return err("Sign in to upload files.", 401);
+  }
+  // Owner path is DB-verified (cookie id alone is forgeable).
+  if (viewer.kind === "owner") {
+    const ok =
+      viewer.id === candidateId && (await verifyOwnerEmail(candidateId, viewer.email));
+    if (!ok) return err("You can only upload files to your own profile.", 403);
+  }
+  if (viewer.kind === "hr" && !isHr(viewer)) {
+    return err("Employer session required.", 401);
   }
   if (!(file instanceof File)) {
     return err("file is required");
@@ -101,6 +120,20 @@ export async function POST(request: Request) {
   const ext = (file.name.split(".").pop() ?? "").toLowerCase();
   if (!KIND_EXT[kind].includes(ext)) {
     return err(`invalid extension for ${kind}: expected ${KIND_EXT[kind].join(" / ")}`);
+  }
+  // Magic-byte check: file.type / extension are client-spoofable.
+  try {
+    const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
+    const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47;
+    const isJpg = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff;
+    const okMagic =
+      (ext === "pdf" && isPdf) ||
+      (ext === "png" && isPng) ||
+      ((ext === "jpg" || ext === "jpeg") && isJpg);
+    if (!okMagic) return err("file content does not match its extension");
+  } catch {
+    return err("could not read file");
   }
 
   const bucket = KIND_BUCKET[kind];
@@ -122,14 +155,16 @@ export async function POST(request: Request) {
   if (upErr) {
     const dup =
       /duplicate|already exists|resource already exists/i.test(upErr.message);
-    return err("upload failed", dup ? 409 : 500, upErr.message);
+    console.error("[uploads] storage upload failed", bucket);
+    return err("upload failed", dup ? 409 : 500);
   }
 
   const { data: signed, error: signErr } = await db.storage
     .from(bucket)
     .createSignedUrl(path, SIGNED_URL_TTL);
   if (signErr || !signed?.signedUrl) {
-    return err("uploaded but signing failed", 500, signErr?.message ?? null);
+    console.error("[uploads] signing failed", bucket);
+    return err("uploaded but signing failed", 500);
   }
 
   // Persist storage path onto the candidate row (best-effort, never blocks).
@@ -149,6 +184,8 @@ export async function POST(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const rl = rateLimit(request, { key: "uploads-get", limit: 120, windowMs: 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const url = new URL(request.url);
   const bucket = url.searchParams.get("bucket") ?? "";
   const path = url.searchParams.get("path") ?? "";
@@ -164,12 +201,24 @@ export async function GET(request: Request) {
     return err("path must be {candidate_uuid}/{filename}");
   }
 
+  // Signed URLs unlock private files: verified owner of the folder or HR only.
+  const viewer = getViewer(request);
+  const folderId = path.split("/")[0] ?? "";
+  if (viewer.kind === "anon") {
+    return err("Sign in to view files.", 401);
+  }
+  if (viewer.kind === "owner") {
+    const ok =
+      viewer.id === folderId && (await verifyOwnerEmail(folderId, viewer.email));
+    if (!ok) return err("You can only view your own files.", 403);
+  }
+
   const db = supabaseAdmin();
   const { data: signed, error } = await db.storage
     .from(bucket)
     .createSignedUrl(path, SIGNED_URL_TTL);
   if (error || !signed?.signedUrl) {
-    return err("sign failed (object may not exist)", 404, error?.message ?? null);
+    return err("sign failed (object may not exist)", 404);
   }
   return Response.json({
     bucket,

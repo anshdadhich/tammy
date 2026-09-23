@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
 import { newMatchEmail, sendEmail } from "@/lib/email";
+import { getViewer, requireHr } from "@/lib/api-auth";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 const uuid = z.string().uuid("Must be a valid UUID");
 
@@ -21,6 +23,11 @@ const removeByIdSchema = z.object({ id: uuid });
 
 // GET /api/shortlists?employer_id=&candidate_id=&job_id= — list saved rows.
 export async function GET(request: Request) {
+  const rl = rateLimit(request, { key: "shortlists-get", limit: 120, windowMs: 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
+  // Shortlists expose candidate contact info: employer session required.
+  const denied = requireHr(getViewer(request));
+  if (denied) return denied;
   const url = new URL(request.url);
   const raw = {
     employer_id: url.searchParams.get("employer_id") ?? undefined,
@@ -35,22 +42,33 @@ export async function GET(request: Request) {
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
   }
+  // Forbid unfiltered dumps across all employers.
+  if (!parsed.data.employer_id && !parsed.data.candidate_id && !parsed.data.job_id) {
+    return Response.json({ error: "Filter by employer_id, candidate_id, or job_id." }, { status: 400 });
+  }
   const db = supabaseAdmin();
   let q = db
     .from("shortlists")
-    .select("*, candidates(id, full_name, headline, contact_email, contact_phone)")
+    .select("id, employer_id, candidate_id, job_id, status, notes, created_at, candidates(id, full_name, headline)")
     .order("created_at", { ascending: false })
     .limit(100);
   if (parsed.data.employer_id) q = q.eq("employer_id", parsed.data.employer_id);
   if (parsed.data.candidate_id) q = q.eq("candidate_id", parsed.data.candidate_id);
   if (parsed.data.job_id) q = q.eq("job_id", parsed.data.job_id);
   const { data, error } = await q;
-  if (error) return Response.json({ error: "shortlist list failed", detail: error.message }, { status: 500 });
+  if (error) {
+    console.error("[shortlists] list failed");
+    return Response.json({ error: "shortlist list failed" }, { status: 500 });
+  }
   return Response.json({ results: data ?? [] });
 }
 
 // POST /api/shortlists { candidate_id, job_id?, employer_id?, notes? }
 export async function POST(request: Request) {
+  const rl = rateLimit(request, { key: "shortlists-post", limit: 30, windowMs: 10 * 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
+  const denied = requireHr(getViewer(request));
+  if (denied) return denied;
   const body = await request.json().catch(() => null);
   const parsed = saveSchema.safeParse(body);
   if (!parsed.success) {
@@ -78,7 +96,7 @@ export async function POST(request: Request) {
   );
   if (dup) return Response.json({ shortlist: dup, deduped: true });
 
-  const { data, error } = await db
+  const { data } = await db
     .from("shortlists")
     .insert({
       employer_id: employer_id ?? null,
@@ -89,7 +107,10 @@ export async function POST(request: Request) {
     })
     .select("id, employer_id, candidate_id, job_id, status, notes, created_at")
     .single();
-  if (!data) return Response.json({ error: "shortlist save failed", detail: error?.message ?? null }, { status: 500 });
+  if (!data) {
+    console.error("[shortlists] save failed");
+    return Response.json({ error: "shortlist save failed" }, { status: 500 });
+  }
   try {
     const { data: cc } = await db.from("candidates").select("full_name, contact_email").eq("id", candidate_id).maybeSingle();
     const em = (cc as { contact_email?: string; full_name?: string } | null)?.contact_email;
@@ -103,6 +124,10 @@ export async function POST(request: Request) {
 
 // DELETE /api/shortlists?id=  OR  body { id }  OR  body { candidate_id, job_id?, employer_id? }
 export async function DELETE(request: Request) {
+  const rl = rateLimit(request, { key: "shortlists-delete", limit: 60, windowMs: 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
+  const denied = requireHr(getViewer(request));
+  if (denied) return denied;
   const url = new URL(request.url);
   const idParam = url.searchParams.get("id") ?? undefined;
   const body = await request.json().catch(() => null);
@@ -114,7 +139,10 @@ export async function DELETE(request: Request) {
     }
     const db = supabaseAdmin();
     const { error } = await db.from("shortlists").delete().eq("id", parsed.data.id);
-    if (error) return Response.json({ error: "shortlist remove failed", detail: error.message }, { status: 500 });
+    if (error) {
+      console.error("[shortlists] remove failed");
+      return Response.json({ error: "shortlist remove failed" }, { status: 500 });
+    }
     return Response.json({ ok: true });
   }
 
@@ -132,6 +160,9 @@ export async function DELETE(request: Request) {
   if (parsed.data.employer_id) q = q.eq("employer_id", parsed.data.employer_id);
   else q = q.is("employer_id", null);
   const { error } = await q;
-  if (error) return Response.json({ error: "shortlist remove failed", detail: error.message }, { status: 500 });
+  if (error) {
+    console.error("[shortlists] remove failed");
+    return Response.json({ error: "shortlist remove failed" }, { status: 500 });
+  }
   return Response.json({ ok: true });
 }
