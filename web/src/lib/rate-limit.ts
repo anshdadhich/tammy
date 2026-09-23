@@ -44,7 +44,6 @@ export function rateLimitResponse(retryAfterMs: number) {
 
 // Prune stale buckets every 5 min (timer unref'd so it never blocks exit).
 declare global {
-  // eslint-disable-next-line no-var
   var __tammyRateLimitPrune: NodeJS.Timeout | undefined;
 }
 if (!globalThis.__tammyRateLimitPrune) {

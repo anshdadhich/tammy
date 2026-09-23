@@ -12,11 +12,11 @@ type Props = {
 };
 
 /**
- * Major CTA with Beam glow — mono (grayscale, no purple) on light theme,
- * button-sized `sm`, strength 0.7 as requested.
+ * CTA wrapper with a border-beam sweep — grayscale variant (no purple),
+ * button-sized `sm`, strength 0.7, pill radius matching `.btn`.
  * Theme-aware: flips to the dark variant when <html data-theme="dark">.
  */
-export default function BeamButton({ children, className, strength = 0.7, active = true, radius = 8 }: Props) {
+export default function BeamButton({ children, className, strength = 0.7, active = true, radius = 999 }: Props) {
   const [dark, setDark] = useState(false);
 
   useEffect(() => {

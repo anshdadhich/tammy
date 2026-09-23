@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Menu, X } from "lucide-react";
 
 const LANDING_NAV = [
@@ -14,13 +14,14 @@ const LANDING_NAV = [
 
 const NAV_ITEMS: { label: string; href: string }[] = LANDING_NAV.map((n) => ({ ...n }));
 
-export default function AppNav() {
-  const [active, setActive] = useState<string>(NAV_ITEMS[0]?.href ?? "/");
+export default function AppNav({ active: activeProp }: { active?: string } = {}) {
+  const [active, setActive] = useState<string>(activeProp ?? NAV_ITEMS[0]?.href ?? "/");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [hideNav, setHideNav] = useState(false);
+  const reduceMotion = useReducedMotion();
 
-  // Opaque blur bar once scrolled; hide on scroll down, reveal on scroll up.
+  // Translucent blur bar once scrolled; hide on scroll down, reveal on scroll up.
   const lastY = useRef(0);
   useEffect(() => {
     const onScroll = () => {
@@ -43,18 +44,18 @@ export default function AppNav() {
         setActive(`/${hash}`);
         return;
       }
-      if (!hash) setActive(NAV_ITEMS[0]?.href ?? "/");
+      if (!hash) setActive(activeProp ?? NAV_ITEMS[0]?.href ?? "/");
     };
     sync();
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
-  }, []);
+  }, [activeProp]);
 
   return (
     <motion.header
       className={`site-navbar-wrap${scrolled ? " is-scrolled" : ""}`}
-      initial={{ y: -18, opacity: 0 }}
-      animate={{ y: hideNav ? "-110%" : 0, opacity: 1 }}
+      initial={false}
+      animate={{ y: hideNav ? "-110%" : 0 }}
       transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="site-navbar">
@@ -66,23 +67,12 @@ export default function AppNav() {
             setMobileOpen(false);
           }}
         >
-          <motion.span
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.35, delay: 0.05 }}
-          >
-            Tammy
-          </motion.span>
+          Tammy
         </Link>
 
         {/* Center pill — in-page anchors, animated sliding indicator */}
         <nav aria-label="Main navigation" className="site-navigation hidden md:flex">
-          <motion.div
-            className="site-nav-links"
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.4, delay: 0.08, ease: [0.16, 1, 0.3, 1] }}
-          >
+          <div className="site-nav-links">
             {NAV_ITEMS.map((item) => {
               const isActive = active === item.href;
               return (
@@ -106,15 +96,10 @@ export default function AppNav() {
                 </Link>
               );
             })}
-          </motion.div>
+          </div>
         </nav>
 
-        <motion.div
-          className="site-nav-actions"
-          initial={{ opacity: 0, x: 8 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.35, delay: 0.12 }}
-        >
+        <div className="site-nav-actions">
           <Link
             href="/join"
             className="site-login press"
@@ -141,7 +126,7 @@ export default function AppNav() {
           >
             {mobileOpen ? <X /> : <Menu />}
           </button>
-        </motion.div>
+        </div>
       </div>
 
       {/* Animated mobile menu — same options as desktop */}
@@ -154,7 +139,11 @@ export default function AppNav() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            transition={
+              reduceMotion
+                ? { duration: 0 }
+                : { duration: 0.3, ease: [0.16, 1, 0.3, 1] }
+            }
             style={{ overflow: "hidden" }}
           >
             <div className="site-mobile-links">
@@ -163,7 +152,7 @@ export default function AppNav() {
                   key={item.href + item.label}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.25, delay: 0.05 + i * 0.05 }}
+                  transition={{ duration: 0.25, delay: reduceMotion ? 0 : 0.05 + i * 0.05 }}
                 >
                   <Link
                     href={item.href}
@@ -180,7 +169,7 @@ export default function AppNav() {
               <motion.div
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: 0.28 }}
+                transition={{ duration: 0.25, delay: reduceMotion ? 0 : 0.28 }}
                 className="site-mobile-actions"
               >
                 <Link

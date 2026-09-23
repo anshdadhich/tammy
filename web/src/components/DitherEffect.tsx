@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * WebGL Dither Effect — ported from the Originkit / reference HTML shader.
@@ -158,6 +158,9 @@ function createProgram(gl: WebGLRenderingContext, vsSrc: string, fsSrc: string) 
   return prog;
 }
 
+/* Frozen time sample drawn when the user prefers reduced motion. */
+const STATIC_FRAME_T = 6;
+
 /* ─── Component ─── */
 
 export default function DitherEffect({
@@ -171,36 +174,11 @@ export default function DitherEffect({
 }: DitherEffectProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
-  // Theme-aware: swap to a neutral dark pair when data-theme="dark" so the
-  // animated dither never glares on dark surfaces (brand colors stay for light).
-  const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    const read = () => {
-      try {
-        setDark(document.documentElement.getAttribute("data-theme") === "dark");
-      } catch {
-        /* ignore */
-      }
-    };
-    read();
-    const mo = new MutationObserver(read);
-    try {
-      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    } catch {
-      /* ignore */
-    }
-    return () => mo.disconnect();
-  }, []);
-
-  const front = dark ? "#3A3A42" : colorFront;
-  const back = dark ? "#17171C" : colorBack;
-
-  // Colors ride in a ref so theme flips only update uniforms — the GL
-  // program, buffers and rAF loop are created once and never torn down
-  // (teardown flashes a black frame, which reads as a broken transition).
-  const colorRef = useRef({ front: hexToRgb(front), back: hexToRgb(back) });
-  colorRef.current = { front: hexToRgb(front), back: hexToRgb(back) };
+  // Colors ride in a ref that the GL effect below keeps in sync with
+  // data-theme — never written during render. The GL program, buffers and
+  // rAF loop are created once and never torn down (teardown flashes a
+  // black frame, which reads as a broken transition).
+  const colorRef = useRef({ front: hexToRgb(colorFront), back: hexToRgb(colorBack) });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -237,27 +215,29 @@ export default function DitherEffect({
 
     const startTime = performance.now();
 
-    /* Resize — downscale for chunky retro matrix feel */
-    const resize = () => {
-      const rect = canvas!.getBoundingClientRect();
-      canvas!.width = Math.max(1, Math.floor(rect.width * 0.5));
-      canvas!.height = Math.max(1, Math.floor(rect.height * 0.5));
-      gl!.viewport(0, 0, canvas!.width, canvas!.height);
-    };
-    resize();
-    window.addEventListener("resize", resize);
+    /* Reduced motion: draw one frozen frame instead of looping. */
+    let reduceMotion = false;
+    try {
+      reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch {
+      /* ignore */
+    }
 
-    let paused = false;
+    let paused = document.hidden;
+    let inView = true;
     let disposed = false;
-    const onVis = () => {
-      paused = document.hidden;
-      if (!paused && !disposed) requestAnimationFrame(render);
+    let frameQueued = false;
+
+    const scheduleFrame = () => {
+      if (frameQueued || paused || disposed || !inView) return;
+      frameQueued = true;
+      rafRef.current = requestAnimationFrame(render);
     };
-    document.addEventListener("visibilitychange", onVis);
 
     function render(now: number) {
-      if (paused || disposed) return;
-      const t = ((now - startTime) / 1000) * speed;
+      frameQueued = false;
+      if (paused || disposed || !inView) return;
+      const t = reduceMotion ? STATIC_FRAME_T : ((now - startTime) / 1000) * speed;
 
       gl!.useProgram(prog);
       gl!.uniform2f(uRes, canvas!.width, canvas!.height);
@@ -267,13 +247,64 @@ export default function DitherEffect({
       gl!.uniform3fv(uBack, colorRef.current.back);
 
       gl!.drawArrays(gl!.TRIANGLES, 0, 6);
-      rafRef.current = requestAnimationFrame(render);
+      if (!reduceMotion) scheduleFrame();
     }
 
-    rafRef.current = requestAnimationFrame(render);
+    /* Theme pair: neutral dark colors so the dither never glares on dark
+       surfaces (brand colors stay for light). */
+    const applyColors = () => {
+      let isDark = false;
+      try {
+        isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      } catch {
+        /* ignore */
+      }
+      colorRef.current = isDark
+        ? { front: hexToRgb("#3A3A42"), back: hexToRgb("#17171C") }
+        : { front: hexToRgb(colorFront), back: hexToRgb(colorBack) };
+    };
+    applyColors();
+    const themeMo = new MutationObserver(() => {
+      applyColors();
+      scheduleFrame(); // repaint frozen frames after a theme flip
+    });
+    try {
+      themeMo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    } catch {
+      /* ignore */
+    }
+
+    /* Resize — downscale for chunky retro matrix feel */
+    const resize = () => {
+      const rect = canvas!.getBoundingClientRect();
+      canvas!.width = Math.max(1, Math.floor(rect.width * 0.5));
+      canvas!.height = Math.max(1, Math.floor(rect.height * 0.5));
+      gl!.viewport(0, 0, canvas!.width, canvas!.height);
+      scheduleFrame(); // frozen frames must repaint after a resize
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const onVis = () => {
+      paused = document.hidden;
+      if (!paused) scheduleFrame();
+    };
+    document.addEventListener("visibilitychange", onVis);
+
+    /* Pause the loop entirely while off-screen. */
+    let io: IntersectionObserver | null = null;
+    if ("IntersectionObserver" in window) {
+      io = new IntersectionObserver((entries) => {
+        inView = entries[0]?.isIntersecting ?? true;
+        if (inView) scheduleFrame();
+      });
+      io.observe(canvas);
+    }
+
+    scheduleFrame();
 
     return () => {
-      // Halt the loop FIRST. The visibilitychange handler schedules new
+      // Halt the loop FIRST. The visibilitychange/IO handlers schedule new
       // frames independently of rafRef, so cancelling the id alone left a
       // zombie loop drawing a deleted program+buffer every frame — the
       // "no buffer is bound / attempt to use a deleted object" spam.
@@ -281,10 +312,12 @@ export default function DitherEffect({
       cancelAnimationFrame(rafRef.current);
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVis);
+      io?.disconnect();
+      themeMo.disconnect();
       if (prog) gl!.deleteProgram(prog);
       if (buf) gl!.deleteBuffer(buf);
     };
-  }, [scale, speed]);
+  }, [scale, speed, colorFront, colorBack]);
 
   return (
     <canvas

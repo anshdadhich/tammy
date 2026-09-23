@@ -4,49 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Check, ChevronDown } from "lucide-react";
 
-/* ─── Scroll-reveal wrapper (IntersectionObserver island) ─── */
-
-export function Reveal({
-  className = "",
-  stagger = 0,
-  children,
-}: {
-  className?: string;
-  stagger?: number;
-  children: React.ReactNode;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      el.classList.add("is-visible");
-      return;
-    }
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-visible");
-            obs.unobserve(entry.target);
-          }
-        });
-      },
-      { root: null, rootMargin: "0px 0px -70px 0px", threshold: 0.1 },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  return (
-    <div ref={ref} className={`reveal-blur ${stagger ? `stagger-${stagger}` : ""} ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-/* ─── Trace fill bar (animates when visible) ─── */
+/* ─── Trace fill bar (animates when visible — the value it draws is also
+       shown as text, so the bar itself stays decorative) ─── */
 
 export function TraceFill({ width, bg }: { width: string; bg: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -71,7 +30,7 @@ export function TraceFill({ width, bg }: { width: string; bg: string }) {
   }, [width]);
 
   return (
-    <div ref={ref} className="trace-rule">
+    <div ref={ref} className="trace-rule" aria-hidden="true">
       <div className="trace-fill" style={{ background: bg }} />
     </div>
   );
@@ -132,15 +91,15 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
   return (
     <div className="grid lg:grid-cols-5 gap-10 lg:gap-14 items-start">
       {/* Dither panel with checklist */}
-      <Reveal className="lg:col-span-3 relative" stagger={1}>
-        <div className="relative rounded-xl bg-[#1F2DE6] p-8 sm:p-12 overflow-hidden shadow-md">
-          <div className="absolute inset-0">{dither}</div>
+      <div className="lg:col-span-3 relative">
+        <div className="relative rounded-[28px] bg-brand p-8 sm:p-12 overflow-hidden shadow-soft-lg">
+          <div className="absolute inset-0" aria-hidden="true">{dither}</div>
 
-          <div className="relative rounded-xl bg-[#F4F5F7] shadow-lg px-6 py-6 sm:px-8 sm:py-7 border border-white/60">
-            <div className="flex items-center justify-between text-[11px] text-slate-500 mb-4 font-mono">
+          <div className="relative rounded-2xl bg-surface shadow-soft-md px-6 py-6 sm:px-8 sm:py-7">
+            <div className="flex items-center justify-between text-[11px] text-muted mb-4 font-mono">
               <span>MATCHING YOUR BRIEF</span>
-              <span className="text-[#1F2DE6] flex items-center gap-1.5 font-sans font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#1F2DE6] pulse-dot" /> Active query
+              <span className="text-brand-text flex items-center gap-1.5 font-sans font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand pulse-dot" /> Active query
               </span>
             </div>
             <div className="space-y-3">
@@ -148,22 +107,22 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
                 const s = statuses[i];
                 return (
                   <div key={label} className="flex items-center justify-between">
-                    <span className={`flex items-center gap-2.5 text-[13px] ${s === "queued" ? "text-slate-400" : "text-slate-800"}`}>
+                    <span className={`flex items-center gap-2.5 text-[13px] ${s === "queued" ? "text-muted" : "text-ink"}`}>
                       {s === "done" ? (
-                        <Check className="w-3.5 h-3.5 text-[#1F2DE6]" aria-hidden="true" />
+                        <Check className="w-3.5 h-3.5 text-brand-text" aria-hidden="true" />
                       ) : s === "running" ? (
-                        <span className="w-2 h-2 rounded-full bg-[#1F2DE6] pulse-dot inline-block" />
+                        <span className="w-2 h-2 rounded-full bg-brand pulse-dot inline-block" />
                       ) : (
-                        <span className="w-2 h-2 rounded-full border border-slate-300 inline-block" />
+                        <span className="w-2 h-2 rounded-full border border-line inline-block" />
                       )}
                       {label}
                     </span>
                     {s === "done" ? (
-                      <span className="font-mono text-[11px] text-slate-400">done</span>
+                      <span className="font-mono text-[11px] text-muted">done</span>
                     ) : s === "running" ? (
-                      <span className="font-mono text-[11px] text-[#1F2DE6]">running…</span>
+                      <span className="font-mono text-[11px] text-brand-text">running…</span>
                     ) : (
-                      <span className="font-mono text-[11px] text-slate-300">queued</span>
+                      <span className="font-mono text-[11px] text-muted">queued</span>
                     )}
                   </div>
                 );
@@ -171,10 +130,10 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
             </div>
           </div>
         </div>
-      </Reveal>
+      </div>
 
       {/* Right column */}
-      <Reveal className="lg:col-span-2 lg:pt-1" stagger={2}>
+      <div className="lg:col-span-2 lg:pt-1">
         <div className="match-controls">
           <div className="match-mode-switcher">
             <button
@@ -248,12 +207,12 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             >
-              <h3 className="text-lg font-bold tracking-tight">{MATCH_COPY[matchMode].title}</h3>
-              <p className="text-sm leading-relaxed text-slate-600 mt-2">{MATCH_COPY[matchMode].desc}</p>
+              <h3 className="text-lg font-semibold tracking-[-0.01em] text-ink">{MATCH_COPY[matchMode].title}</h3>
+              <p className="text-[15px] leading-relaxed text-body mt-2">{MATCH_COPY[matchMode].desc}</p>
             </motion.div>
           </AnimatePresence>
         </div>
-      </Reveal>
+      </div>
     </div>
   );
 }
@@ -269,6 +228,7 @@ export function FaqList({ faqs }: { faqs: { q: string; a: string }[] }) {
         return (
           <div key={i} className="faq-item">
             <button
+              id={`faq-q-${i}`}
               onClick={() => setOpenFaq(open ? null : i)}
               className="faq-trigger"
               aria-expanded={open}
@@ -283,7 +243,13 @@ export function FaqList({ faqs }: { faqs: { q: string; a: string }[] }) {
                 />
               </span>
             </button>
-            <div className={`faq-body ${open ? "open" : ""}`} id={`faq-panel-${i}`} role="region">
+            <div
+              className={`faq-body ${open ? "open" : ""}`}
+              id={`faq-panel-${i}`}
+              role="region"
+              aria-labelledby={`faq-q-${i}`}
+              aria-hidden={open ? undefined : true}
+            >
               <div>
                 <p>{f.a}</p>
               </div>
