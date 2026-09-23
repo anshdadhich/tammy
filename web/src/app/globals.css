@@ -472,11 +472,33 @@ button, input { font: inherit; }
 }
 .site-nav-burger svg { width: 18px; height: 18px; }
 
+/* Theme toggle — same round metrics as the burger, visible at every
+   breakpoint. Both icons are server-rendered; pure CSS picks which to show
+   from the pre-paint data-theme, so there is no flash and no hydration
+   mismatch (same pattern DitherEffect/BeamButton use to observe the theme). */
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--inset);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 160ms var(--ease-out);
+}
+.theme-toggle svg { width: 18px; height: 18px; }
+:root[data-theme="light"] .theme-toggle .theme-icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .theme-icon-moon { display: none; }
+
 @media (hover: hover) and (pointer: fine) {
   .site-nav-link:hover { color: var(--ink); }
   .site-login:hover { background: var(--line); }
   .site-nav-cta:hover, .site-nav-cta-dark:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
   .site-nav-burger:hover { background: var(--line); }
+  .theme-toggle:hover { background: var(--line); }
 }
 
 /* Mobile drawer */
@@ -987,6 +1009,39 @@ details.judge[open] summary > svg:last-child { transform: rotate(180deg); }
 }
 .btn-link:hover {
   color: var(--brand-text);
+}
+
+/* Theme switch: View Transitions cross-fade — the JS wraps the data-theme
+   flip in document.startViewTransition so the palette glides instead of
+   snapping (the hard swap read as a flash). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+  animation-timing-function: var(--ease-out);
+}
+
+/* Wizard step transitions — enter from below going forward, from above
+   going back; direction is set on the wrapper via .step-anim-back. */
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--step-dx, 10px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.step-anim {
+  animation: step-in 300ms var(--ease-out) both;
+}
+.step-anim-back {
+  --step-dx: -10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-anim {
+    animation: none !important;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════

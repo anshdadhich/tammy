@@ -3,7 +3,35 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Menu, X } from "lucide-react";
+import { Menu, Moon, Sun, X } from "lucide-react";
+
+type ViewTransitionDoc = Document & {
+  startViewTransition?: (updateCallback: () => void) => { finished: Promise<void> };
+};
+
+// Flip <html data-theme> and persist — module-scope, no React state, so the
+// server/client render never diverges (the pre-paint script reads the same key).
+// The View Transitions API cross-fades the whole page so colors glide instead
+// of snapping (the hard swap read as a flash); reduced motion flips instantly.
+const toggleTheme = () => {
+  const root = document.documentElement;
+  const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  const apply = () => {
+    root.setAttribute("data-theme", next);
+    try {
+      localStorage.setItem("tammy_theme", next);
+    } catch {
+      /* storage blocked — theme still flips for this visit */
+    }
+  };
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const start = (document as ViewTransitionDoc).startViewTransition;
+  if (!reduce && typeof start === "function") {
+    start.call(document, apply);
+  } else {
+    apply();
+  }
+};
 
 const LANDING_NAV = [
   { label: "Candidates", href: "/#candidates" },
@@ -116,6 +144,17 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
               Book a demo
             </Link>
           </motion.span>
+          {/* Theme toggle — icon swap handled in CSS off data-theme */}
+          <button
+            type="button"
+            className="theme-toggle press"
+            aria-label="Toggle color theme"
+            title="Toggle light / dark theme"
+            onClick={toggleTheme}
+          >
+            <Sun className="theme-icon-sun" aria-hidden="true" />
+            <Moon className="theme-icon-moon" aria-hidden="true" />
+          </button>
           {/* Mobile toggle */}
           <button
             type="button"

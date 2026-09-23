@@ -534,6 +534,8 @@ export default function JoinWizard() {
   const [saveState, setSaveState] = useState<"saving" | "saved">("saved");
   const [step, setStep] = useState(0);
   const [maxStep, setMaxStep] = useState(0);
+  // 1 = entering forward (from below), -1 = entering backward (from above)
+  const [dir, setDir] = useState<1 | -1>(1);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeId, setNoticeId] = useState<string | null>(null);
@@ -575,6 +577,23 @@ export default function JoinWizard() {
     },
     [],
   );
+
+  // On step change, bring the card top back into view (skipped on first
+  // mount) so the new step's enter animation is actually on screen — after
+  // Continue the viewport is usually down at the footer.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const prevStep = useRef(step);
+  useEffect(() => {
+    if (prevStep.current === step) return;
+    prevStep.current = step;
+    const el = cardRef.current;
+    if (!el) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({
+      top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 76),
+      behavior: reduce ? "auto" : "smooth",
+    });
+  }, [step]);
 
   /** Every mutation funnels through here: state + debounced autosave. */
   const update = (fn: (d: Draft) => Draft) => {
@@ -773,7 +792,10 @@ export default function JoinWizard() {
         const map = fromFlat(body.errors);
         setErrs(map);
         const keys = Object.keys(map);
-        if (keys.length) setStep(stepOf(keys[0].split(".")[0]));
+        if (keys.length) {
+          setDir(-1); // publish runs on the last step — errors always jump back
+          setStep(stepOf(keys[0].split(".")[0]));
+        }
         setNotice("Fix the highlighted fields.");
         return;
       }
@@ -828,22 +850,30 @@ export default function JoinWizard() {
     if (mine.length) return;
     if (step < STEPS.length - 1) {
       const next = step + 1;
+      setDir(1);
       setStep(next);
       setMaxStep((m) => Math.max(m, next));
       return;
     }
     const keys = Object.keys(map);
     if (keys.length) {
-      setStep(stepOf(keys[0].split(".")[0]));
+      const target = stepOf(keys[0].split(".")[0]);
+      setDir(target < step ? -1 : 1);
+      setStep(target);
       return;
     }
     void publish();
   };
 
-  const back = () => setStep((s) => Math.max(0, s - 1));
+  const back = () => {
+    setDir(-1);
+    setStep((s) => Math.max(0, s - 1));
+  };
 
   const jump = (i: number) => {
-    if (i <= maxStep) setStep(i);
+    if (i > maxStep) return;
+    setDir(i < step ? -1 : 1);
+    setStep(i);
   };
 
   // --- success ---------------------------------------------------------------
@@ -1860,7 +1890,7 @@ export default function JoinWizard() {
   const [stepTitle, stepSub] = STEP_TITLES[step];
 
   return (
-    <div className="rounded-2xl bg-surface shadow-soft-md p-5 sm:p-8">
+    <div ref={cardRef} className="rounded-2xl bg-surface shadow-soft-md p-5 sm:p-8">
       {/* header: step count + autosave */}
       <div className="flex items-center justify-between gap-3 mb-5">
         <span className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-muted">
@@ -1900,25 +1930,27 @@ export default function JoinWizard() {
         ))}
       </div>
 
-      {/* step heading + autofill */}
-      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 mb-5">
-        <div>
-          <h2 className="text-[clamp(1.35rem,2.6vw,1.75rem)] font-semibold tracking-[-0.02em] text-ink">
-            {stepTitle}
-          </h2>
-          <p className="text-[14.5px] text-muted mt-1.5">{stepSub}</p>
+      {/* heading + body — keyed on step so the enter animation replays */}
+      <div key={step} className={`step-anim${dir === -1 ? " step-anim-back" : ""}`}>
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 mb-5">
+          <div>
+            <h2 className="text-[clamp(1.35rem,2.6vw,1.75rem)] font-semibold tracking-[-0.02em] text-ink">
+              {stepTitle}
+            </h2>
+            <p className="text-[14.5px] text-muted mt-1.5">{stepSub}</p>
+          </div>
+          <button
+            type="button"
+            className="btn-link flex items-center gap-1.5"
+            onClick={autofill}
+          >
+            <Sparkles size={14} aria-hidden="true" /> Autofill test data
+          </button>
         </div>
-        <button
-          type="button"
-          className="btn-link flex items-center gap-1.5"
-          onClick={autofill}
-        >
-          <Sparkles size={14} aria-hidden="true" /> Autofill test data
-        </button>
-      </div>
 
-      {/* body */}
-      <div>{renderStep()}</div>
+        {/* body */}
+        <div>{renderStep()}</div>
+      </div>
 
       {notice ? (
         <div className="notice notice-warn mt-6" role="status">
@@ -1939,14 +1971,17 @@ export default function JoinWizard() {
 
       {/* footer */}
       <div className="flex items-center justify-between gap-3 mt-7 pt-5 border-t border-line">
-        <div>
+        <div className="flex flex-wrap items-center gap-4">
           {step > 0 ? (
             <button type="button" className="btn btn-secondary press" onClick={back}>
               <ArrowLeft size={16} aria-hidden="true" /> Back
             </button>
           ) : (
-            <span className="field-hint">Drafts autosave on this device.</span>
+            <Link href="/" className="btn btn-secondary press">
+              <ArrowLeft size={16} aria-hidden="true" /> Back
+            </Link>
           )}
+          <span className="field-hint hidden sm:inline">Drafts autosave on this device.</span>
         </div>
         <button
           type="button"
