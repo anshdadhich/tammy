@@ -17,9 +17,11 @@
 **Concept:** reverse hiring. Candidates file ONE structured dossier once; verified
 employers search the talent DB; every match cites evidence + gaps; contact is
 open on match (no unlock/approval). Landing: `web/src/app/page.tsx:26-197`
-(server component, static marketing, CTAs → `/candidate`, `/hire`).
+(server component, static marketing; former CTAs → `/candidate`, `/hire` now 404
+— **all UI routes below were removed; only the landing page and JSON API remain.**
+Flows A–C describe the deleted UI and are kept for historical context only).
 
-### Flow A — candidate onboarding (`/candidate`, client) — `web/src/app/candidate/page.tsx:59-742`
+### Flow A — candidate onboarding (`/candidate`, client) — `web/src/app/candidate/page.tsx:59-742` *(deleted)*
 
 4-step wizard (`STEPS`, `candidate/page.tsx:56`): 0 Basics → 1 Profile & skills →
 2 Proof of work (experience/projects/education) → 3 Resume & terms (prefs + review +
@@ -38,7 +40,7 @@ required (`z.literal(true)`, `lib/validators.ts:150-152`). Photo URL optional;
 photo file JPG/PNG ≤10 MB, resume PDF ≤10 MB, client pre-validated
 (`candidate/page.tsx:166-174`) and server re-validated (`api/uploads/route.ts:89-104`).
 
-### Flow B — employer search (`/hire`, client) — `web/src/app/hire/page.tsx:25-391`
+### Flow B — employer search (`/hire`, client) — `web/src/app/hire/page.tsx:25-391` *(deleted)*
 
 3-step job form (role → skills → context), client `jobSchema` validation
 (`hire/page.tsx:67-84`), autofill demo job (`:146-166`), `POST /api/search`
@@ -205,8 +207,8 @@ NULL, `domain`, `seniority`, `description`, `responsibilities`,
 `must_have_skills` [] / `nice_to_have_skills` [], `min/max_experience`,
 `salary_min/max`, `salary_currency` dflt INR, `location`, `remote_policy`,
 `employment_type`, `start_date`, `status` ∈ draft/active/paused/closed dflt
-active, timestamps. (No API writes jobs — `/hire` searches WITHOUT persisting a
-job row; `job_id` is NULL on all live searches.)
+active, timestamps. (No API writes jobs — the deleted `/hire` UI searched WITHOUT
+persisting a job row; `job_id` is NULL on all live searches.)
 
 **`job_requirements`** (`:265-281`): PK `job_id` → jobs CASCADE, `must_have` /
 `nice_to_have` [], `seniority`, `domain`, `location`, `salary_range` jsonb,
@@ -501,8 +503,8 @@ all client pages), `supabaseServer` (cookie RLS user), `supabaseAdmin`
 (service_role, ALL routes + pipeline + admin/dossier pages). `getSessionUser`
 reads auth user then users row via admin client (`auth.ts:36-55`, null-safe);
 `requireRole` throws `AuthError(401)` anon/no-row, `403` suspended/role-mismatch
-(`:64-82`). **Middleware** (`middleware.ts:6-36`) only refreshes session on
-every non-static request — enforces NOTHING. Enforcement points:
+(`:64-82`). **Middleware** (`middleware.ts`, since **deleted**) only refreshed
+session on every non-static request — enforces NOTHING. Enforcement points:
 `api/admin/*` (401/403 JSON), `/admin` (denied card), `/employer/verify`
 (client redirect + role message), `/auth/callback` (links pre-existing email
 rows, sets `auth_id`, `email_verified:true`, role from `?role` → metadata →
@@ -521,7 +523,7 @@ by design (service_role) and not re-checked in code.
 
 | Script | What | Creds / notes |
 |---|---|---|
-| `scripts/smoke.sh` / `smoke.ps1` (`:1-34`) | GET `/`, `/candidate`, `/hire` =200; POST `{}` to search/shortlists/contacts =400 | `BASE_URL` dflt localhost:3000; 6 checks; exit 1 on fail |
+| `scripts/smoke.sh` / `smoke.ps1` (`:1-34`) | GET `/` =200; POST `{}` to search/shortlists/contacts =400 | `BASE_URL` dflt localhost:3000; exit 1 on fail |
 | `scripts/e2e-test.mjs` (`:1-57`) | fast search contains "Test Candidate" → shortlist save+list → `/api/contact` 201 → candidate GET → deep search responds (judge-missing tolerated) | expects **`reset-test-data`** seed (name "Test Candidate"), NOT `seed_demo.sql` names; reads `.env.local` at runtime (URL only); `BASE_URL` |
 | `scripts/reset-test-data.mjs` (`:1-79`) | wipes 17 tables FK-order → deletes `@test.com`/`@demo.local` auth users → creates auth+users → verified employer+job → candidate+skills+project+summary+2 zero-vector chunks | **TEST creds (safe):** `admin@test.com` / `employer@test.com` / `candidate@test.com`, all `Test@1234`; reads `.env.local` service key at runtime |
 | `scripts/bootstrap-admin.mjs` (`:1-44`) | promote oldest user if no admin (masked log) + verify all pending employers | runtime `.env.local`; exits if no users |

@@ -6,7 +6,7 @@ no unlock gate; `contact_log` is audit-only).
 
 Monorepo layout: `web/` (Next.js app: portfolio pages + HR search + JSON API) + `supabase/` (SQL) + `docs/` (blueprint).
 
-Flow: landing `/` → candidate joins at `/join` once → public dossier `/talent/[id]` (✎ edit at `/talent/[id]/edit`) → HR searches at `/hire/search` (brief + filters → ranked list → two-pane dossier with sidebar) and tracks in `/hire/dashboard`.
+Flow: landing `/` only — all app UI routes (`/join`, `/talent/[id]`, `/hire/*`, `/start`, `/u/*`) were removed; the JSON API and background pipeline remain fully functional.
 
 ## Quickstart
 
@@ -44,7 +44,7 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-Pages: `/` (landing) · `/join` (candidate signup → dossier) · `/talent/[id]` (public dossier + ✎ edit) · `/hire/search` (HR search → results → two-pane dossier) · `/hire/dashboard` (shortlist + outreach). Legacy `/start`, `/u/*`, `/hire/dash` redirect.
+Pages: `/` (landing) only — UI routes (`/join`, `/talent/[id]`, `/hire/search`, `/hire/dashboard`, legacy `/start`, `/u/*`) were removed; the JSON API is unchanged.
 
 ### 4. Inngest dev (background pipeline: normalize → summary → depth → chunks → embed)
 

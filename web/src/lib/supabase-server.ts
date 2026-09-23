@@ -19,7 +19,8 @@ export async function supabaseServer() {
               cookieStore.set(name, value, options),
             );
           } catch {
-            // Server Component: middleware refreshes the session instead.
+            // Server Component: cookies are read-only here (the session
+            // middleware that once refreshed them has been removed).
           }
         },
       },

@@ -3,10 +3,11 @@ import { supabaseAdmin } from "@/lib/supabase";
 /**
  * Demo-phase API auth — cookie-based, server-verified.
  *
- * The site currently uses a test employer login (/hire/login) and an
- * email-gated candidate flow. Both mirror their identity into cookies
- * (tammy_hr / tammy_owner, written by lib/session.ts), so route handlers
- * can verify ownership server-side without full Supabase Auth yet.
+ * The cookie readers below are kept for API compatibility: identity used
+ * to be mirrored into cookies (tammy_hr / tammy_owner) by the now-removed
+ * login UI, so route handlers can verify ownership server-side from the
+ * cookie alone. (The login pages that wrote these cookies were deleted;
+ * only the landing page + API remain.)
  *
  * Trust model (demo):
  *  - tammy_hr   → employer session; can search, shortlist, contact, list.
@@ -217,10 +218,10 @@ export async function verifyOwnerEmail(
 
 /**
  * HR verification against the employers table (opt-in strict mode).
- * Demo phase: /hire/login mints sessions without a DB row, so strict mode
- * is off by default. Set STRICT_HR_VERIFY=1 to require a verified employer
- * row matching the session email (company_email or linked users.email).
- * Returns true when the HR session may proceed.
+ * Demo phase: the (now-deleted) /hire/login page minted sessions without a
+ * DB row, so strict mode is off by default. Set STRICT_HR_VERIFY=1 to
+ * require a verified employer row matching the session email (company_email
+ * or linked users.email). Returns true when the HR session may proceed.
  */
 export async function verifyHrEmail(email: string): Promise<boolean> {
   if (process.env.STRICT_HR_VERIFY !== "1") return true;

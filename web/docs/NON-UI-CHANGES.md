@@ -1,5 +1,10 @@
 # Non-UI changes in the working tree
 
+> **Note (later):** the UI files this audit references (`hire/page.tsx`,
+> `login/page.tsx`, `chrome.tsx`, `bui.tsx`, `candidate/[id]/page.tsx`,
+> `dashboard/page.tsx`, …) have since been removed — only the landing page
+> and JSON API remain. Kept as a historical snapshot of that review.
+
 Date: 2026-09-11. Scope: everything in `web/` that changes **behavior, data,
 API contracts, or auth** rather than visuals. UI-only work (palette, hero,
 illustrations, portfolio cover) is listed at the bottom for the commit split.
