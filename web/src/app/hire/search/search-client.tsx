@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowLeft,
   ArrowRight,
   Bookmark,
   Briefcase,
@@ -587,6 +588,10 @@ export default function SearchClient({
   const [meta, setMeta] = useState({ queryText: "", cached: false, deep: false });
   const [deepError, setDeepError] = useState<string | null>(null);
   const [sl, setSl] = useState<Record<string, "saving" | "saved" | "error">>({});
+  // three-screen flow: compose → searching (animated) → results
+  const [view, setView] = useState<"compose" | "searching" | "results">("compose");
+  const [stage, setStage] = useState(0);
+  const stageTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearErr = (key: string) =>
     setErrs((prev) => {
@@ -613,6 +618,17 @@ export default function SearchClient({
     );
     clearErr("must_have");
   };
+
+  const stages = deep
+    ? ["Parse brief", "Embed query", "Hybrid retrieval", "Score 5 dimensions", "Deep Read judge"]
+    : ["Parse brief", "Embed query", "Hybrid retrieval", "Score 5 dimensions"];
+
+  useEffect(
+    () => () => {
+      if (stageTimer.current) clearInterval(stageTimer.current);
+    },
+    [],
+  );
 
   const run = async () => {
     if (busy) return;
@@ -648,6 +664,13 @@ export default function SearchClient({
     setNotice(null);
     setDeepError(null);
     setBusy(true);
+    setStage(0);
+    setView("searching");
+    if (stageTimer.current) clearInterval(stageTimer.current);
+    stageTimer.current = setInterval(() => {
+      setStage((s) => Math.min(s + 1, stages.length - 1));
+    }, 450);
+    const startedAt = Date.now();
     try {
       const res = await fetch("/api/search", {
         method: "POST",
@@ -664,20 +687,29 @@ export default function SearchClient({
         errors?: unknown;
       } | null;
 
+      // Let the progress screen breathe — cached/instant responses would
+      // otherwise flash past the animation.
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < 1500) await new Promise<void>((r) => setTimeout(r, 1500 - elapsed));
+
       if (res.status === 401) {
+        setView("compose");
         setSession(null);
         return;
       }
       if (res.status === 429) {
+        setView("compose");
         setNotice("Rate limit reached — take a short pause and try again.");
         return;
       }
       if (res.status === 400 && body?.errors) {
+        setView("compose");
         setErrs(flattenErrors(body.errors));
         setNotice("Fix the highlighted fields.");
         return;
       }
       if (!res.ok) {
+        setView("compose");
         setNotice(body?.error || "Search failed — try again.");
         return;
       }
@@ -688,9 +720,15 @@ export default function SearchClient({
         deep: body?.deep === true,
       });
       setDeepError(typeof body?.deepError === "string" ? body.deepError : null);
+      setView("results");
     } catch {
+      setView("compose");
       setNotice("Network error — try again.");
     } finally {
+      if (stageTimer.current) {
+        clearInterval(stageTimer.current);
+        stageTimer.current = null;
+      }
       setBusy(false);
     }
   };
@@ -769,6 +807,123 @@ export default function SearchClient({
         </Link>
       </div>
 
+      {view === "searching" ? (
+        <div
+          className="rounded-2xl bg-surface shadow-soft-md p-7 sm:p-9 mt-5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2.5">
+            <Loader2 size={15} className="animate-spin text-brand-text" aria-hidden="true" />
+            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+              Searching the pool{deep ? " · deep read" : ""}
+            </span>
+          </div>
+          <h2 className="mt-3 text-[clamp(1.35rem,2.6vw,1.75rem)] font-semibold tracking-[-0.02em] text-ink">
+            {deriveTitle(prompt.trim())}
+          </h2>
+          <p className="text-[14px] leading-[1.55] text-muted mt-1.5 line-clamp-2">
+            {prompt.trim()}
+          </p>
+
+          {/* staged progress — same checklist language as the landing hero */}
+          <div className="mt-6 space-y-3">
+            {stages.map((label, i) => {
+              const s = i < stage ? "done" : i === stage ? "running" : "queued";
+              return (
+                <div key={label} className="flex items-center justify-between">
+                  <span
+                    className={`flex items-center gap-2.5 text-[13px] ${
+                      s === "queued" ? "text-muted" : "text-ink"
+                    }`}
+                  >
+                    {s === "done" ? (
+                      <Check className="w-3.5 h-3.5 text-brand-text" aria-hidden="true" />
+                    ) : s === "running" ? (
+                      <span className="w-2 h-2 rounded-full bg-brand pulse-dot inline-block" />
+                    ) : (
+                      <span className="w-2 h-2 rounded-full border border-line inline-block" />
+                    )}
+                    {label}
+                  </span>
+                  <span
+                    className={`font-mono text-[11px] ${
+                      s === "running" ? "text-brand-text" : "text-muted"
+                    }`}
+                  >
+                    {s === "done" ? "done" : s === "running" ? "running…" : "queued"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="trace-rule" aria-hidden="true">
+            <div
+              className="trace-fill"
+              style={{
+                background: "#1F2DE6",
+                width: `${Math.round(((stage + 1) / stages.length) * 100)}%`,
+                transitionDuration: "450ms",
+              }}
+            />
+          </div>
+        </div>
+      ) : view === "results" && results !== null ? (
+        <div className="mt-2">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <button
+              type="button"
+              className="btn btn-secondary press"
+              onClick={() => setView("compose")}
+            >
+              <ArrowLeft size={16} aria-hidden="true" /> Edit brief
+            </button>
+          </div>
+          <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-[-0.02em] text-ink">
+            {results.length} {results.length === 1 ? "candidate" : "candidates"}
+            {meta.deep ? (
+              <span className="tag ml-3 align-middle inline-flex">
+                <Sparkles size={12} aria-hidden="true" /> Deep read
+              </span>
+            ) : null}
+            {meta.cached ? (
+              <span className="font-mono text-[11px] text-muted ml-3 align-middle">
+                repeat query
+              </span>
+            ) : null}
+          </h2>
+          {meta.queryText ? (
+            <p className="font-mono text-[11.5px] text-muted mt-1.5 truncate">
+              parsed: {meta.queryText}
+            </p>
+          ) : null}
+          {deepError ? (
+            <div className="notice notice-warn mt-4" role="status">
+              <Info aria-hidden="true" />
+              <span>{deepError}</span>
+            </div>
+          ) : null}
+          {results.length === 0 ? (
+            <div className="empty-note mt-5">
+              No matches yet. The pool fills as candidates publish pages — try
+              looser skills or a wider experience range.
+            </div>
+          ) : (
+            <div className="grid gap-5 mt-5">
+              {results.map((r) => (
+                <ResultCard
+                  key={r.id}
+                  row={r}
+                  sl={sl[r.id]}
+                  onShortlist={(id) => void shortlist(id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
       {/* try examples */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
         <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted mr-1">
@@ -1040,58 +1195,25 @@ export default function SearchClient({
         ) : null}
       </div>
 
-      {/* results */}
+      {/* compose foot — last results link, or the pre-search hint */}
       {results !== null ? (
-        <div className="mt-8">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h2 className="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-[-0.02em] text-ink">
-              {results.length} {results.length === 1 ? "candidate" : "candidates"}
-              {meta.deep ? (
-                <span className="tag ml-3 align-middle inline-flex">
-                  <Sparkles size={12} aria-hidden="true" /> Deep read
-                </span>
-              ) : null}
-              {meta.cached ? (
-                <span className="font-mono text-[11px] text-muted ml-3 align-middle">
-                  repeat query
-                </span>
-              ) : null}
-            </h2>
-          </div>
-          {meta.queryText ? (
-            <p className="font-mono text-[11.5px] text-muted mt-1.5 truncate">
-              parsed: {meta.queryText}
-            </p>
-          ) : null}
-          {deepError ? (
-            <div className="notice notice-warn mt-4" role="status">
-              <Info aria-hidden="true" />
-              <span>{deepError}</span>
-            </div>
-          ) : null}
-          {results.length === 0 ? (
-            <div className="empty-note mt-5">
-              No matches yet. The pool fills as candidates publish pages — try
-              looser skills or a wider experience range.
-            </div>
-          ) : (
-            <div className="grid gap-5 mt-5">
-              {results.map((r) => (
-                <ResultCard
-                  key={r.id}
-                  row={r}
-                  sl={sl[r.id]}
-                  onShortlist={(id) => void shortlist(id)}
-                />
-              ))}
-            </div>
-          )}
+        <div className="mt-6">
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => setView("results")}
+          >
+            View last results ({results.length}){" "}
+            <ArrowRight size={14} aria-hidden="true" />
+          </button>
         </div>
       ) : (
         <div className="empty-note mt-8">
           Your shortlist lands here — ranked, scored, with every sub-score one
           click open.
         </div>
+      )}
+        </>
       )}
     </div>
   );
