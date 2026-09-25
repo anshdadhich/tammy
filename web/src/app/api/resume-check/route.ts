@@ -1,9 +1,6 @@
 import { driveFileId } from "@/lib/drive";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-// GET /api/resume-check?url=... — reachability test for a resume file link.
-// Currently supports Google Drive links only (locked to drive.google.com file
-// IDs: generic URL fetching was an SSRF/open-proxy). Non-Drive URLs are rejected.
 export async function GET(request: Request) {
   const rl = rateLimit(request, { key: "resume-check", limit: 30, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
@@ -33,7 +30,6 @@ export async function GET(request: Request) {
       return Response.json({ status: "restricted", reason: `Google returned ${r.status}` });
     }
     if (ct.includes("text/html")) {
-      // Virus-scan interstitial or confirm page: file IS shared, one extra click.
       return Response.json({ status: "reachable", note: "shared — large files may show one confirm screen" });
     }
     if (!r.ok) return Response.json({ status: "unknown", http: r.status });

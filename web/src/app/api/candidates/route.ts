@@ -12,9 +12,6 @@ import {
 
 const uuid = z.string().uuid("Must be a valid UUID");
 
-// Public-contact opt-in columns (show_*) may not exist yet in every
-// environment (migration pending). PostgREST returns PGRST204 / "could not
-// find the column" — retry without those keys instead of hard-failing.
 const SHOW_FLAGS = [
   "show_email",
   "show_phone",
@@ -37,11 +34,6 @@ function stripShowFlags(obj: Record<string, unknown>): Record<string, unknown> {
   return out;
 }
 
-// GET /api/candidates?id=<candidate uuid>
-// Returns the dossier bundle: candidate row + summary + private activity
-// (contact_log / matches / shortlists only for verified owner-of or HR).
-// Email lookup lives at POST /api/candidates/lookup (rate-limited) so this
-// endpoint is never an enumeration oracle.
 export async function GET(request: Request) {
   const rl = rateLimit(request, { key: "candidates-get", limit: 120, windowMs: 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
@@ -61,11 +53,6 @@ export async function GET(request: Request) {
   if (!candidate) return Response.json({ error: "candidate not found" }, { status: 404 });
   const cid = candidate.id as string;
 
-  // Viewer resolved FIRST: hidden profiles 404 before any child queries run,
-  // and anonymous viewers never pay for the three private-activity queries
-  // (contact_log / matches / shortlists) whose results are discarded anyway.
-  // Private activity is owner-verified or HR only: a forged owner cookie for
-  // another id must not receive contact_log / matches / shortlists.
   const privilegedLogs =
     viewer.kind === "hr" ||
     (viewer.kind === "owner" && viewer.id === cid
@@ -86,8 +73,6 @@ export async function GET(request: Request) {
     db.from("candidate_skills").select("experience_years, proficiency_level, source, skills(name)").eq("candidate_id", cid),
   ]);
 
-  // Open source contributions — isolated: empty array if the migration
-  // (supabase/oss_contributions.sql) hasn't been run yet.
   let oss: Record<string, unknown>[] = [];
   try {
     const { data, error } = await db
@@ -99,7 +84,6 @@ export async function GET(request: Request) {
     oss = [];
   }
 
-  // Per-project AI depth analysis (badges on the profile page).
   const depths: Record<string, Record<string, unknown>> = {};
   const projIds = ((projects ?? []) as { id: string }[]).map((p) => p.id).filter(Boolean);
   if (projIds.length) {
@@ -112,9 +96,6 @@ export async function GET(request: Request) {
     }
   }
 
-  // Viewer-scoped response: only verified owner-of or HR see private
-  // activity; everyone else gets the PII-stripped row with empty logs.
-  // (PII stripping itself is deny-by-default for all viewers.)
   return Response.json(
     bundleForViewer(privilegedLogs ? viewer : { kind: "anon" }, candidate, {
       profile: profile ?? null,
@@ -131,7 +112,6 @@ export async function GET(request: Request) {
   );
 }
 
-// Accepts YYYY, YYYY-MM or YYYY-MM-DD (year-only input used to vanish silently).
 function toDateInput(v: unknown): string | null {
   const s = String(v ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
@@ -140,8 +120,6 @@ function toDateInput(v: unknown): string | null {
   return null;
 }
 
-// POST /api/candidates — validate, save raw, trigger background processing.
-// Heavy AI (summary/depth/embed) runs in Inngest, not in this request.
 export async function POST(request: Request) {
   const rl = rateLimit(request, { key: "candidates-post", limit: 10, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
@@ -154,8 +132,6 @@ export async function POST(request: Request) {
   const c = parsed.data;
   const email = String(c.email ?? "").toLowerCase().trim();
 
-  // Duplicate guard: one visible profile per contact email. Prevents
-  // spam farms filling the DB with identical rows.
   const { data: dupe } = await db
     .from("candidates")
     .select("id")
@@ -170,7 +146,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Reuse existing user on retry (unique email), else create.
   let userId: string | null = null;
   const existing = await db.from("users").select("id").eq("email", email).maybeSingle();
   if (existing.data) {
@@ -207,8 +182,6 @@ export async function POST(request: Request) {
     availability_status: avail,
     visibility_status: c.visibility ?? "visible",
     consent_status: "granted",
-    // Public contact opt-ins (privacy by default). Stripped + retried below
-    // when the migration hasn't run yet.
     ...(c.show_email !== undefined ? { show_email: c.show_email } : {}),
     ...(c.show_phone !== undefined ? { show_phone: c.show_phone } : {}),
     ...(c.show_linkedin !== undefined ? { show_linkedin: c.show_linkedin } : {}),
@@ -238,8 +211,6 @@ export async function POST(request: Request) {
   }
   const candidateId = (cand as { id: string }).id;
 
-  // Child rows: each section saves in isolation so one bad section can never
-  // eat the others. Anything that fails lands in `warnings` for the UI.
   const warnings: string[] = [];
   const cleanTech = (t: unknown): string[] =>
     Array.isArray(t) ? t.filter((x): x is string => typeof x === "string") : [];
@@ -349,13 +320,11 @@ export async function POST(request: Request) {
   try {
     await inngest.send({ name: "candidate.profile.submitted", data: { candidateId } });
   } catch {
-    // Inngest dev server offline — profile stays saved, worker picks up later.
   }
 
   return Response.json({ candidateId, status: "processing", warnings }, { status: 202 });
 }
 
-// PATCH /api/candidates { id, visibility_status } — visibility toggle (owner only).
 export async function PATCH(request: Request) {
   const rl = rateLimit(request, { key: "candidates-patch", limit: 30, windowMs: 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
@@ -379,11 +348,6 @@ export async function PATCH(request: Request) {
   return Response.json({ candidate: data });
 }
 
-// PUT /api/candidates — full profile update (owner edit flow).
-// Body: { id (uuid), ...any subset of candidateSchema fields }.
-// Updates the candidates row for provided keys; when experiences / projects /
-// education / skills arrays are present they replace existing child rows.
-// Re-fires the background pipeline so search vectors refresh.
 export async function PUT(request: Request) {
   const rl = rateLimit(request, { key: "candidates-put", limit: 20, windowMs: 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
@@ -393,7 +357,6 @@ export async function PUT(request: Request) {
     return Response.json({ errors: idParsed.error.flatten() }, { status: 400 });
   }
   const id = idParsed.data.id;
-  // Ownership: only the candidate's own session may edit this profile.
   const denied = await guardOwner(request, id);
   if (denied) return denied;
   const rest = { ...(body as Record<string, unknown>) };
@@ -462,8 +425,6 @@ export async function PUT(request: Request) {
     if (present.has(flag)) patch[flag] = c[flag] === true;
   }
   if (present.has("phone")) patch.contact_phone = c.phone || null;
-  // Link/file columns: empty string means "no change" (forms can't round-trip
-  // storage paths), so an edit never wipes an uploaded photo/resume/portfolio.
   if (present.has("photo_url") && c.photo_url) patch.photo_url = c.photo_url;
   if (present.has("links")) {
     patch.github_url = c.links?.github || null;
@@ -474,9 +435,6 @@ export async function PUT(request: Request) {
   if (present.has("email") && c.email) {
     const email = String(c.email).toLowerCase().trim();
     if (email && email !== prev.contact_email) {
-      // Never steal another account's users row: only create a fresh row
-      // when the address is unused. Taking over an existing user_id would
-      // merge two identities without a verification link.
       const found = await db.from("users").select("id").eq("email", email).maybeSingle();
       if (found.data) {
         return Response.json(
@@ -631,13 +589,11 @@ export async function PUT(request: Request) {
   try {
     await inngest.send({ name: "candidate.profile.submitted", data: { candidateId: id } });
   } catch {
-    // Offline worker picks up later.
   }
 
   return Response.json({ candidateId: id, status: "processing", warnings: putWarnings });
 }
 
-// DELETE /api/candidates?id=<candidate uuid> — delete own profile (cascades).
 export async function DELETE(request: Request) {
   const rl = rateLimit(request, { key: "candidates-delete", limit: 10, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
@@ -647,11 +603,9 @@ export async function DELETE(request: Request) {
   if (!uuid.safeParse(id).success) {
     return Response.json({ error: "provide ?id=<candidate uuid>" }, { status: 400 });
   }
-  // Ownership: only the candidate's own session may delete this profile.
   const denied = await guardOwner(request, id as string);
   if (denied) return denied;
   const db = supabaseAdmin();
-  // Capture storage paths first so files don't orphan in private buckets.
   const { data: doomed } = await db
     .from("candidates")
     .select("resume_url, photo_url, portfolio_url")
@@ -662,7 +616,6 @@ export async function DELETE(request: Request) {
     console.error("[candidates] delete failed");
     return Response.json({ error: "candidate delete failed" }, { status: 500 });
   }
-  // Best-effort storage cleanup (never blocks the response).
   try {
     const paths = doomed as { resume_url?: string | null; photo_url?: string | null; portfolio_url?: string | null } | null;
     const jobs: Promise<unknown>[] = [];
@@ -677,7 +630,6 @@ export async function DELETE(request: Request) {
     }
     if (jobs.length) await Promise.all(jobs);
   } catch {
-    /* orphan cleanup is best-effort */
   }
   return Response.json({ ok: true });
 }

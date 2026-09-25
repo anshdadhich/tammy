@@ -28,11 +28,6 @@ export class AuthError extends Error {
   }
 }
 
-/**
- * Server-side: current signed-in user + their public.users row (via admin
- * client to bypass RLS edge cases for brand-new signups).
- * Returns null when not signed in. Never throws for anonymous callers.
- */
 export async function getSessionUser(): Promise<SessionUser | null> {
   const supabase = await supabaseServer();
   const {
@@ -54,13 +49,6 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   };
 }
 
-/**
- * Server-side: require one of the given roles.
- * Throws AuthError(401) when anonymous / no users row,
- * AuthError(403) when role mismatch or account suspended.
- * Route handlers: catch AuthError and return Response.json with e.status.
- * Server components: catch and render an access-denied state.
- */
 export async function requireRole(
   role: Role | Role[],
 ): Promise<SessionUser & { profile: UserRow }> {

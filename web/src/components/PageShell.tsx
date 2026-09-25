@@ -1,16 +1,14 @@
 import AppNav from "@/components/AppNav";
 import SiteFooter from "@/components/SiteFooter";
 
-/**
- * Every route wears the same chrome: skip link, nav, <main> landmark,
- * footer. Landing passes no `active`; employer routes pass "/hire".
- */
 export default function PageShell({
   children,
   active,
+  footer,
 }: {
   children: React.ReactNode;
   active?: string;
+  footer?: boolean;
 }) {
   return (
     <div className="relative min-h-screen bg-paper text-body antialiased selection:bg-brand selection:text-on-brand">
@@ -19,7 +17,7 @@ export default function PageShell({
       </a>
       <AppNav active={active} />
       <main id="main-content">{children}</main>
-      <SiteFooter />
+      {footer ? <SiteFooter /> : null}
     </div>
   );
 }

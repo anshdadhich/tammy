@@ -1,14 +1,3 @@
-/**
- * Voyage embeddings client (voyage-4-lite).
- *
- * Docs: https://docs.voyageai.com/reference/embeddings-api
- * - model: "voyage-4-lite" (task caller may override)
- * - input_type: "document" for profile chunks, "query" for job text
- *
- * Requires VOYAGE_API_KEY env. No SDK dependency — plain fetch so the
- * module works in Next.js route handlers / edge (node) without extra deps.
- */
-
 const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
 
 export const VOYAGE_DEFAULT_MODEL = "voyage-4-lite";
@@ -28,7 +17,6 @@ function apiKey(): string {
   return key;
 }
 
-// Retry 429/5xx with exponential backoff (Voyage rate limits bursts).
 async function fetchWithRetry(url: string, init: RequestInit, tries = 3): Promise<Response> {
   let last: Response | null = null;
   for (let attempt = 0; attempt < tries; attempt++) {
@@ -43,15 +31,9 @@ async function fetchWithRetry(url: string, init: RequestInit, tries = 3): Promis
   return last as Response;
 }
 
-// Short-lived in-memory cache for identical job query texts (5 min).
-// Stops paying Voyage twice for re-runs / double-submits.
 const queryCache = new Map<string, { vec: number[]; at: number }>();
 const QUERY_CACHE_TTL = 5 * 60 * 1000;
 
-/**
- * Embed a batch of texts. Returns one vector per input, in order.
- * Throws on auth/rate-limit/network errors with status context.
- */
 export async function embedTexts(
   texts: string[],
   opts: { input_type?: VoyageInputType; model?: string } = {},
@@ -59,7 +41,6 @@ export async function embedTexts(
   if (texts.length === 0) return [];
   const { input_type = "document", model = VOYAGE_DEFAULT_MODEL } = opts;
 
-  // Truncate runaway inputs before paying Voyage per token (8k chars ≈ 2k tokens).
   const clipped = texts.map((t) => (t.length > 8000 ? t.slice(0, 8000) : t));
 
   const res = await fetchWithRetry(VOYAGE_URL, {
@@ -79,7 +60,6 @@ export async function embedTexts(
   }
 
   const json = (await res.json()) as VoyageEmbeddingResponse;
-  // API guarantees order via index, but sort defensively.
   const sorted = [...(json.data ?? [])].sort((a, b) => a.index - b.index);
   if (sorted.length !== texts.length) {
     throw new Error(
@@ -89,7 +69,6 @@ export async function embedTexts(
   return sorted.map((d) => d.embedding);
 }
 
-/** Convenience: embed profile chunks as documents. */
 export async function embedChunks(
   texts: string[],
   model = VOYAGE_DEFAULT_MODEL,
@@ -97,7 +76,6 @@ export async function embedChunks(
   return embedTexts(texts, { input_type: "document", model });
 }
 
-/** Convenience: embed a job query string as a query. */
 export async function embedQuery(
   text: string,
   model = VOYAGE_DEFAULT_MODEL,
@@ -107,7 +85,6 @@ export async function embedQuery(
   if (hit && Date.now() - hit.at < QUERY_CACHE_TTL) return hit.vec;
   const [vec] = await embedTexts([text], { input_type: "query", model });
   queryCache.set(key, { vec, at: Date.now() });
-  // Bound memory: drop oldest when over 200 entries.
   if (queryCache.size > 200) {
     const oldest = queryCache.keys().next().value;
     if (oldest) queryCache.delete(oldest);
@@ -115,7 +92,6 @@ export async function embedQuery(
   return vec;
 }
 
-/** Build the job-side query text: title + must/nice skills + responsibilities. */
 export function buildJobQueryText(job: {
   job_title: string;
   must_have_skills: string[];

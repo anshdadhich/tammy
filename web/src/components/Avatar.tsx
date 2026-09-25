@@ -1,7 +1,5 @@
 "use client";
 
-/* Arbitrary candidate-supplied photo URLs render as plain <img> with
-   lazy loading — precedent set in next.config.ts (avatars). */
 /* eslint-disable @next/next/no-img-element */
 import { useState } from "react";
 

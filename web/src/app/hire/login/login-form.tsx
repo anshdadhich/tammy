@@ -7,7 +7,7 @@ import { ArrowRight, CircleAlert, Info } from "lucide-react";
 
 const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const COOKIE = "tammy_hr";
-const MAX_AGE = 60 * 60 * 24 * 30; // 30 days, mirrors the server cookies
+const MAX_AGE = 60 * 60 * 24 * 30;
 
 type Session = { name?: string; email: string };
 

@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { normalizeSkills } from "./skills";
 
-/**
- * Zod schemas for candidate intake (docs/02 flow A, docs/04 sections)
- * and employer job posts (docs/02 flow B).
- * Used by both client forms and /api routes (server re-validates).
- */
-
 const optionalUrl = z
   .string()
   .trim()
@@ -19,8 +13,6 @@ const optionalUrl = z
 
 const emptyToUndefined = (v: unknown) =>
   typeof v === "string" && v.trim() === "" ? undefined : v;
-
-// --- shared enums -----------------------------------------------------------
 
 export const remotePrefSchema = z.enum(["onsite", "hybrid", "remote"]);
 export const salaryFrequencySchema = z.enum(["hourly", "monthly", "yearly"]);
@@ -42,8 +34,6 @@ export const employmentTypeSchema = z.enum([
 export const visibilitySchema = z
   .enum(["visible", "hidden", "inactive"])
   .default("visible");
-
-// --- candidate --------------------------------------------------------------
 
 export const experienceSchema = z.object({
   company: z.string().trim().min(1, "Company required").max(200),
@@ -123,14 +113,12 @@ export const candidateSchema = z.object({
   location: z.string().trim().min(1, "Location required").max(200),
   photo_url: optionalUrl,
 
-  // professional identity
   role: z.string().trim().min(1, "Desired role required").max(200),
   current_role: z.string().trim().max(200).default(""),
   headline: z.string().trim().max(220).default(""),
   domain: z.string().trim().min(1, "Domain required").max(100),
   exp: z.coerce.number().min(0).max(50).default(0),
 
-  // skills → normalized to canonical on the server; client sends raw
   skills: z
     .array(z.string().trim().min(1).max(100))
     .min(1, "Add at least one skill")
@@ -148,7 +136,6 @@ export const candidateSchema = z.object({
     resume_url: "",
   }),
 
-  // preferences
   min_salary: z.coerce.number().min(0).default(0),
   currency: z
     .string()
@@ -167,9 +154,6 @@ export const candidateSchema = z.object({
   ),
 
   visibility: visibilitySchema,
-  // Public contact opt-ins — all default false (privacy by default).
-  // Persisted as boolean columns on candidates when the migration lands;
-  // harmless no-ops until then.
   show_email: z.boolean().default(false),
   show_phone: z.boolean().default(false),
   show_linkedin: z.boolean().default(false),
@@ -187,8 +171,6 @@ export type ExperienceInput = z.infer<typeof experienceSchema>;
 export type ProjectInput = z.infer<typeof projectSchema>;
 export type OssInput = z.infer<typeof ossSchema>;
 export type EducationInput = z.infer<typeof educationSchema>;
-
-// --- job --------------------------------------------------------------------
 
 export const jobSchema = z
   .object({
@@ -241,7 +223,6 @@ export const jobSchema = z
 
 export type JobInput = z.infer<typeof jobSchema>;
 
-/** Lenient parse helper for forms: returns field-error map. */
 export function toFieldErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of error.issues) {

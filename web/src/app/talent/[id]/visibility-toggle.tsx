@@ -1,6 +1,5 @@
 "use client";
 
-/* Owner-only listing control: PATCH /api/candidates { id, visibility_status }. */
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 

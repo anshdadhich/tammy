@@ -4,9 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, Check, ChevronDown } from "lucide-react";
 
-/* ─── Trace fill bar (animates when visible — the value it draws is also
-       shown as text, so the bar itself stays decorative) ─── */
-
 export function TraceFill({ width, bg }: { width: string; bg: string }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -35,8 +32,6 @@ export function TraceFill({ width, bg }: { width: string; bg: string }) {
     </div>
   );
 }
-
-/* ─── Hero demo: matching checklist + Describe/Search/Deep switcher ─── */
 
 const CHECKLIST_STEPS = [
   "Parse brief",
@@ -90,7 +85,6 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
 
   return (
     <div className="grid lg:grid-cols-5 gap-10 lg:gap-14 items-start">
-      {/* Dither panel with checklist */}
       <div className="lg:col-span-3 relative">
         <div className="relative rounded-[28px] bg-brand p-8 sm:p-12 overflow-hidden shadow-soft-lg">
           <div className="absolute inset-0" aria-hidden="true">{dither}</div>
@@ -132,7 +126,6 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
         </div>
       </div>
 
-      {/* Right column */}
       <div className="lg:col-span-2 lg:pt-1">
         <div className="match-controls">
           <div className="match-mode-switcher">
@@ -216,8 +209,6 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
     </div>
   );
 }
-
-/* ─── FAQ accordion ─── */
 
 export function FaqList({ faqs }: { faqs: { q: string; a: string }[] }) {
   const [openFaq, setOpenFaq] = useState<number | null>(null);

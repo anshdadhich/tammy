@@ -9,10 +9,6 @@ type ViewTransitionDoc = Document & {
   startViewTransition?: (updateCallback: () => void) => { finished: Promise<void> };
 };
 
-// Flip <html data-theme> and persist — module-scope, no React state, so the
-// server/client render never diverges (the pre-paint script reads the same key).
-// The View Transitions API cross-fades the whole page so colors glide instead
-// of snapping (the hard swap read as a flash); reduced motion flips instantly.
 const toggleTheme = () => {
   const root = document.documentElement;
   const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
@@ -21,7 +17,6 @@ const toggleTheme = () => {
     try {
       localStorage.setItem("tammy_theme", next);
     } catch {
-      /* storage blocked — theme still flips for this visit */
     }
   };
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -49,7 +44,6 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
   const [hideNav, setHideNav] = useState(false);
   const reduceMotion = useReducedMotion();
 
-  // Translucent blur bar once scrolled; hide on scroll down, reveal on scroll up.
   const lastY = useRef(0);
   useEffect(() => {
     const onScroll = () => {
@@ -64,7 +58,6 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Keep the sliding pill in sync with the current in-page hash.
   useEffect(() => {
     const sync = () => {
       const hash = window.location.hash;
@@ -86,7 +79,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
       animate={{ y: hideNav ? "-110%" : 0 }}
       transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="site-navbar">
+      <div className="site-navbar !px-[max(24px,calc((100%_-_1160px)/2))]">
         <Link
           href="/"
           className="site-brand site-brand-text"
@@ -98,7 +91,6 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
           Tammy
         </Link>
 
-        {/* Center pill — in-page anchors, animated sliding indicator */}
         <nav aria-label="Main navigation" className="site-navigation hidden md:flex">
           <div className="site-nav-links">
             {NAV_ITEMS.map((item) => {
@@ -130,7 +122,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
         <div className="site-nav-actions">
           <Link
             href="/join"
-            className="site-login press"
+            className="site-login press h-10"
             onClick={() => setMobileOpen(false)}
           >
             Signup
@@ -138,13 +130,12 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
           <motion.span whileTap={{ scale: 0.96 }} className="inline-flex">
             <Link
               href="/hire"
-              className="site-nav-cta site-nav-cta-dark press"
+              className="site-nav-cta site-nav-cta-dark press h-10"
               onClick={() => setMobileOpen(false)}
             >
               Book a demo
             </Link>
           </motion.span>
-          {/* Theme toggle — icon swap handled in CSS off data-theme */}
           <button
             type="button"
             className="theme-toggle press"
@@ -155,7 +146,6 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
             <Sun className="theme-icon-sun" aria-hidden="true" />
             <Moon className="theme-icon-moon" aria-hidden="true" />
           </button>
-          {/* Mobile toggle */}
           <button
             type="button"
             className="site-nav-burger md:hidden press"
@@ -168,7 +158,6 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
         </div>
       </div>
 
-      {/* Animated mobile menu — same options as desktop */}
       <AnimatePresence initial={false}>
         {mobileOpen ? (
           <motion.nav

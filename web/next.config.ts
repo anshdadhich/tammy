@@ -5,9 +5,7 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["lucide-react", "motion"],
   },
   images: {
-    // Candidate photos are remote URLs (uploads sign, Drive thumbnails).
-    // Keep unoptimized to avoid remote-pattern allowlisting sprawl; avatars
-    // render via plain <img> with lazy loading in list views.
+    unoptimized: true,
     remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
   async headers() {
@@ -18,6 +16,14 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "DENY" },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+          },
         ],
       },
     ];

@@ -4,8 +4,7 @@ import DitherEffect from "@/components/DitherEffect";
 import PageShell from "@/components/PageShell";
 import BeamButton from "@/components/BeamButton";
 import { FaqList, HeroDemo, TraceFill } from "@/components/landing-client";
-
-/* ─── Static copy (server-rendered, SEO-visible) ─── */
+import ProcessSteps from "@/components/ProcessSteps";
 
 const FAQS = [
   {
@@ -83,8 +82,8 @@ const DISCOVERY = [
 
 export default function Landing() {
   return (
-    <PageShell>
-        {/* ================= HERO — the one orchestrated entrance ================= */}
+    <PageShell footer>
+
         <section id="top" className="relative pt-20 lg:pt-28 pb-24 overflow-hidden">
           <div className="max-w-[1160px] mx-auto px-6">
             <h1
@@ -120,7 +119,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ================= THE PROBLEM ================= */}
         <section className="py-24">
           <div className="max-w-[1160px] mx-auto px-6">
             <div className="mb-10 lg:mb-14">
@@ -181,7 +179,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ================= CANDIDATE WIZARD ================= */}
         <section id="candidates" className="py-24">
           <div className="max-w-[1160px] mx-auto px-6">
             <div className="mb-10 lg:mb-14">
@@ -260,7 +257,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ================= INTELLIGENCE PIPELINE ================= */}
         <section id="engine" className="py-24">
           <div className="max-w-[1160px] mx-auto px-6">
             <div className="mb-10 lg:mb-14">
@@ -303,7 +299,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ================= DISCOVERY FLOW ================= */}
         <section className="py-24">
           <div className="max-w-[1160px] mx-auto px-6">
             <div className="mb-10 lg:mb-14">
@@ -316,24 +311,10 @@ export default function Landing() {
               </p>
             </div>
 
-            <div className="discovery-grid grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
-              {DISCOVERY.map((d) => (
-                <div key={d.n} className="discovery-card rounded-2xl bg-surface p-5 shadow-soft-md">
-                  <span className="text-[11px] font-mono text-muted">{d.n}</span>
-                  <div className="discovery-card-body">
-                    <div className="discovery-dot" />
-                    <div>
-                      <h3 className="text-[15px] font-semibold text-ink mb-1">{d.title}</h3>
-                      <p className="text-[13px] text-muted leading-relaxed">{d.desc}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ProcessSteps steps={DISCOVERY} />
           </div>
         </section>
 
-        {/* ================= DOSSIER ================= */}
         <section className="py-24">
           <div className="max-w-[1160px] mx-auto px-6">
             <div className="mb-10 lg:mb-14">
@@ -418,7 +399,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ================= TRUST ================= */}
         <section className="py-24">
           <div className="max-w-[1160px] mx-auto px-6">
             <div className="mb-10 lg:mb-14">
@@ -468,7 +448,6 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* ================= FAQ ================= */}
         <section id="faq" className="py-24">
           <div className="max-w-[920px] mx-auto px-6">
             <div className="text-center max-w-2xl mx-auto mb-10">

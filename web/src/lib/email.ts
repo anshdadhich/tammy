@@ -1,8 +1,5 @@
 import { Resend } from "resend";
-
-// Central Resend helper. Graceful no-op when RESEND_API_KEY is missing
-// (local dev / CI without email): logs a warning and returns
-// { skipped: true } instead of throwing, so API routes never break.
+import { redactPii } from "@/lib/redact";
 
 export type SendEmailResult =
   | { skipped: true; reason: string }
@@ -23,14 +20,13 @@ export async function sendEmail(
 ): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.warn("[email] RESEND_API_KEY missing — skipping send to", to);
+    console.warn("[email] RESEND_API_KEY missing — skipping send");
     return { skipped: true, reason: "RESEND_API_KEY missing" };
   }
   if (!to || !to.includes("@")) {
-    console.warn("[email] invalid recipient — skipping send:", to);
+    console.warn("[email] invalid recipient — skipping send");
     return { skipped: true, reason: "invalid recipient" };
   }
-  // Header-injection guard: subjects become SMTP headers.
   const safeSubject = subject.replace(/[\r\n]+/g, " ").slice(0, 200);
   if (!safeSubject.trim()) {
     return { skipped: true, reason: "empty subject" };
@@ -46,17 +42,16 @@ export async function sendEmail(
       html,
     });
     if (error) {
-      console.error("[email] Resend error:", error);
+      console.error("[email] Resend error:", redactPii(error.message || "resend error"));
       return { skipped: true, reason: error.message || "resend error" };
     }
     return { skipped: false, id: data?.id };
   } catch (e) {
-    console.error("[email] send failed:", (e as Error).message);
-    return { skipped: true, reason: (e as Error).message };
+    const msg = (e as Error).message;
+    console.error("[email] send failed:", redactPii(msg));
+    return { skipped: true, reason: msg };
   }
 }
-
-// --- Templates ---------------------------------------------------------------
 
 function shell(title: string, body: string): string {
   return `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#18181b">`
@@ -67,7 +62,6 @@ function shell(title: string, body: string): string {
     + `</div>`;
 }
 
-/** Candidate finished onboarding / pipeline marked profile visible. */
 export function profileReadyEmail(name: string, candidateId?: string): {
   subject: string;
   html: string;
@@ -86,7 +80,6 @@ export function profileReadyEmail(name: string, candidateId?: string): {
   };
 }
 
-/** Candidate was shortlisted by an employer for a job. */
 export function newMatchEmail(
   candidateName: string,
   jobTitle: string,
@@ -105,7 +98,6 @@ export function newMatchEmail(
   };
 }
 
-/** Candidate was contacted (audit-logged outreach). */
 export function contactLoggedEmail(
   candidateName: string,
   context: { jobTitle?: string | null; company?: string | null; channel?: string | null },

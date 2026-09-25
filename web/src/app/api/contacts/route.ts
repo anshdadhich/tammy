@@ -4,12 +4,6 @@ import { contactLoggedEmail, sendEmail } from "@/lib/email";
 import { getViewer, requireHr, verifyOwnerEmail } from "@/lib/api-auth";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-// POST /api/contacts — audit-log an outreach (OPEN-CONTACT: audit, not a gate).
-// Body: { candidate_id (uuid), job_id? (uuid|null), employer_id? (uuid|null),
-//         channel? (email|phone|platform|other), message? }
-// Writes to public.contact_log, then best-effort emails the candidate.
-// Email is guarded try/catch and never breaks the API.
-
 const bodySchema = z.object({
   candidate_id: z.string().uuid(),
   job_id: z.string().uuid().nullish(),
@@ -26,7 +20,6 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
   }
-  // Outreach writes audit rows + emails candidates: employer session required.
   const denied = requireHr(getViewer(request));
   if (denied) return denied;
   const db = supabaseAdmin();
@@ -52,7 +45,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Best-effort candidate email — guarded, never breaks the API.
   try {
     const { data: c } = await db
       .from("candidates")
@@ -87,7 +79,6 @@ export async function POST(request: Request) {
       await sendEmail(cc.contact_email, tpl.subject, tpl.html);
     }
   } catch {
-    // Email is best-effort only.
   }
 
   return Response.json(
@@ -96,9 +87,6 @@ export async function POST(request: Request) {
   );
 }
 
-// GET /api/contacts?candidate_id=&limit=50 — recent contact_log rows.
-// Requires candidate_id: unfiltered dumps across tenants are forbidden.
-// Owner must match own id (DB-verified); HR allowed.
 export async function GET(request: Request) {
   const rl = rateLimit(request, { key: "contacts-get", limit: 60, windowMs: 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);

@@ -1,31 +1,14 @@
 import { supabaseAdmin } from "@/lib/supabase";
-import { getViewer, isHr, verifyOwnerEmail } from "@/lib/api-auth";
+import { getViewer, isHr, requireVerifiedHr, verifyOwnerEmail } from "@/lib/api-auth";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
-
-// File uploads via service_role (bypasses RLS) + 1h signed URLs.
-// Buckets are private; browsers never touch Storage directly.
-//
-// POST /api/uploads (multipart/form-data):
-//   file: File (required) — pdf for resume; jpg/png for photo;
-//                        pdf/jpg/png for portfolio. Max 10MB.
-//   kind: "resume" | "photo" | "portfolio" (required)
-//         -> bucket resumes | photos | portfolios,
-//            candidates column resume_url | photo_url | portfolio_url
-//   candidate_id: uuid (required) — storage path {candidate_id}/{file}
-// Returns { bucket, path, signedUrl, expiresIn }.
-// Also persists `path` onto the candidates row (best-effort).
-//
-// GET /api/uploads?bucket=<resumes|photos|portfolios>&path=<...>
-// Returns a fresh 1h signed URL for an existing object.
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const SIGNED_URL_TTL = 3600; // 1h
+const SIGNED_URL_TTL = 3600;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-// Strict storage-path shape: {candidate_id}/{filename} (no nesting, no "..").
 const PATH_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[A-Za-z0-9._-]{1,200}$/;
 
@@ -74,8 +57,6 @@ export async function POST(request: Request) {
     return err("expected multipart/form-data", 400);
   }
 
-  // Uploads write files into private buckets: owner or HR only, and the
-  // owner may only upload into their own folder.
   const viewer = getViewer(request);
   const kindRaw = form.get("kind");
   const candidateIdRaw = form.get("candidate_id");
@@ -93,7 +74,6 @@ export async function POST(request: Request) {
   if (viewer.kind === "anon") {
     return err("Sign in to upload files.", 401);
   }
-  // Owner path is DB-verified (cookie id alone is forgeable).
   if (viewer.kind === "owner") {
     const ok =
       viewer.id === candidateId && (await verifyOwnerEmail(candidateId, viewer.email));
@@ -121,7 +101,6 @@ export async function POST(request: Request) {
   if (!KIND_EXT[kind].includes(ext)) {
     return err(`invalid extension for ${kind}: expected ${KIND_EXT[kind].join(" / ")}`);
   }
-  // Magic-byte check: file.type / extension are client-spoofable.
   try {
     const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
     const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46;
@@ -141,7 +120,6 @@ export async function POST(request: Request) {
 
   const db = supabaseAdmin();
 
-  // Refuse orphans: candidate row must exist.
   const { data: cand } = await db
     .from("candidates")
     .select("id")
@@ -167,14 +145,12 @@ export async function POST(request: Request) {
     return err("uploaded but signing failed", 500);
   }
 
-  // Persist storage path onto the candidate row (best-effort, never blocks).
   try {
     await db
       .from("candidates")
       .update({ [KIND_COLUMN[kind]]: path })
       .eq("id", candidateId);
   } catch {
-    /* column write is a convenience; signed URL already returned */
   }
 
   return Response.json(
@@ -201,7 +177,6 @@ export async function GET(request: Request) {
     return err("path must be {candidate_uuid}/{filename}");
   }
 
-  // Signed URLs unlock private files: verified owner of the folder or HR only.
   const viewer = getViewer(request);
   const folderId = path.split("/")[0] ?? "";
   if (viewer.kind === "anon") {
@@ -214,6 +189,20 @@ export async function GET(request: Request) {
   }
 
   const db = supabaseAdmin();
+  if (viewer.kind === "hr") {
+    const deniedVerified = await requireVerifiedHr(viewer);
+    if (deniedVerified) return deniedVerified;
+    const { data: cand } = await db
+      .from("candidates")
+      .select("visibility_status")
+      .eq("id", folderId)
+      .maybeSingle();
+    const visibility = (cand as { visibility_status?: string | null } | null)
+      ?.visibility_status;
+    if (!cand || (visibility ?? "visible") !== "visible") {
+      return err("candidate not found", 404);
+    }
+  }
   const { data: signed, error } = await db.storage
     .from(bucket)
     .createSignedUrl(path, SIGNED_URL_TTL);

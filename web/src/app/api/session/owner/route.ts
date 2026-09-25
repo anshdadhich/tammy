@@ -2,10 +2,6 @@ import { z } from "zod";
 import { verifyOwnerEmail } from "@/lib/api-auth";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-// PATCH /api/session/owner { id, email } — re-mirror the candidate session
-// after an email change. Verifies the new email actually owns the candidate
-// row server-side before writing the cookie; otherwise it would be a
-// session-forgery endpoint.
 const bodySchema = z.object({
   id: z.string().uuid(),
   email: z.string().trim().email().max(200),

@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
   CircleAlert,
   Info,
   Loader2,
@@ -18,12 +26,9 @@ import { candidateSchema, toFieldErrors } from "@/lib/validators";
 import {
   DOMAINS,
   LOCATIONS,
-  REMOTE_PREFS,
   SALARY_FREQUENCIES,
 } from "@/lib/skills";
 import SkillPicker from "@/components/SkillPicker";
-
-// --- types ------------------------------------------------------------------
 
 type ExpRow = {
   company: string;
@@ -106,8 +111,6 @@ type StringKeys<D> = {
 type BoolKeys<D> = {
   [K in keyof D]: D[K] extends boolean ? K : never;
 }[keyof D];
-
-// --- constants --------------------------------------------------------------
 
 const LS_KEY = "tammy.join.draft.v1";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -225,6 +228,136 @@ const DEFAULT_DRAFT: Draft = {
 
 const CURRENCIES = ["INR", "USD", "EUR", "GBP", "SGD", "AED", "AUD", "CAD"];
 
+const ROLE_SUGGESTIONS = [
+  "Software Engineer",
+  "Senior Software Engineer",
+  "Staff Engineer",
+  "Principal Engineer",
+  "Engineering Manager",
+  "Frontend Engineer",
+  "Backend Engineer",
+  "Full Stack Engineer",
+  "Mobile Developer",
+  "iOS Developer",
+  "Android Developer",
+  "DevOps Engineer",
+  "Site Reliability Engineer",
+  "Cloud Engineer",
+  "Platform Engineer",
+  "Solutions Architect",
+  "Technical Architect",
+  "Data Engineer",
+  "Data Scientist",
+  "Machine Learning Engineer",
+  "Data Analyst",
+  "Business Analyst",
+  "Product Manager",
+  "Senior Product Manager",
+  "Program Manager",
+  "Project Manager",
+  "Product Designer",
+  "UX Designer",
+  "UI Designer",
+  "QA Engineer",
+  "Automation Test Engineer",
+  "Security Engineer",
+  "Database Administrator",
+  "System Administrator",
+  "Growth Manager",
+  "Marketing Manager",
+  "Sales Manager",
+  "Content Writer",
+  "Customer Success Manager",
+  "Research Scientist",
+] as const;
+
+const EXP_SUGGESTIONS = [
+  "0", "0.5", "1", "1.5", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+  "12", "15", "20", "25", "30",
+] as const;
+
+const PROJECT_TYPES = [
+  { v: "personal", label: "Personal" },
+  { v: "academic", label: "Academic" },
+  { v: "freelance", label: "Freelance" },
+  { v: "production", label: "Production" },
+  { v: "open_source", label: "Open source" },
+  { v: "prototype", label: "Prototype" },
+] as const;
+
+const DEGREE_SUGGESTIONS = [
+  "B.E.", "B.Tech", "B.S.", "B.Sc", "BCA", "BBA",
+  "M.E.", "M.Tech", "M.S.", "M.Sc", "MCA", "MBA",
+  "Ph.D.", "Diploma", "Advanced Diploma",
+] as const;
+
+const FIELD_SUGGESTIONS = [
+  "Computer Science",
+  "Information Technology",
+  "Electronics & Communication",
+  "Electrical Engineering",
+  "Mechanical Engineering",
+  "Civil Engineering",
+  "Mathematics",
+  "Statistics",
+  "Data Science",
+  "Business Administration",
+  "Commerce",
+  "Economics",
+  "Design",
+] as const;
+
+const OSS_ROLES = [
+  "Maintainer",
+  "Contributor",
+  "Core contributor",
+  "Owner",
+  "Triager",
+  "Reviewer",
+] as const;
+
+const NOTICE_PERIODS = [
+  "No notice period",
+  "15 days",
+  "30 days",
+  "45 days",
+  "60 days",
+  "90 days",
+] as const;
+
+const AVAILABILITY_OPTS = [
+  { v: "Immediate", label: "Immediate" },
+  { v: "Within 15 days", label: "15 days" },
+  { v: "Within 30 days", label: "30 days" },
+  { v: "Within 60 days", label: "60 days" },
+  { v: "After 90 days", label: "90+ days" },
+] as const;
+
+const WORK_MODE_OPTS = [
+  { v: "remote", label: "Remote" },
+  { v: "hybrid", label: "Hybrid" },
+  { v: "onsite", label: "On-site" },
+] as const;
+
+const SKILL_SUGGESTIONS = [
+  "JavaScript",
+  "TypeScript",
+  "React",
+  "Next.js",
+  "Node.js",
+  "Python",
+  "Java",
+  "Go",
+  "PostgreSQL",
+  "Redis",
+  "Docker",
+  "Kubernetes",
+  "AWS",
+  "GraphQL",
+  "Figma",
+  "Git",
+] as const;
+
 const blankExp = (): ExpRow => ({
   company: "",
   title: "",
@@ -263,7 +396,6 @@ const blankOss = (): OssRow => ({
   role: "Contributor",
 });
 
-/** Per-step sample data — only fills fields the candidate left empty. */
 const SAMPLES: Partial<Draft>[] = [
   {
     name: "Aarav Sharma",
@@ -309,7 +441,7 @@ const SAMPLES: Partial<Draft>[] = [
         users_scale: "40k accounts",
         hardest_challenge: "Idempotent replays without double-posting entries.",
         personal_contribution: "Schema, worker design, and the alert rules.",
-        project_type: "Backend service",
+        project_type: "production",
       },
     ],
   },
@@ -436,8 +568,6 @@ function fromFlat(errors: unknown): Record<string, string> {
   return out;
 }
 
-// --- small view pieces ------------------------------------------------------
-
 function F({
   label,
   htmlFor,
@@ -454,7 +584,7 @@ function F({
   children: ReactNode;
 }) {
   return (
-    <div className="field">
+    <div className="field content-start">
       <label className="field-label" htmlFor={htmlFor}>
         {label}
         {req ? (
@@ -469,6 +599,394 @@ function F({
         <span className="field-error" role="alert">
           {error}
         </span>
+      ) : null}
+    </div>
+  );
+}
+
+function SegGroup<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly { v: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="field content-start">
+      <span className="field-label">{label}</span>
+      <div className="seg h-[46.5px]" role="group" aria-label={label}>
+        {options.map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            className={`seg-btn ${value === o.v ? "is-on" : ""}`}
+            aria-pressed={value === o.v}
+            onClick={() => onChange(o.v)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function useOutsideDismiss(
+  open: boolean,
+  ref: { current: HTMLElement | null },
+  dismiss: () => void,
+) {
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      const el = ref.current;
+      const t = e.target;
+      if (el && (!(t instanceof Node) || !el.contains(t))) dismiss();
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [open, ref, dismiss]);
+}
+
+function PickList({
+  listId,
+  items,
+  active,
+  display,
+  onHover,
+  onPick,
+}: {
+  listId: string;
+  items: readonly string[];
+  active: number;
+  display?: (v: string) => string;
+  onHover: (i: number) => void;
+  onPick: (i: number) => void;
+}) {
+  useEffect(() => {
+    if (active < 0) return;
+    const panel = document.getElementById(listId);
+    const el = panel?.querySelector<HTMLElement>(`[data-idx="${active}"]`);
+    if (!panel || !el) return;
+    const top = el.offsetTop;
+    const bottom = top + el.offsetHeight;
+    if (top < panel.scrollTop) panel.scrollTop = top;
+    else if (bottom > panel.scrollTop + panel.clientHeight)
+      panel.scrollTop = bottom - panel.clientHeight;
+  }, [listId, active]);
+
+  return (
+    <div
+      id={listId}
+      role="listbox"
+      className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-60 overflow-y-auto rounded-[14px] border border-line bg-surface shadow-soft-md py-1.5"
+    >
+      {items.length === 0 ? (
+        <div
+          role="option"
+          aria-selected={false}
+          className="px-3.5 py-2 text-[13.5px] text-muted"
+        >
+          No matches
+        </div>
+      ) : (
+        items.map((item, i) => (
+          <button
+            key={item === "" ? "__empty__" : item}
+            type="button"
+            role="option"
+            id={`${listId}-${i}`}
+            data-idx={i}
+            aria-selected={i === active}
+            tabIndex={-1}
+            className={`block w-full cursor-pointer border-0 px-3.5 py-2 text-left text-[14px] leading-[1.45] ${
+              i === active ? "bg-inset text-ink" : "bg-transparent text-body"
+            }`}
+            onMouseDown={(e) => e.preventDefault()}
+            onMouseEnter={() => onHover(i)}
+            onClick={() => onPick(i)}
+          >
+            {display ? display(item) : item}
+          </button>
+        ))
+      )}
+    </div>
+  );
+}
+
+function PickCombo({
+  id,
+  value,
+  options,
+  onChange,
+  placeholder,
+  invalid,
+  inputMode,
+  maxLength,
+}: {
+  id: string;
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+  placeholder?: string;
+  invalid?: boolean;
+  inputMode?: "text" | "decimal" | "numeric" | "none" | "search" | "email" | "tel" | "url";
+  maxLength?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const listId = `${id}-listbox`;
+
+  const q = query.trim().toLowerCase();
+  const items = q
+    ? options.filter((o) => o.toLowerCase().includes(q))
+    : options;
+  const ai = items.length ? Math.min(active, items.length - 1) : -1;
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery("");
+  }, []);
+  useOutsideDismiss(open, wrapRef, close);
+
+  const openList = () => {
+    setOpen(true);
+    setQuery("");
+    setActive(0);
+  };
+
+  const commit = (v: string) => {
+    onChange(v);
+    close();
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    const k = e.key;
+    if (k === "ArrowDown" || k === "ArrowUp") {
+      e.preventDefault();
+      if (!open) {
+        setOpen(true);
+        setQuery("");
+        setActive(k === "ArrowDown" ? 0 : Math.max(0, items.length - 1));
+        return;
+      }
+      if (!items.length) return;
+      setActive(
+        Math.min(
+          Math.max(k === "ArrowDown" ? ai + 1 : ai - 1, 0),
+          items.length - 1,
+        ),
+      );
+      return;
+    }
+    if (k === "Enter") {
+      if (open) {
+        e.preventDefault();
+        if (ai >= 0) commit(items[ai]);
+        else close();
+      }
+      return;
+    }
+    if (k === "Escape") {
+      if (open) {
+        e.preventDefault();
+        close();
+      }
+      return;
+    }
+    if (k === "Tab") close();
+  };
+
+  return (
+    <div
+      className="relative"
+      ref={wrapRef}
+      onBlur={(e) => {
+        const next = e.relatedTarget;
+        if (!next || !e.currentTarget.contains(next)) close();
+      }}
+    >
+      <input
+        id={id}
+        className="input"
+        style={{ paddingRight: 38 }}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        aria-autocomplete="list"
+        aria-activedescendant={open && ai >= 0 ? `${listId}-${ai}` : undefined}
+        aria-invalid={invalid ? true : undefined}
+        value={value}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        autoComplete="off"
+        onFocus={() => {
+          if (!open) openList();
+        }}
+        onClick={() => {
+          if (!open) openList();
+        }}
+        onChange={(e) => {
+          const v = e.target.value;
+          onChange(v);
+          setQuery(v);
+          setActive(0);
+          setOpen(true);
+        }}
+        onKeyDown={onKey}
+      />
+      <ChevronDown
+        size={16}
+        aria-hidden="true"
+        className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted"
+      />
+      {open ? (
+        <PickList
+          listId={listId}
+          items={items}
+          active={ai}
+          onHover={setActive}
+          onPick={(i) => commit(items[i])}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function PickSelect({
+  id,
+  value,
+  options,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const suppressRef = useRef(false);
+  const listId = `${id}-listbox`;
+
+  const items: string[] = [
+    ...(placeholder !== undefined ? [""] : []),
+    ...(value && !options.includes(value) ? [value] : []),
+    ...options,
+  ];
+  const ai = items.length ? Math.min(active, items.length - 1) : -1;
+
+  const close = useCallback(() => setOpen(false), []);
+  useOutsideDismiss(open, wrapRef, close);
+
+  const labelOf = (v: string) =>
+    v === "" ? (placeholder ?? "Not specified") : v;
+
+  const openAtValue = () => {
+    setOpen(true);
+    setActive(Math.max(0, items.indexOf(value)));
+  };
+
+  const commit = (v: string) => {
+    onChange(v);
+    close();
+  };
+
+  const onKey = (e: KeyboardEvent<HTMLButtonElement>) => {
+    const k = e.key;
+    if (k === "ArrowDown" || k === "ArrowUp") {
+      suppressRef.current = false;
+      e.preventDefault();
+      if (!open) {
+        setOpen(true);
+        setActive(
+          k === "ArrowDown"
+            ? Math.max(0, items.indexOf(value))
+            : Math.max(0, items.length - 1),
+        );
+        return;
+      }
+      if (!items.length) return;
+      setActive(
+        Math.min(
+          Math.max(k === "ArrowDown" ? ai + 1 : ai - 1, 0),
+          items.length - 1,
+        ),
+      );
+      return;
+    }
+    if (k === "Enter" || k === " ") {
+      if (open) {
+        e.preventDefault();
+        suppressRef.current = true;
+        if (ai >= 0) commit(items[ai]);
+        else close();
+      } else {
+        suppressRef.current = false;
+      }
+      return;
+    }
+    suppressRef.current = false;
+    if (k === "Escape" && open) {
+      e.preventDefault();
+      close();
+    }
+  };
+
+  return (
+    <div
+      className="relative"
+      ref={wrapRef}
+      onPointerDown={() => {
+        suppressRef.current = false;
+      }}
+      onBlur={(e) => {
+        const next = e.relatedTarget;
+        if (!next || !e.currentTarget.contains(next)) close();
+      }}
+    >
+      <button
+        id={id}
+        type="button"
+        role="combobox"
+        className="select cursor-pointer text-left"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-controls={open ? listId : undefined}
+        aria-activedescendant={open && ai >= 0 ? `${listId}-${ai}` : undefined}
+        onClick={() => {
+          if (suppressRef.current) {
+            suppressRef.current = false;
+            return;
+          }
+          if (open) close();
+          else openAtValue();
+        }}
+        onKeyDown={onKey}
+      >
+        <span className={`block truncate ${value ? "text-ink" : "text-muted"}`}>
+          {value ? value : placeholder ? placeholder : "Select"}
+        </span>
+      </button>
+      {open ? (
+        <PickList
+          listId={listId}
+          items={items}
+          active={ai}
+          display={labelOf}
+          onHover={setActive}
+          onPick={(i) => commit(items[i])}
+        />
       ) : null}
     </div>
   );
@@ -524,8 +1042,6 @@ function ReviewCard({
   );
 }
 
-// --- the wizard -------------------------------------------------------------
-
 export default function JoinWizard() {
   const [draft, setDraft] = useState<Draft>(DEFAULT_DRAFT);
   const draftRef = useRef(draft);
@@ -534,7 +1050,6 @@ export default function JoinWizard() {
   const [saveState, setSaveState] = useState<"saving" | "saved">("saved");
   const [step, setStep] = useState(0);
   const [maxStep, setMaxStep] = useState(0);
-  // 1 = entering forward (from below), -1 = entering backward (from above)
   const [dir, setDir] = useState<1 | -1>(1);
   const [errs, setErrs] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
@@ -545,9 +1060,6 @@ export default function JoinWizard() {
   const [lookupMsg, setLookupMsg] = useState<string | null>(null);
   const [lookupId, setLookupId] = useState<string | null>(null);
 
-  // Restore the local draft after hydration, then mark ready. localStorage only
-  // exists client-side, so this external-system sync necessarily runs in an
-  // effect — reading it at init time would mismatch the server-rendered HTML.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     try {
@@ -565,11 +1077,9 @@ export default function JoinWizard() {
         }
       }
     } catch {
-      /* corrupt draft — start clean */
     }
     setHydrated(true);
   }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(
     () => () => {
@@ -578,9 +1088,6 @@ export default function JoinWizard() {
     [],
   );
 
-  // On step change, bring the card top back into view (skipped on first
-  // mount) so the new step's enter animation is actually on screen — after
-  // Continue the viewport is usually down at the footer.
   const cardRef = useRef<HTMLDivElement>(null);
   const prevStep = useRef(step);
   useEffect(() => {
@@ -595,7 +1102,6 @@ export default function JoinWizard() {
     });
   }, [step]);
 
-  /** Every mutation funnels through here: state + debounced autosave. */
   const update = (fn: (d: Draft) => Draft) => {
     const next = fn(draftRef.current);
     draftRef.current = next;
@@ -606,7 +1112,6 @@ export default function JoinWizard() {
       try {
         localStorage.setItem(LS_KEY, JSON.stringify(draftRef.current));
       } catch {
-        /* storage blocked — draft still lives in memory */
       }
       setSaveState("saved");
     }, 400);
@@ -624,6 +1129,10 @@ export default function JoinWizard() {
     (k: keyof Draft["links"]) =>
     (e: { target: { value: string } }) =>
       update((d) => ({ ...d, links: { ...d.links, [k]: e.target.value } }));
+  const pick =
+    <K extends StringKeys<Draft>>(k: K) =>
+    (v: string) =>
+      update((d) => ({ ...d, [k]: v }));
 
   const clearErr = (key: string) =>
     setErrs((prev) => {
@@ -633,7 +1142,15 @@ export default function JoinWizard() {
       return next;
     });
 
-  // row mutators — explicit keys keep every update typed
+  const toggleSkill = (s: string) => {
+    update((d) =>
+      d.skills.some((x) => x.toLowerCase() === s.toLowerCase())
+        ? { ...d, skills: d.skills.filter((x) => x.toLowerCase() !== s.toLowerCase()) }
+        : { ...d, skills: [...d.skills, s] },
+    );
+    clearErr("skills");
+  };
+
   const addExp = () => update((d) => ({ ...d, experiences: [...d.experiences, blankExp()] }));
   const dropExp = (i: number) =>
     update((d) => ({ ...d, experiences: d.experiences.filter((_, j) => j !== i) }));
@@ -793,7 +1310,7 @@ export default function JoinWizard() {
         setErrs(map);
         const keys = Object.keys(map);
         if (keys.length) {
-          setDir(-1); // publish runs on the last step — errors always jump back
+          setDir(-1);
           setStep(stepOf(keys[0].split(".")[0]));
         }
         setNotice("Fix the highlighted fields.");
@@ -806,7 +1323,6 @@ export default function JoinWizard() {
         return;
       }
       if (res.status === 409 && body?.candidateId) {
-        // A visible page already exists: adopt it (server verifies ownership).
         try {
           await fetch("/api/session/owner", {
             method: "PATCH",
@@ -814,7 +1330,6 @@ export default function JoinWizard() {
             body: JSON.stringify({ id: body.candidateId, email: draftRef.current.email.trim() }),
           });
         } catch {
-          /* best effort */
         }
         setNotice(body.error ?? "A visible profile already exists for this email.");
         setNoticeId(body.candidateId);
@@ -828,7 +1343,6 @@ export default function JoinWizard() {
             body: JSON.stringify({ id: body.candidateId, email: draftRef.current.email.trim() }),
           });
         } catch {
-          /* best effort — page works without it */
         }
         setDone({
           id: body.candidateId,
@@ -876,7 +1390,6 @@ export default function JoinWizard() {
     setStep(i);
   };
 
-  // --- success ---------------------------------------------------------------
   if (done) {
     return (
       <div className="rounded-2xl bg-surface shadow-soft-md p-7 sm:p-10 text-center">
@@ -924,11 +1437,8 @@ export default function JoinWizard() {
     );
   }
 
-  // --- step bodies -----------------------------------------------------------
-
   const renderStep = (): ReactNode => {
     switch (step) {
-      // ---------------------------------------------------------------- 0
       case 0:
         return (
           <>
@@ -973,20 +1483,14 @@ export default function JoinWizard() {
                 />
               </F>
               <F label="City" htmlFor="j-loc" req error={errs.location}>
-                <input
+                <PickCombo
                   id="j-loc"
-                  className="input"
-                  list="join-loc-list"
                   value={draft.location}
-                  onChange={str("location")}
+                  options={LOCATIONS}
+                  onChange={pick("location")}
                   placeholder="Bengaluru"
-                  aria-invalid={errs.location ? true : undefined}
+                  invalid={!!errs.location}
                 />
-                <datalist id="join-loc-list">
-                  {LOCATIONS.map((l) => (
-                    <option key={l} value={l} />
-                  ))}
-                </datalist>
               </F>
               <div className="sm:col-span-2">
                 <F
@@ -1042,18 +1546,17 @@ export default function JoinWizard() {
           </>
         );
 
-      // ---------------------------------------------------------------- 1
       case 1:
         return (
           <div className="grid gap-4 sm:grid-cols-2">
             <F label="Desired role" htmlFor="p-role" req error={errs.role}>
-              <input
+              <PickCombo
                 id="p-role"
-                className="input"
                 value={draft.role}
-                onChange={str("role")}
+                options={ROLE_SUGGESTIONS}
+                onChange={pick("role")}
                 placeholder="Backend Engineer"
-                aria-invalid={errs.role ? true : undefined}
+                invalid={!!errs.role}
               />
             </F>
             <F
@@ -1061,11 +1564,11 @@ export default function JoinWizard() {
               htmlFor="p-current"
               hint="Optional — shown under your name."
             >
-              <input
+              <PickCombo
                 id="p-current"
-                className="input"
                 value={draft.current_role}
-                onChange={str("current_role")}
+                options={ROLE_SUGGESTIONS}
+                onChange={pick("current_role")}
                 placeholder="SDE II at Paystream"
               />
             </F>
@@ -1089,13 +1592,14 @@ export default function JoinWizard() {
               error={errs.exp}
               hint="0 – 50."
             >
-              <input
+              <PickCombo
                 id="p-exp"
-                className="input"
-                inputMode="numeric"
                 value={draft.exp}
-                onChange={str("exp")}
+                options={EXP_SUGGESTIONS}
+                onChange={pick("exp")}
                 placeholder="4"
+                inputMode="decimal"
+                invalid={!!errs.exp}
               />
             </F>
             <div className="sm:col-span-2">
@@ -1120,6 +1624,7 @@ export default function JoinWizard() {
                 label="Skills"
                 required
                 hint="The terms employers search by — normalized to canonical names."
+                placeholder="+ Add skill…"
                 error={errs.skills}
                 value={draft.skills}
                 onChange={(v) => {
@@ -1127,11 +1632,32 @@ export default function JoinWizard() {
                   clearErr("skills");
                 }}
               />
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted mr-1">
+                  Suggestions
+                </span>
+                {SKILL_SUGGESTIONS.map((s) => {
+                  const on = draft.skills.some(
+                    (x) => x.toLowerCase() === s.toLowerCase(),
+                  );
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      className={`chip-toggle ${on ? "is-on" : ""}`}
+                      aria-pressed={on}
+                      onClick={() => toggleSkill(s)}
+                    >
+                      {on ? null : <span aria-hidden="true">+</span>}
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         );
 
-      // ---------------------------------------------------------------- 2
       case 2:
         return (
           <>
@@ -1168,12 +1694,15 @@ export default function JoinWizard() {
                       req
                       error={errs[`experiences.${i}.title`]}
                     >
-                      <input
+                      <PickCombo
                         id={`exp-${i}-title`}
-                        className="input"
                         value={row.title}
-                        onChange={onExp(i, "title")}
+                        options={ROLE_SUGGESTIONS}
+                        onChange={(v) =>
+                          onExp(i, "title")({ target: { value: v } })
+                        }
                         placeholder="Software Engineer II"
+                        invalid={!!errs[`experiences.${i}.title`]}
                       />
                     </F>
                     <F label="Start" htmlFor={`exp-${i}-start`} hint="2022-04 or Apr 2022.">
@@ -1229,6 +1758,7 @@ export default function JoinWizard() {
                       <SkillPicker
                         id={`exp-${i}-tech`}
                         label="Tech used"
+                        placeholder="+ Add tech…"
                         value={row.tech}
                         onChange={(v) => onExpTech(i, v)}
                       />
@@ -1243,7 +1773,6 @@ export default function JoinWizard() {
           </>
         );
 
-      // ---------------------------------------------------------------- 3
       case 3:
         return (
           <>
@@ -1311,14 +1840,26 @@ export default function JoinWizard() {
                         />
                       </F>
                     </div>
-                    <F label="Project type" htmlFor={`proj-${i}-type`} hint="Backend service, mobile app…">
-                      <input
+                    <F label="Project type" htmlFor={`proj-${i}-type`} hint="Personal, academic, freelance, production, open source, prototype.">
+                      <select
                         id={`proj-${i}-type`}
-                        className="input"
+                        className="select"
                         value={row.project_type}
                         onChange={onProj(i, "project_type")}
-                        placeholder="Backend service"
-                      />
+                      >
+                        <option value="">Not specified</option>
+                        {PROJECT_TYPES.map((t) => (
+                          <option key={t.v} value={t.v}>
+                            {t.label}
+                          </option>
+                        ))}
+                        {row.project_type &&
+                        !PROJECT_TYPES.some((t) => t.v === row.project_type) ? (
+                          <option value={row.project_type}>
+                            {row.project_type}
+                          </option>
+                        ) : null}
+                      </select>
                     </F>
                     <div className="sm:col-span-2">
                       <SkillPicker
@@ -1413,7 +1954,6 @@ export default function JoinWizard() {
           </>
         );
 
-      // ---------------------------------------------------------------- 4
       case 4:
         return (
           <div className="grid gap-8">
@@ -1444,21 +1984,25 @@ export default function JoinWizard() {
                         />
                       </F>
                       <F label="Degree" htmlFor={`edu-${i}-deg`}>
-                        <input
+                        <PickSelect
                           id={`edu-${i}-deg`}
-                          className="input"
                           value={row.degree}
-                          onChange={onEdu(i, "degree")}
-                          placeholder="B.E."
+                          options={DEGREE_SUGGESTIONS}
+                          onChange={(v) =>
+                            onEdu(i, "degree")({ target: { value: v } })
+                          }
+                          placeholder="Not specified"
                         />
                       </F>
                       <F label="Field" htmlFor={`edu-${i}-field`}>
-                        <input
+                        <PickSelect
                           id={`edu-${i}-field`}
-                          className="input"
                           value={row.field}
-                          onChange={onEdu(i, "field")}
-                          placeholder="Computer Science"
+                          options={FIELD_SUGGESTIONS}
+                          onChange={(v) =>
+                            onEdu(i, "field")({ target: { value: v } })
+                          }
+                          placeholder="Not specified"
                         />
                       </F>
                       <F label="Years" htmlFor={`edu-${i}-years`} hint="2018 – 2022.">
@@ -1517,12 +2061,14 @@ export default function JoinWizard() {
                         />
                       </F>
                       <F label="Role" htmlFor={`oss-${i}-role`} hint="Maintainer, contributor…">
-                        <input
+                        <PickSelect
                           id={`oss-${i}-role`}
-                          className="input"
                           value={row.role}
-                          onChange={onOss(i, "role")}
-                          placeholder="Maintainer"
+                          options={OSS_ROLES}
+                          onChange={(v) =>
+                            onOss(i, "role")({ target: { value: v } })
+                          }
+                          placeholder="Not specified"
                         />
                       </F>
                       <div className="sm:col-span-2">
@@ -1555,6 +2101,7 @@ export default function JoinWizard() {
                         <SkillPicker
                           id={`oss-${i}-tech`}
                           label="Tech"
+                          placeholder="+ Add tech…"
                           value={row.tech}
                           onChange={(v) => onOssTech(i, v)}
                         />
@@ -1570,29 +2117,33 @@ export default function JoinWizard() {
           </div>
         );
 
-      // ---------------------------------------------------------------- 5
       case 5:
         return (
-          <div className="grid gap-7">
+          <div className="grid gap-8">
             <div>
               <h3 className="text-[15.5px] font-semibold text-ink mb-4">Reachability</h3>
               <div className="grid gap-4 sm:grid-cols-2">
-                <F label="Availability" htmlFor="v-avail" hint="When you can start.">
-                  <input
-                    id="v-avail"
-                    className="input"
-                    value={draft.availability}
-                    onChange={str("availability")}
-                    placeholder="Immediate"
-                  />
-                </F>
+                <SegGroup
+                  label="Availability"
+                  value={draft.availability}
+                  options={
+                    !draft.availability ||
+                    AVAILABILITY_OPTS.some((o) => o.v === draft.availability)
+                      ? AVAILABILITY_OPTS
+                      : [
+                          ...AVAILABILITY_OPTS,
+                          { v: draft.availability, label: draft.availability },
+                        ]
+                  }
+                  onChange={(v) => update((d) => ({ ...d, availability: v }))}
+                />
                 <F label="Notice period" htmlFor="v-notice" hint="Optional.">
-                  <input
+                  <PickSelect
                     id="v-notice"
-                    className="input"
                     value={draft.notice_period}
-                    onChange={str("notice_period")}
-                    placeholder="30 days"
+                    options={NOTICE_PERIODS}
+                    onChange={pick("notice_period")}
+                    placeholder="Not specified"
                   />
                 </F>
                 <F label="Salary expectation" htmlFor="v-salary" error={errs.min_salary} hint="Plain number — your period is chosen below.">
@@ -1606,7 +2157,7 @@ export default function JoinWizard() {
                   />
                 </F>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="field mb-0">
+                  <div className="field content-start mb-0">
                     <label className="field-label" htmlFor="v-cur">
                       Currency
                     </label>
@@ -1623,7 +2174,7 @@ export default function JoinWizard() {
                       ))}
                     </select>
                   </div>
-                  <div className="field mb-0">
+                  <div className="field content-start mb-0">
                     <label className="field-label" htmlFor="v-freq">
                       Period
                     </label>
@@ -1641,29 +2192,21 @@ export default function JoinWizard() {
                     </select>
                   </div>
                 </div>
-                <F label="Preferred location" htmlFor="v-locref" hint="Free text — Remote, Bengaluru…">
-                  <input
+                <F label="Preferred location" htmlFor="v-locref" hint="Type or pick — Remote, Bengaluru…">
+                  <PickCombo
                     id="v-locref"
-                    className="input"
                     value={draft.location_pref}
-                    onChange={str("location_pref")}
+                    options={LOCATIONS}
+                    onChange={pick("location_pref")}
                     placeholder="Remote"
                   />
                 </F>
-                <F label="Work mode" htmlFor="v-remote">
-                  <select
-                    id="v-remote"
-                    className="select"
-                    value={draft.remote_pref}
-                    onChange={str("remote_pref")}
-                  >
-                    {REMOTE_PREFS.map((r) => (
-                      <option key={r} value={r}>
-                        {r === "onsite" ? "On-site" : r === "hybrid" ? "Hybrid" : "Remote"}
-                      </option>
-                    ))}
-                  </select>
-                </F>
+                <SegGroup
+                  label="Work mode"
+                  value={draft.remote_pref}
+                  options={WORK_MODE_OPTS}
+                  onChange={(v) => update((d) => ({ ...d, remote_pref: v }))}
+                />
                 <label className="check">
                   <input type="checkbox" checked={draft.negotiable} onChange={bool("negotiable")} />
                   <span>Salary is negotiable</span>
@@ -1751,7 +2294,7 @@ export default function JoinWizard() {
               <h3 className="text-[15.5px] font-semibold text-ink mb-2">
                 What employers see
               </h3>
-              <p className="field-hint mb-3">
+              <p className="field-hint mb-4">
                 Contact channels stay private until you switch them on.
               </p>
               <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1776,7 +2319,6 @@ export default function JoinWizard() {
           </div>
         );
 
-      // ---------------------------------------------------------------- 6
       default:
         return (
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1885,15 +2427,16 @@ export default function JoinWizard() {
     }
   };
 
-  // --- shell ----------------------------------------------------------------
-
   const [stepTitle, stepSub] = STEP_TITLES[step];
 
   return (
     <div ref={cardRef} className="rounded-2xl bg-surface shadow-soft-md p-5 sm:p-8">
-      {/* header: step count + autosave */}
+
       <div className="flex items-center justify-between gap-3 mb-5">
-        <span className="font-mono text-[11.5px] uppercase tracking-[0.14em] text-muted">
+        <span
+          key={step}
+          className="step-count-anim font-mono text-[11.5px] uppercase tracking-[0.14em] text-muted"
+        >
           Step {step + 1} of {STEPS.length}
         </span>
         <span className="flex items-center gap-2" title="Draft autosaves on this device">
@@ -1908,7 +2451,6 @@ export default function JoinWizard() {
         </span>
       </div>
 
-      {/* stepper */}
       <div className="stepper mb-7">
         {STEPS.map((label, i) => (
           <button
@@ -1930,7 +2472,6 @@ export default function JoinWizard() {
         ))}
       </div>
 
-      {/* heading + body — keyed on step so the enter animation replays */}
       <div key={step} className={`step-anim${dir === -1 ? " step-anim-back" : ""}`}>
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 mb-5">
           <div>
@@ -1948,7 +2489,6 @@ export default function JoinWizard() {
           </button>
         </div>
 
-        {/* body */}
         <div>{renderStep()}</div>
       </div>
 
@@ -1969,7 +2509,6 @@ export default function JoinWizard() {
         </div>
       ) : null}
 
-      {/* footer */}
       <div className="flex items-center justify-between gap-3 mt-7 pt-5 border-t border-line">
         <div className="flex flex-wrap items-center gap-4">
           {step > 0 ? (
@@ -2008,7 +2547,6 @@ export default function JoinWizard() {
   );
 }
 
-/** Disclosure arrow — matches the details.judge rotation rule. */
 function ChevronRightPlaceholder() {
   return (
     <svg

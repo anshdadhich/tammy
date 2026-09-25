@@ -1,10 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-// GET /api/admin/bootstrap?email=you@example.com[&token=...]
-// First-run only: if NO admin exists yet, promotes that email to admin.
-// Closed (403) once any admin exists. Requires BOOTSTRAP_SECRET when set
-// (prevents fresh-deploy race takeover). No SQL needed.
 export async function GET(request: Request) {
   const rl = rateLimit(request, { key: "admin-bootstrap", limit: 5, windowMs: 60 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);

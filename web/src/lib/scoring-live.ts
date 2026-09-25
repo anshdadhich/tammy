@@ -1,8 +1,5 @@
 import type { JobReq } from "@/lib/matching/types";
 
-// Live transparent scoring, computed against the REAL schema in /api/search.
-// Five sub-scores (0..1) blended 0.25/0.25/0.20/0.15/0.10 into 0..100.
-
 export interface SubScores {
   semantic: number;
   skill: number;
@@ -12,11 +9,11 @@ export interface SubScores {
 }
 
 export interface ScoreContext {
-  skills: string[]; // canonical skill names
-  skillProjects: Map<string, number>; // lowercase skill -> # projects using it
-  depths: { complexity: number; evidence: string }[]; // per-project depth
+  skills: string[];
+  skillProjects: Map<string, number>;
+  depths: { complexity: number; evidence: string }[];
   minSalary: number | null;
-  salaryFreq: string | null; // candidate's frequency: employer budgets compare annualised
+  salaryFreq: string | null;
   totalExp: number | null;
   remotePref: string | null;
   locationCity: string | null;
@@ -26,17 +23,15 @@ export interface ScoreContext {
 
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 
-/** Employer budgets are annual; candidate expectations carry their own frequency. */
 export function annualize(amount: number, freq: string | null | undefined): number {
   const f = (freq ?? "").toLowerCase();
   if (f === "monthly") return amount * 12;
   if (f === "hourly") return amount * 2080;
-  return amount; // yearly or unknown — compare as-is
+  return amount;
 }
 
 export function semanticFromDistance(distance: number | null | undefined): number {
   if (distance == null || !isFinite(distance)) return 0.5;
-  // pgvector cosine distance: 0 = identical. Map 0..1.2 -> 1..0.
   return clamp01(1 - distance / 1.2);
 }
 
@@ -53,7 +48,7 @@ export function skillScore(job: JobReq, ctx: ScoreContext): number {
     const n = ctx.skillProjects.get(norm(s)) ?? 0;
     if (n >= 2) return 1;
     if (n === 1) return 0.7;
-    return have.has(norm(s)) ? 0.4 : 0; // listed but unproven
+    return have.has(norm(s)) ? 0.4 : 0;
   };
   const mustHit = must.length
     ? must.reduce((a, s) => a + evidence(s), 0) / must.length

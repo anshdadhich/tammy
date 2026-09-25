@@ -1,9 +1,5 @@
 import { cheapModel, defaultOpenAIProvider } from "@/lib/matching/judge";
 
-// Lightweight LLM helpers for summary + project depth (docs/13 §1-2).
-// Always the CHEAP model (CHEAP_MODEL → JUDGE_MODEL → free default).
-// Judge (top-10 evaluation) uses JUDGE_MODEL. All return null on missing key.
-
 async function chat(system: string, user: string): Promise<string | null> {
   try {
     const provider = defaultOpenAIProvider(cheapModel());
@@ -35,7 +31,6 @@ export async function analyzeProjectDepth(p: {
     const end = text.lastIndexOf("}");
     if (start < 0 || end <= start) return null;
     const parsed = JSON.parse(text.slice(start, end + 1)) as Record<string, unknown>;
-    // Clamp/allowlist model output so prompt-injected junk can't poison ranking.
     const complexity = Math.min(10, Math.max(1, Math.round(Number(parsed.complexity_score) || 5)));
     const tech = ["low", "medium", "high", "very_high"].includes(String(parsed.technical_complexity))
       ? String(parsed.technical_complexity) : "medium";
@@ -44,6 +39,6 @@ export async function analyzeProjectDepth(p: {
     const autonomy = ["solo", "contributed", "led", "unknown"].includes(String(parsed.autonomy_level))
       ? String(parsed.autonomy_level) : "unknown";
     return { ...parsed, complexity_score: complexity, technical_complexity: tech, evidence_quality: evidence, autonomy_level: autonomy };
-  } catch { /* fall through */ }
+  } catch {  }
   return null;
 }

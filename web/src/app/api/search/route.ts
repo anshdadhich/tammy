@@ -9,11 +9,7 @@ import { blendWithJudge, scoreCandidate, type ScoreContext } from "@/lib/scoring
 import { withWideEvent } from "@/lib/observe";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-// POST /api/search { job, limit=30, deep=false }
-// Qwen fixes: group chunks BY CANDIDATE (cap 3/candidate, best-distance wins),
-// cache invalidated when candidate data changes after the cached search.
 export const POST = withWideEvent("/api/search", async (request, wev) => {
-  // Search results carry candidate contact info: employer session required.
   const viewer = getViewer(request);
   const deniedHr = requireHr(viewer);
   if (deniedHr) return deniedHr;
@@ -21,7 +17,6 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   if (deniedVerified) return deniedVerified;
   const body = await request.json().catch(() => null);
   const deep = body?.deep === true;
-  // Deep judge costs ~10 LLM calls: throttle harder than shallow search.
   const rl = rateLimit(request, {
     key: deep ? "search-deep" : "search",
     limit: deep ? 10 : 60,
@@ -70,7 +65,55 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
     deep,
   });
 
-  // Cache: same job text, 1h TTL, invalidated if any visible candidate changed since.
+  const attachProfileRows = async (target: Record<string, unknown>[]): Promise<void> => {
+    for (const r of target) {
+      r.work_experiences = [];
+      r.projects = [];
+      r.education = [];
+      r.open_source_contributions = [];
+    }
+    const ids = [...new Set(target.map((r) => String(r.id ?? "")).filter(Boolean))];
+    if (!ids.length) return;
+    try {
+      const [{ data: expRows }, { data: projRows }, { data: eduRows }, { data: ossRows }] = await Promise.all([
+        db.from("work_experiences")
+          .select("candidate_id, company_name, job_title, start_date, end_date, is_current, description, achievements, tech_stack")
+          .in("candidate_id", ids)
+          .order("start_date", { ascending: false }),
+        db.from("projects")
+          .select("candidate_id, id, title, description, problem_statement, tech_stack, role_in_project, project_link, repo_link, deployment_link, impact_summary, project_type")
+          .in("candidate_id", ids),
+        db.from("education")
+          .select("candidate_id, institution, degree, field_of_study, start_year, end_year, achievements")
+          .in("candidate_id", ids)
+          .order("start_year", { ascending: false }),
+        db.from("open_source_contributions")
+          .select("candidate_id, repo_name, repo_url, description, pr_links, tech_stack, role")
+          .in("candidate_id", ids),
+      ]);
+      const assign = (key: string, data: unknown): void => {
+        const buckets = new Map<string, Record<string, unknown>[]>();
+        for (const raw of (Array.isArray(data) ? data : []) as Record<string, unknown>[]) {
+          const cid = String(raw.candidate_id ?? "");
+          if (!cid) continue;
+          const entry = { ...raw };
+          delete entry.candidate_id;
+          const bucket = buckets.get(cid) ?? [];
+          bucket.push(entry);
+          buckets.set(cid, bucket);
+        }
+        for (const r of target) {
+          const bucket = buckets.get(String(r.id ?? ""));
+          if (bucket?.length) r[key] = bucket;
+        }
+      };
+      assign("work_experiences", expRows);
+      assign("projects", projRows);
+      assign("education", eduRows);
+      assign("open_source_contributions", ossRows);
+    } catch {  }
+  };
+
   if (!deep) {
     try {
       const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -97,9 +140,6 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
             .eq("search_id", rs.id)
             .limit(limit);
           if (cached?.length) {
-            // Flatten to the exact shape the live path returns (flat candidate
-            // fields + overall_score), so list rendering and caching behave
-            // identically on cache hits and live searches.
             const flattened: Record<string, unknown>[] = (cached as Record<string, unknown>[])
               .map((m): Record<string, unknown> | null => {
                 const mm = m as {
@@ -120,16 +160,16 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
               })
               .filter((r): r is Record<string, unknown> => !!r?.id);
             if (flattened.length) {
+              await attachProfileRows(flattened);
               wev.add({ cached: true, result_count: flattened.length, search_id: rs.id });
               return Response.json({ results: flattened, queryText, searchId: rs.id, cached: true });
             }
           }
         }
       }
-    } catch { /* cache miss — run live */ }
+    } catch {  }
   }
 
-  // Retrieve up to 200 chunks, then GROUP BY CANDIDATE (cap 3 each, best distance wins).
   type Chunk = { candidate_id: string; distance?: number; content_text?: string; chunk_type?: string };
   let chunks: Chunk[] = [];
   try {
@@ -139,7 +179,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       match_count: 200,
     });
     if (!error && data) chunks = data as Chunk[];
-  } catch { /* fall back below */ }
+  } catch {  }
 
   const CAND_COLS = "id, full_name, headline, domain, total_experience_years, min_salary, salary_frequency, contact_email, contact_phone, linkedin_url, github_url, portfolio_url, resume_url, photo_url, profile_strength, remote_preference, location_city, availability_status";
   let rows: Record<string, unknown>[] = [];
@@ -150,7 +190,6 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       const g = byCand.get(c.candidate_id) ?? { best: Infinity, hits: [] };
       const d = typeof c.distance === "number" ? c.distance : Infinity;
       if (d < g.best) g.best = d;
-      // One candidate can't dominate via chunk count: keep its 3 nearest chunks.
       g.hits.push(c);
       g.hits.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
       if (g.hits.length > 3) g.hits.length = 3;
@@ -172,7 +211,6 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       }
       rows = grouped;
     }
-    // Live transparent scoring: distance is only one of five votes.
     try {
       const scoreIds = rows.map((r) => String(r.id));
       const [{ data: skillRows }, { data: projRows }] = await Promise.all([
@@ -237,7 +275,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
           };
         })
         .sort((a, b) => (Number(b.overall_score) || 0) - (Number(a.overall_score) || 0));
-    } catch { /* scoring never blocks results */ }
+    } catch {  }
   }
   if (!rows.length) {
     const { data } = await db
@@ -248,12 +286,9 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       .limit(limit);
     rows = (data ?? []) as Record<string, unknown>[];
   }
-  // HR sees only channels the candidate checked.
   rows = rows.map((r) => applyContactPrefs(r as Parameters<typeof applyContactPrefs>[0]) as unknown as Record<string, unknown>);
   wev.add({ result_count: rows.length, chunk_hits: chunks.length });
 
-  // Persist search + per-candidate matches (best-effort).
-  // Skip null-score rows so the cache table doesn't fill with unscored junk.
   let searchId: string | null = null;
   try {
     const { data: s } = await db.from("searches").insert({
@@ -262,7 +297,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       result_count: rows.length,
     }).select("id").single();
     searchId = (s as { id: string } | null)?.id ?? null;
-  } catch { /* ignore */ }
+  } catch {  }
   if (searchId && !deep) {
     try {
       const scored = rows.filter((r) => typeof r.overall_score === "number");
@@ -277,11 +312,13 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
           })),
         );
       }
-    } catch { /* cache seed optional */ }
+    } catch {  }
   }
-  if (!deep) return Response.json({ results: rows, queryText, searchId });
+  if (!deep) {
+    await attachProfileRows(rows);
+    return Response.json({ results: rows, queryText, searchId });
+  }
 
-  // Deep: judge top-10 candidates (one card per candidate, never per chunk).
   try {
     const top = rows.slice(0, 10);
     const inputs: JudgeInput[] = await Promise.all(top.map(async (r) => {
@@ -313,12 +350,14 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
             };
           }),
         );
-      } catch { /* ignore */ }
+      } catch {  }
     }
     wev.add({ judged: merged.length, deep: true });
+    await attachProfileRows(merged);
     return Response.json({ results: merged, queryText, searchId, deep: true });
   } catch {
     console.error("[search] deep judge failed");
+    await attachProfileRows(rows);
     return Response.json({ results: rows, queryText, searchId, deepError: "Deep read unavailable. Showing rule-ranked results." });
   }
 });

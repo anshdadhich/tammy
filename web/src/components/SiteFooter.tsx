@@ -1,11 +1,6 @@
 import Link from "next/link";
 import DitherEffect from "@/components/DitherEffect";
 
-/**
- * Blue-dither footer card, shared by every route. In-page anchors are
- * absolute (/#candidates) so they scroll to the landing sections from
- * any page.
- */
 export default function SiteFooter() {
   return (
     <footer id="start" className="footer-simple">

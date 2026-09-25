@@ -2,15 +2,6 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getViewer, requireHr } from "@/lib/api-auth";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-// POST /api/candidates/batch { ids: string[] }
-// Returns lightweight summary cards for the dashboard sidebar. One query
-// replaces the previous ~30 sequential /api/candidates?id= fetches, which
-// each ran ~10 DB queries (≈300 round-trips per dashboard load).
-//
-// Access rules mirror GET /api/candidates:
-//   - HR: any visible candidate
-//   - Candidate owner: rows matching their session id
-//   - Anonymous: not allowed (summaries expose profile fields)
 export async function POST(request: Request) {
   const rl = rateLimit(request, { key: "candidates-batch", limit: 60, windowMs: 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);

@@ -1,24 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabase";
 
-/**
- * Demo-phase API auth — cookie-based, server-verified.
- *
- * The cookie readers below are kept for API compatibility: identity used
- * to be mirrored into cookies (tammy_hr / tammy_owner) by the now-removed
- * login UI, so route handlers can verify ownership server-side from the
- * cookie alone. (The login pages that wrote these cookies were deleted;
- * only the landing page + API remain.)
- *
- * Trust model (demo):
- *  - tammy_hr   → employer session; can search, shortlist, contact, list.
- *  - tammy_owner → candidate session; can PUT/PATCH/DELETE only their own
- *                 candidate row (id must match the session's candidate id).
- *  - no cookie  → anonymous; GETs of public profiles are PII-stripped.
- *
- * When real Supabase Auth lands, swap the readers below for verified
- * JWT/session lookups — every call site already goes through this module.
- */
-
 export type Viewer =
   | { kind: "hr"; name: string; email: string }
   | { kind: "owner"; id: string; email: string }
@@ -44,7 +25,6 @@ export function getViewer(req: Request): Viewer {
           return { kind: "owner", id: o.id, email: o.email.toLowerCase() };
         }
       } catch {
-        /* fall through */
       }
     }
 
@@ -63,11 +43,9 @@ export function getViewer(req: Request): Viewer {
           };
         }
       } catch {
-        /* fall through */
       }
     }
   } catch {
-    /* anonymous */
   }
   return { kind: "anon" };
 }
@@ -99,12 +77,6 @@ export function requireOwnerOf(
   );
 }
 
-/**
- * Full ownership guard for destructive writes (PUT/PATCH/DELETE):
- * owner session + id match + server-side email cross-check against
- * the candidates row (the cookie is client-mirrored, so verify it).
- * Returns a Response to send, or null when the write may proceed.
- */
 export async function guardOwner(
   request: Request,
   candidateId: string,
@@ -129,12 +101,6 @@ export async function guardOwner(
   return null;
 }
 
-/**
- * Anonymous viewer: strip every contact channel the candidate has not
- * explicitly opted in (show_* === true). Opted-in channels stay visible —
- * the site's open-contact promise — but private activity records never
- * leave the server (handled in bundleForViewer).
- */
 const CONTACT_CHANNELS = [
   ["show_email", "contact_email"],
   ["show_phone", "contact_phone"],
@@ -158,11 +124,6 @@ export function stripCandidatePii<T extends Record<string, unknown>>(
   return out as T;
 }
 
-/**
- * Full bundle for the owner or an HR viewer. Anonymous visitors get the
- * candidate row PII-stripped, and contact_log / matches / shortlists
- * replaced with empty arrays (they are private activity records).
- */
 export function bundleForViewer(
   viewer: Viewer,
   candidate: Record<string, unknown> | null,
@@ -196,11 +157,6 @@ export function bundleForViewer(
   };
 }
 
-/**
- * Server-side ownership verification against the DB. The tammy_owner
- * cookie is client-mirrored, so cross-check email against the candidate
- * row before destructive writes. Returns the candidate id when verified.
- */
 export async function verifyOwnerEmail(
   candidateId: string,
   email: string,
@@ -216,13 +172,6 @@ export async function verifyOwnerEmail(
   return row.contact_email.toLowerCase() === email.toLowerCase();
 }
 
-/**
- * HR verification against the employers table (opt-in strict mode).
- * Demo phase: the (now-deleted) /hire/login page minted sessions without a
- * DB row, so strict mode is off by default. Set STRICT_HR_VERIFY=1 to
- * require a verified employer row matching the session email (company_email
- * or linked users.email). Returns true when the HR session may proceed.
- */
 export async function verifyHrEmail(email: string): Promise<boolean> {
   if (process.env.STRICT_HR_VERIFY !== "1") return true;
   try {
@@ -241,7 +190,6 @@ export async function verifyHrEmail(email: string): Promise<boolean> {
   }
 }
 
-/** HR gate with optional strict DB verification. */
 export async function requireVerifiedHr(viewer: Viewer): Promise<Response | null> {
   const denied = requireHr(viewer);
   if (denied) return denied;

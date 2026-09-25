@@ -19,24 +19,28 @@ import { GET } from "@/app/api/candidates/route";
 import { getViewer } from "@/lib/api-auth";
 import { driveImageUrl, isDriveLink } from "@/lib/drive";
 
-// --- types (response bundle keys mirror the GET call site) -------------------
-
 type Cand = {
   id: string;
+  user_id?: string | null;
   full_name?: string | null;
   headline?: string | null;
   domain?: string | null;
   current_position?: string | null;
   total_experience_years?: number | null;
+  education_level?: string | null;
   location_city?: string | null;
+  location_country?: string | null;
   remote_preference?: string | null;
   availability_status?: string | null;
   min_salary?: number | null;
   salary_currency?: string | null;
   salary_frequency?: string | null;
   salary_negotiable?: boolean | null;
+  notice_period?: string | null;
   open_to_relocation?: boolean | null;
   visibility_status?: string | null;
+  consent_status?: string | null;
+  profile_strength?: string | number | null;
   contact_email?: string | null;
   contact_phone?: string | null;
   linkedin_url?: string | null;
@@ -44,6 +48,9 @@ type Cand = {
   portfolio_url?: string | null;
   resume_url?: string | null;
   photo_url?: string | null;
+  freshness_updated_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 type Prof = { summary_markdown?: string | null; updated_at?: string | null } | null;
 type Proj = {
@@ -75,11 +82,13 @@ type Edu = {
   field_of_study?: string | null;
   start_year?: number | null;
   end_year?: number | null;
+  achievements?: string | null;
 };
 type Oss = {
   repo_name?: string | null;
   repo_url?: string | null;
   description?: string | null;
+  pr_links?: string[] | null;
   tech_stack?: string[] | null;
   role?: string | null;
 };
@@ -107,9 +116,6 @@ type Bundle = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// The dossier reads exactly like GET /api/candidates?id= — called directly
-// (no HTTP self-fetch, so no port/env dependency). Visitor cookie + IP headers
-// forward so viewer scoping and rate-limit keying behave identically.
 const load = cache(
   async (
     id: string,
@@ -159,14 +165,12 @@ export async function generateMetadata({
   };
 }
 
-// --- formatting --------------------------------------------------------------
-
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function fmtDate(v: unknown): string {
   const s = String(v ?? "").trim();
   if (!s) return "";
-  const m = s.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?$/);
+  const m = s.match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/);
   if (!m) return s.length > 10 ? s.slice(0, 10) : s;
   if (m[2]) {
     const idx = Number(m[2]) - 1;
@@ -198,7 +202,6 @@ function resolvePhoto(u?: string | null): string | null {
   try {
     if (isDriveLink(u)) return driveImageUrl(u) || u;
   } catch {
-    /* fall through to raw url */
   }
   return u;
 }
@@ -215,7 +218,53 @@ function salaryLine(c: Cand): string | null {
   return `${cur} ${c.min_salary.toLocaleString()} / ${freq}${c.salary_negotiable === false ? "" : " (negotiable)"}`;
 }
 
-// --- minimal, XSS-safe markdown (text nodes only) ----------------------------
+const isHttp = (v: string | null | undefined): boolean =>
+  typeof v === "string" && v.trim().toLowerCase().startsWith("http");
+
+type Fact = { k: string; v: string; href?: string };
+
+function buildFacts(c: Cand, profile: Prof): Fact[] {
+  const out: Fact[] = [];
+  const add = (k: string, v: unknown, href?: (s: string) => string | undefined) => {
+    if (v === null || v === undefined) return;
+    const s = typeof v === "string" ? v.trim() : String(v);
+    if (!s) return;
+    out.push(href ? { k, v: s, href: href(s) } : { k, v: s });
+  };
+  add("Full name", c.full_name);
+  add("Headline", c.headline);
+  add("Domain", c.domain);
+  add("Current position", c.current_position);
+  add("Experience (years)", c.total_experience_years);
+  add("Education level", c.education_level);
+  add("City", c.location_city);
+  add("Country", c.location_country);
+  add("Remote preference", c.remote_preference);
+  add("Availability", c.availability_status);
+  add("Notice period", c.notice_period);
+  add("Open to relocation", c.open_to_relocation);
+  add("Minimum salary", c.min_salary);
+  add("Salary currency", c.salary_currency);
+  add("Salary frequency", c.salary_frequency);
+  add("Salary negotiable", c.salary_negotiable);
+  add("Email", c.contact_email, (s) => `mailto:${s}`);
+  add("Phone", c.contact_phone, (s) => `tel:${s}`);
+  add("LinkedIn", c.linkedin_url, (s) => (isHttp(s) ? s : undefined));
+  add("GitHub", c.github_url, (s) => (isHttp(s) ? s : undefined));
+  add("Portfolio", c.portfolio_url, (s) => (isHttp(s) ? s : undefined));
+  add("Resume", c.resume_url, (s) => (isHttp(s) ? s : undefined));
+  add("Photo", c.photo_url, (s) => (isHttp(s) ? s : undefined));
+  add("Visibility", c.visibility_status);
+  add("Consent", c.consent_status);
+  add("Profile strength", c.profile_strength);
+  add("Summary updated", profile?.updated_at);
+  add("Profile refreshed", c.freshness_updated_at);
+  add("Record created", c.created_at);
+  add("Record updated", c.updated_at);
+  add("Candidate id", c.id);
+  add("User id", c.user_id);
+  return out;
+}
 
 type MdBlock =
   | { type: "h"; level: number; text: string }
@@ -325,20 +374,13 @@ function Markdownish({ text }: { text: string }) {
   );
 }
 
-// --- shared pieces -----------------------------------------------------------
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="mt-10 first:mt-0">
-      <h2 className="text-[clamp(1.4rem,2.4vw,1.85rem)] font-semibold tracking-[-0.02em] text-ink">
-        {title}
-      </h2>
+    <section className="mt-9 first:mt-0 pt-8 border-t border-line first:border-0 first:pt-0">
+      <div className="flex items-center gap-3">
+        <h2 className="sq-overline">{title}</h2>
+        <span className="h-px flex-1 bg-line" aria-hidden="true" />
+      </div>
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -348,7 +390,7 @@ function Chiplist({ items }: { items?: (string | null | undefined)[] | null }) {
   const clean = (items ?? []).filter((x): x is string => !!x && !!x.trim());
   if (!clean.length) return null;
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="mt-3 flex flex-wrap gap-2">
       {clean.map((t, i) => (
         <span className="tag" key={`${t}-${i}`}>
           {t}
@@ -376,7 +418,7 @@ function DepthBadges({ depth }: { depth?: Depth | null }) {
   }
   if (!badges.length) return null;
   return (
-    <div className="flex flex-wrap gap-2 mt-3">
+    <div className="mt-3 flex flex-wrap gap-2">
       {badges.map((b) => (
         <span className="tag font-mono text-[11.5px]" key={b}>
           {b}
@@ -386,7 +428,162 @@ function DepthBadges({ depth }: { depth?: Depth | null }) {
   );
 }
 
-// --- page --------------------------------------------------------------------
+function Entry({ children }: { children: ReactNode }) {
+  return (
+    <div className="border-b border-line py-4 first:pt-0 last:border-b-0 last:pb-0">
+      {children}
+    </div>
+  );
+}
+
+function EntryHead({
+  title,
+  meta,
+  mono,
+}: {
+  title: string;
+  meta?: string | null;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <h3
+        className={`text-[15px] font-semibold text-ink tracking-[-0.01em]${mono ? " font-mono" : ""}`}
+      >
+        {title}
+      </h3>
+      {meta ? <p className="font-mono text-[12.5px] text-muted">{meta}</p> : null}
+    </div>
+  );
+}
+
+function Body({ label, value }: { label: string; value?: string | null }) {
+  const v = (value ?? "").trim();
+  if (!v) return null;
+  return (
+    <p className="mt-2 text-[13.5px] leading-[1.65] text-body whitespace-pre-line">
+      <span className="font-semibold text-ink">{label} — </span>
+      {v}
+    </p>
+  );
+}
+
+function Lines({ label, value }: { label: string; value?: string | null }) {
+  const items = (value ?? "")
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!items.length) return null;
+  return (
+    <div className="mt-2">
+      <p className="text-[13.5px] font-semibold text-ink">{label}</p>
+      <ul className="list-disc pl-5 mt-1 grid gap-1.5 text-[13.5px] leading-[1.6] text-body">
+        {items.map((a, i) => (
+          <li key={i}>{a}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function LinkRow({ items }: { items: (string | null | undefined)[] }) {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const raw of items) {
+    const href = (raw ?? "").trim();
+    if (!href || seen.has(href)) continue;
+    seen.add(href);
+    list.push(href);
+  }
+  if (!list.length) return null;
+  return (
+    <div className="mt-2.5 flex flex-col gap-1.5 text-[12.5px]">
+      {list.map((href) => (
+        <a
+          key={href}
+          href={href}
+          className="underline decoration-muted underline-offset-2 transition-colors hover:text-brand-text break-all"
+          target={isHttp(href) ? "_blank" : undefined}
+          rel={isHttp(href) ? "noopener noreferrer" : undefined}
+        >
+          {href}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+type TimelineLine = { kind: "contact" | "shortlist" | "search"; text: string };
+type TimelineDay = { date: string; lines: TimelineLine[] };
+
+function buildTimeline(bundle: Bundle): TimelineDay[] {
+  const days = new Map<string, TimelineLine[]>();
+  const put = (date: string, line: TimelineLine) => {
+    if (!date) return;
+    let arr = days.get(date);
+    if (!arr) {
+      arr = [];
+      days.set(date, arr);
+    }
+    if (arr.some((l) => l.kind === line.kind && l.text === line.text)) return;
+    arr.push(line);
+  };
+
+  for (const v of bundle.contact_log) {
+    const channel = (v.channel ?? "").trim();
+    const label = channel ? `Contacted via ${channel}` : "Contacted";
+    put(fmtDay(v.created_at), {
+      kind: "contact",
+      text: v.job_id ? `${label} · job` : label,
+    });
+  }
+
+  for (const s of bundle.shortlists) {
+    const status = (s.status ?? "").trim();
+    put(fmtDay(s.created_at), {
+      kind: "shortlist",
+      text: status ? `Shortlisted · ${status}` : "Shortlisted",
+    });
+  }
+
+  const perDay = new Map<string, { n: number; min: number | null; max: number | null }>();
+  for (const m of bundle.matches) {
+    const date = fmtDay(m.created_at);
+    if (!date) continue;
+    const cur = perDay.get(date) ?? { n: 0, min: null, max: null };
+    cur.n += 1;
+    if (typeof m.score === "number" && Number.isFinite(m.score)) {
+      const s = Math.round(m.score);
+      cur.min = cur.min === null ? s : Math.min(cur.min, s);
+      cur.max = cur.max === null ? s : Math.max(cur.max, s);
+    }
+    perDay.set(date, cur);
+  }
+  for (const [date, agg] of perDay) {
+    let score = "";
+    if (agg.min !== null && agg.max !== null) {
+      score = agg.min === agg.max ? ` · score ${agg.min}` : ` · scores ${agg.min}–${agg.max}`;
+    }
+    put(date, {
+      kind: "search",
+      text: `Surfaced in ${agg.n} search${agg.n === 1 ? "" : "es"}${score}`,
+    });
+  }
+
+  const order: Record<TimelineLine["kind"], number> = { contact: 0, shortlist: 1, search: 2 };
+  return [...days.entries()]
+    .map(([date, lines]) => ({
+      date,
+      lines: lines.sort((a, b) => order[a.kind] - order[b.kind]),
+    }))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+const LINE_KIND_CLASS: Record<TimelineLine["kind"], string> = {
+  contact: "text-ink font-medium",
+  shortlist: "text-body",
+  search: "text-muted",
+};
 
 export default async function TalentPage({
   params,
@@ -400,11 +597,10 @@ export default async function TalentPage({
   if (status === 404 || status === 400) notFound();
 
   if (status !== 200 || !bundle) {
-    // 429 or transient: honest soft state instead of a false "not found".
     return (
       <PageShell>
         <section className="pt-24 pb-24">
-          <div className="max-w-[1160px] mx-auto px-6 max-w-xl">
+          <div className="max-w-xl mx-auto px-6">
             <div className="rounded-2xl bg-surface shadow-soft-md p-8">
               <h1 className="text-[26px] font-semibold text-ink tracking-[-0.02em]">
                 One moment.
@@ -432,6 +628,7 @@ export default async function TalentPage({
   const salary = salaryLine(c);
   const availability = c.availability_status ? AVAIL[c.availability_status] : null;
   const mode = c.remote_preference ? MODE[c.remote_preference] : null;
+  const facts = buildFacts(c, bundle.profile);
 
   const skillEntries = bundle.skills.flatMap((s) => {
     const embedded = Array.isArray(s.skills) ? s.skills : s.skills ? [s.skills] : [];
@@ -516,10 +713,10 @@ export default async function TalentPage({
     bundle.contact_log.length > 0 ||
     bundle.matches.length > 0 ||
     bundle.shortlists.length > 0;
+  const timeline = hasPrivate ? buildTimeline(bundle) : [];
 
   return (
     <PageShell>
-      {/* header */}
       <section className="pt-20 lg:pt-28 pb-8">
         <div className="max-w-[1160px] mx-auto px-6">
           <div
@@ -578,160 +775,116 @@ export default async function TalentPage({
         </div>
       </section>
 
-      {/* body */}
       <section className="pb-24">
         <div className="max-w-[1160px] mx-auto px-6">
-          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-            <div>
-              <Section title="About">
-                {summary ? (
-                  <Markdownish text={summary} />
-                ) : (
-                  <div className="empty-note">
-                    The summary is still being written — background processing
-                    usually finishes within a couple of minutes. The raw record
-                    below is complete either way.
-                  </div>
-                )}
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+            <div className="min-w-0">
+              <Section title="Profile facts">
+                <dl className="grid gap-x-10 lg:grid-cols-2 sq-facts">
+                  {facts.map((f) => (
+                    <div className="sq-detail-row" key={f.k}>
+                      <dt>{f.k}</dt>
+                      <dd>
+                        {f.href ? (
+                          <a
+                            href={f.href}
+                            className="underline decoration-muted underline-offset-2 transition-colors hover:text-brand-text"
+                            target={f.href.startsWith("http") ? "_blank" : undefined}
+                            rel={
+                              f.href.startsWith("http") ? "noopener noreferrer" : undefined
+                            }
+                          >
+                            {f.v}
+                          </a>
+                        ) : (
+                          f.v
+                        )}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               </Section>
 
-              {bundle.projects.length ? (
-                <Section title="Projects">
-                  <div className="grid gap-5">
-                    {bundle.projects.map((p, i) => (
-                      <article
-                        className="rounded-2xl bg-surface shadow-soft-md p-5 sm:p-6"
-                        key={p.id ?? `proj-${i}`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div>
-                            <h3 className="text-[16.5px] font-semibold text-ink tracking-[-0.01em]">
-                              {p.title ?? "Project"}
-                            </h3>
-                            <p className="text-[13px] text-muted mt-0.5">
-                              {[p.role_in_project, p.project_type?.replace(/_/g, " ")]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            {p.project_link ? (
-                              <a
-                                className="tag hover:text-brand-text transition-colors"
-                                href={p.project_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                Live <ExternalLink size={12} aria-hidden="true" />
-                              </a>
-                            ) : null}
-                            {p.repo_link ? (
-                              <a
-                                className="tag hover:text-brand-text transition-colors"
-                                href={p.repo_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                Repo <ExternalLink size={12} aria-hidden="true" />
-                              </a>
-                            ) : null}
-                            {p.deployment_link && p.deployment_link !== p.project_link ? (
-                              <a
-                                className="tag hover:text-brand-text transition-colors"
-                                href={p.deployment_link}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                Demo <ExternalLink size={12} aria-hidden="true" />
-                              </a>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        {p.description ? (
-                          <p className="text-[14.5px] leading-[1.6] text-body mt-3">
-                            {p.description}
-                          </p>
-                        ) : null}
-                        {p.problem_statement ? (
-                          <p className="text-[14px] leading-[1.6] text-muted mt-2">
-                            <span className="font-semibold text-body">Problem — </span>
-                            {p.problem_statement}
-                          </p>
-                        ) : null}
-                        {p.impact_summary ? (
-                          <div className="text-[14.5px] leading-[1.6] text-body mt-3 grid gap-2 pt-3 border-t border-line">
-                            {p.impact_summary
-                              .split(/\n{2,}|\n/)
-                              .map((para) => para.trim())
-                              .filter(Boolean)
-                              .map((para, j) => (
-                                <p key={j}>{para}</p>
-                              ))}
-                          </div>
-                        ) : null}
-
-                        <div className="mt-3">
-                          <Chiplist items={p.tech_stack} />
-                        </div>
-                        <DepthBadges depth={p.id ? bundle.depths[p.id] : null} />
-                      </article>
-                    ))}
-                  </div>
-                </Section>
-              ) : null}
-
               {bundle.experiences.length ? (
-                <Section title="Experience">
-                  <div className="grid gap-5">
+                <Section title="Work experience">
+                  <div>
                     {bundle.experiences.map((x, i) => {
                       const dates = [
                         fmtDate(x.start_date),
                         x.is_current ? "Present" : fmtDate(x.end_date),
                       ]
                         .filter(Boolean)
-                        .join(" — ");
-                      const achievements = (x.achievements ?? "")
-                        .split(/\n+/)
-                        .map((a) => a.trim())
-                        .filter(Boolean);
+                        .join(" – ");
                       return (
-                        <article
-                          className="rounded-2xl bg-surface shadow-soft-md p-5 sm:p-6"
-                          key={`exp-${i}`}
-                        >
-                          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                            <h3 className="text-[16px] font-semibold text-ink tracking-[-0.01em]">
-                              {x.job_title ?? "Role"}
-                              {x.company_name ? (
-                                <span className="text-muted font-normal">
-                                  {" "}
-                                  · {x.company_name}
-                                </span>
-                              ) : null}
-                            </h3>
-                            {dates ? (
-                              <span className="font-mono text-[12.5px] text-muted">
-                                {dates}
-                              </span>
-                            ) : null}
-                          </div>
-                          {x.description ? (
-                            <p className="text-[14.5px] leading-[1.6] text-body mt-2.5">
-                              {x.description}
+                        <Entry key={`exp-${i}`}>
+                          <EntryHead
+                            title={x.job_title ?? x.company_name ?? "Role"}
+                            meta={dates || null}
+                          />
+                          {x.job_title && x.company_name ? (
+                            <p className="mt-0.5 text-[13.5px] text-body">
+                              {x.company_name}
                             </p>
                           ) : null}
-                          {achievements.length ? (
-                            <ul className="list-disc pl-5 mt-2.5 grid gap-1.5 text-[14.5px] leading-[1.6] text-body">
-                              {achievements.map((a, j) => (
-                                <li key={j}>{a}</li>
-                              ))}
-                            </ul>
+                          <Body label="Description" value={x.description} />
+                          <Lines label="Achievements" value={x.achievements} />
+                          <Chiplist items={x.tech_stack} />
+                        </Entry>
+                      );
+                    })}
+                  </div>
+                </Section>
+              ) : null}
+
+              {bundle.projects.length ? (
+                <Section title="Projects">
+                  <div>
+                    {bundle.projects.map((p, i) => (
+                      <Entry key={p.id ?? `proj-${i}`}>
+                        <EntryHead
+                          title={p.title ?? "Project"}
+                          meta={[
+                            p.role_in_project,
+                            p.project_type,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || null}
+                        />
+                        <Body label="Problem" value={p.problem_statement} />
+                        <Body label="Description" value={p.description} />
+                        <Body label="Impact" value={p.impact_summary} />
+                        <Chiplist items={p.tech_stack} />
+                        <LinkRow
+                          items={[p.project_link, p.repo_link, p.deployment_link]}
+                        />
+                        <DepthBadges depth={p.id ? bundle.depths[p.id] : null} />
+                      </Entry>
+                    ))}
+                  </div>
+                </Section>
+              ) : null}
+
+              {bundle.education.length ? (
+                <Section title="Education">
+                  <div>
+                    {bundle.education.map((e, i) => {
+                      const years = [e.start_year, e.end_year]
+                        .filter((y) => y !== null && y !== undefined)
+                        .join(" – ");
+                      const degree = [e.degree, e.field_of_study]
+                        .filter(Boolean)
+                        .join(", ");
+                      return (
+                        <Entry key={`edu-${i}`}>
+                          <EntryHead
+                            title={e.institution ?? "Education"}
+                            meta={years || null}
+                          />
+                          {degree ? (
+                            <p className="mt-0.5 text-[13.5px] text-body">{degree}</p>
                           ) : null}
-                          <div className="mt-3">
-                            <Chiplist items={x.tech_stack} />
-                          </div>
-                        </article>
+                          <Lines label="Achievements" value={e.achievements} />
+                        </Entry>
                       );
                     })}
                   </div>
@@ -740,191 +893,99 @@ export default async function TalentPage({
 
               {bundle.oss.length ? (
                 <Section title="Open source">
-                  <div className="grid gap-4">
+                  <div>
                     {bundle.oss.map((o, i) => (
-                      <article
-                        className="rounded-2xl bg-surface shadow-soft-md p-5 sm:p-6"
-                        key={`oss-${i}`}
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <h3 className="text-[15.5px] font-semibold text-ink font-mono">
-                            {o.repo_name ?? "repo"}
-                            {o.role ? (
-                              <span className="text-muted font-sans font-normal text-[13px]">
-                                {" "}
-                                · {o.role}
-                              </span>
-                            ) : null}
-                          </h3>
-                          {o.repo_url ? (
-                            <a
-                              className="tag hover:text-brand-text transition-colors"
-                              href={o.repo_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              Open <ExternalLink size={12} aria-hidden="true" />
-                            </a>
-                          ) : null}
-                        </div>
-                        {o.description ? (
-                          <p className="text-[14.5px] leading-[1.6] text-body mt-2">
-                            {o.description}
-                          </p>
-                        ) : null}
-                        <div className="mt-3">
-                          <Chiplist items={o.tech_stack} />
-                        </div>
-                      </article>
+                      <Entry key={`oss-${i}`}>
+                        <EntryHead
+                          title={o.repo_name ?? "Repository"}
+                          meta={o.role || null}
+                          mono
+                        />
+                        <Body label="Description" value={o.description} />
+                        <Chiplist items={o.tech_stack} />
+                        <LinkRow items={[o.repo_url, ...(o.pr_links ?? [])]} />
+                      </Entry>
                     ))}
                   </div>
                 </Section>
               ) : null}
 
-              {bundle.education.length ? (
-                <Section title="Education">
-                  <div className="grid gap-4">
-                    {bundle.education.map((e, i) => {
-                      const years = [e.start_year, e.end_year].filter(Boolean).join(" – ");
+              {skillEntries.length ? (
+                <Section title="Skills">
+                  <div className="flex flex-wrap gap-2">
+                    {skillEntries.map((s, i) => {
+                      const meta = [
+                        typeof s.years === "number" ? `${s.years} yrs` : null,
+                        s.level,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ");
                       return (
-                        <div
-                          className="rounded-2xl bg-surface shadow-soft-md p-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"
-                          key={`edu-${i}`}
-                        >
-                          <div>
-                            <p className="text-[15.5px] font-semibold text-ink">
-                              {[e.degree, e.field_of_study].filter(Boolean).join(", ") ||
-                                e.institution}
-                            </p>
-                            <p className="text-[14px] text-muted mt-0.5">
-                              {e.institution}
-                            </p>
-                          </div>
-                          {years ? (
-                            <span className="font-mono text-[12.5px] text-muted">
-                              {years}
-                            </span>
+                        <span className="tag" key={`${s.name}-${i}`}>
+                          {s.name}
+                          {meta ? (
+                            <span className="text-muted font-normal">· {meta}</span>
                           ) : null}
-                        </div>
+                        </span>
                       );
                     })}
                   </div>
                 </Section>
               ) : null}
 
+              {summary ? (
+                <Section title="Summary">
+                  <Markdownish text={summary} />
+                </Section>
+              ) : null}
+
               {!summary && !hasAnyEvidence ? (
-                <div className="empty-note">
+                <div className="empty-note mt-8">
                   This record is still being assembled — summary, skills, and the
                   search embedding fill in as background processing completes.
                 </div>
               ) : null}
             </div>
 
-            {/* aside */}
             <aside className="grid gap-5 lg:sticky lg:top-24">
-              {skillEntries.length ? (
-                <div className="rounded-2xl bg-surface shadow-soft-md p-6">
-                  <h3 className="text-[15px] font-semibold text-ink">Skills</h3>
-                  <div className="flex flex-wrap gap-2 mt-3.5">
-                    {skillEntries.map((s) => (
-                      <span
-                        className="tag"
-                        key={s.name}
-                        title={[
-                          s.level ? `Proficiency: ${s.level}` : null,
-                          typeof s.years === "number" ? `${s.years} yrs` : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ") || undefined}
-                      >
-                        {s.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <div className="rounded-2xl bg-surface shadow-soft-md p-6">
-                <h3 className="text-[15px] font-semibold text-ink">At a glance</h3>
-                <dl className="grid gap-3 mt-3.5 text-[14px]">
-                  {[
-                    ["Work mode", mode],
-                    ["Availability", availability],
-                    ["Expectation", salary],
-                    [
-                      "Relocation",
-                      typeof c.open_to_relocation === "boolean"
-                        ? c.open_to_relocation
-                          ? "Open to relocating"
-                          : "Not relocating"
-                        : null,
-                    ],
-                    ["Based in", c.location_city ?? null],
-                  ]
-                    .filter(([, v]) => !!v)
-                    .map(([k, v]) => (
-                      <div
-                        className="flex items-baseline justify-between gap-3 border-b border-line last:border-0 pb-3 last:pb-0"
-                        key={k}
-                      >
-                        <dt className="text-muted">{k}</dt>
-                        <dd className="text-ink font-medium text-right">{v}</dd>
-                      </div>
-                    ))}
-                </dl>
-              </div>
-
               {hasPrivate ? (
-                <div className="rounded-2xl bg-surface shadow-soft-md p-6">
+                <section className="rounded-2xl bg-surface shadow-soft-md p-6">
                   <div className="flex items-center gap-2">
                     <span
                       className="w-2 h-2 rounded-full"
                       style={{ background: "var(--warn)" }}
                       aria-hidden="true"
                     />
-                    <h3 className="text-[15px] font-semibold text-ink">
-                      Private activity
-                    </h3>
+                    <h2 className="sq-overline">Private activity</h2>
                   </div>
-                  <p className="field-hint mt-1">
+                  <p className="field-hint mt-1.5">
                     Visible only to this profile&apos;s owner and signed-in
-                    hiring teams.
+                    hiring teams. Search appearances are grouped per day;
+                    contacts and shortlists are deduped per day.
                   </p>
-                  <ul className="grid gap-2.5 mt-3.5 text-[13.5px] leading-[1.5] text-body">
-                    {bundle.shortlists.map((s) => (
-                      <li key={`sl-${s.id}`} className="flex justify-between gap-3">
-                        <span>Shortlisted{ s.status ? ` · ${s.status}` : ""}</span>
-                        <span className="font-mono text-[12px] text-muted flex-none">
-                          {fmtDay(s.created_at)}
+                  <ol className="grid gap-2.5 mt-3.5 text-[13.5px] leading-[1.5]">
+                    {timeline.map((day) => (
+                      <li
+                        key={day.date}
+                        className="flex items-start justify-between gap-3 border-b border-line pb-2.5 last:border-0 last:pb-0"
+                      >
+                        <span className="grid gap-1 min-w-0">
+                          {day.lines.map((l, i) => (
+                            <span key={i} className={LINE_KIND_CLASS[l.kind]}>
+                              {l.text}
+                            </span>
+                          ))}
                         </span>
+                        <time
+                          dateTime={day.date}
+                          className="font-mono text-[12px] text-muted flex-none"
+                        >
+                          {day.date}
+                        </time>
                       </li>
                     ))}
-                    {bundle.matches.map((m) => (
-                      <li key={`m-${m.id}`} className="flex justify-between gap-3">
-                        <span>
-                          Surfaced in a search
-                          {typeof m.score === "number"
-                            ? ` · score ${Math.round(m.score)}`
-                            : ""}
-                        </span>
-                        <span className="font-mono text-[12px] text-muted flex-none">
-                          {fmtDay(m.created_at)}
-                        </span>
-                      </li>
-                    ))}
-                    {bundle.contact_log.map((v) => (
-                      <li key={`v-${v.id}`} className="flex justify-between gap-3">
-                        <span>
-                          {v.channel ? `Contacted via ${v.channel}` : "Contacted"}
-                          {v.job_id ? " · job" : ""}
-                        </span>
-                        <span className="font-mono text-[12px] text-muted flex-none">
-                          {fmtDay(v.created_at)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                  </ol>
+                </section>
               ) : null}
 
               <div className="rounded-2xl bg-surface shadow-soft-md p-6">

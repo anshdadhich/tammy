@@ -8,7 +8,6 @@ interface ProfileSubmittedData {
   candidateId: string;
 }
 
-// Background pipeline: normalize -> chunks -> embed -> active.
 export const processProfile = inngest.createFunction(
   {
     id: "process-profile",
@@ -77,7 +76,6 @@ export const processProfile = inngest.createFunction(
           metadata_json: { project_id: p.id, technologies: p.tech_stack ?? [] },
         })),
       ];
-      // Skip empties (e.g. "0y") so Voyage isn't paid for blank vectors.
       return base.filter((c) => c.content_text.replace(/\W+/g, "").length > 10);
     });
 
@@ -102,7 +100,6 @@ export const processProfile = inngest.createFunction(
           summary_json: summary.json,
         }, { onConflict: "candidate_id" });
       }
-      // Concurrent depth (max 4 at once) instead of sequential per-project calls.
       const queue = [...projects];
       const workers = Array.from({ length: Math.min(4, queue.length || 1) }, async () => {
         while (queue.length) {
@@ -133,8 +130,6 @@ export const processProfile = inngest.createFunction(
 
     await step.run("embed-store", async () => {
       if (!chunks.length) return;
-      // Diff: skip re-embed when texts are unchanged (PUT of unrelated fields
-      // shouldn't burn Voyage tokens or create a search gap).
       const { data: existing } = await db
         .from("profile_chunks")
         .select("content_text")
@@ -152,7 +147,6 @@ export const processProfile = inngest.createFunction(
         embedding_model: "voyage-4-lite",
         embedding_dim: vectors[i].length,
       }));
-      // Insert-first then prune stale (no empty-search window on failure).
       const { error } = await db.from("profile_chunks").insert(rows);
       if (error) throw error;
       const freshTexts = new Set(texts);
@@ -162,7 +156,6 @@ export const processProfile = inngest.createFunction(
       if (stale.length) {
         await db.from("profile_chunks").delete().eq("candidate_id", candidateId).in("content_text", stale);
       }
-      // Remove exact duplicates that predate the diff.
       if ((existing?.length ?? 0) + rows.length > chunks.length) {
         const { data: all } = await db
           .from("profile_chunks")
@@ -179,7 +172,6 @@ export const processProfile = inngest.createFunction(
     });
 
     await step.run("quality-score", async () => {
-      // Qwen: evidence-rich profiles outrank vague ones (0-100).
       let q = 20;
       if (projects.length) q += 15;
       if (projects.some((p) => p.tech_stack?.length)) q += 10;
@@ -192,8 +184,6 @@ export const processProfile = inngest.createFunction(
     });
 
     await step.run("notify-ready", async () => {
-      // Respect the candidate's own visibility (never force visible).
-      // Best-effort "profile ready" email — never fails the pipeline.
       try {
         const { data } = await db
           .from("candidates")
@@ -206,7 +196,6 @@ export const processProfile = inngest.createFunction(
           await sendEmail(c.contact_email, tpl.subject, tpl.html);
         }
       } catch {
-        // Email is best-effort only.
       }
     });
 

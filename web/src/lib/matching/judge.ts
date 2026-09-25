@@ -1,25 +1,14 @@
-/**
- * Step 4 (Judge): LLM deep evaluation over top-10 candidates.
- *
- * Prompt: docs/13 §4 (rubric: depth / relevance / impact / red-flags).
- * Output : docs/13 §5 explainable match object (subset parsed here).
- *
- * Provider is abstract so search can run on any cheap chat model
- * (default: GPT-4o-mini-class). Bring your own key via env.
- */
-
 import type { JobReq, MatchLevel } from "./types";
 
 export interface JudgeInput {
   job: JobReq;
-  /** Structured candidate JSON: summary + project_depth + work exp. */
   candidateJson: Record<string, unknown>;
   candidate_id: string;
 }
 
 export interface JudgeResult {
   candidate_id: string;
-  overall_score: number; // 0..100 (maps from total_score)
+  overall_score: number;
   match_level: MatchLevel;
   matched_requirements: string[];
   missing_requirements: string[];
@@ -35,10 +24,8 @@ export interface JudgeResult {
   raw?: unknown;
 }
 
-/** Minimal chat-completions surface any provider adapter must satisfy. */
 export interface JudgeProvider {
   name: string;
-  /** Returns raw text (expected: strict JSON per JUDGE_SYSTEM_PROMPT). */
   complete(prompt: { system: string; user: string }): Promise<string>;
 }
 
@@ -70,7 +57,6 @@ export function buildJudgeUserPrompt(job: JobReq, candidateJson: unknown): strin
   )}\n\nCANDIDATE:\n${JSON.stringify(candidateJson).slice(0, 12000)}`;
 }
 
-/** Default provider: OpenAI-compatible chat completions (OpenRouter by default). */
 export const DEFAULT_CHEAP_MODEL = "minimax/minimax-m3:free";
 
 export function cheapModel(): string {
@@ -135,12 +121,10 @@ function strArr(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
-/** Parse + normalize one raw judge JSON string into a JudgeResult. */
 export function parseJudgeOutput(
   candidate_id: string,
   rawText: string,
 ): JudgeResult {
-  // Strip code fences if the model added them despite instructions.
   const cleaned = rawText
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
@@ -191,7 +175,6 @@ export function parseJudgeOutput(
   };
 }
 
-/** Judge a single candidate with the given (or default) provider. */
 export async function judgeCandidate(
   input: JudgeInput,
   provider: JudgeProvider = defaultOpenAIProvider(),
@@ -203,10 +186,6 @@ export async function judgeCandidate(
   return parseJudgeOutput(input.candidate_id, text);
 }
 
-/**
- * Judge top-N candidates in parallel (docs/07: ~3-5s for the batch).
- * Failures resolve to null so one bad call doesn't kill the search.
- */
 export async function judgeTop(
   inputs: JudgeInput[],
   provider: JudgeProvider = defaultOpenAIProvider(),

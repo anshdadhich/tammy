@@ -1,9 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
-// POST /api/candidates/lookup { email } → { exists, id? }
-// Minimal existence check so /join can offer an existing page instead of
-// silently building a duplicate. Returns no PII beyond the page id.
 export async function POST(request: Request) {
   const rl = rateLimit(request, { key: "candidates-lookup", limit: 10, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);

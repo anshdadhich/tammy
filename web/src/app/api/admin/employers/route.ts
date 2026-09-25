@@ -1,13 +1,14 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { AuthError, requireRole } from "@/lib/auth";
+import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { z } from "zod";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUS_VALUES = ["pending", "verified", "rejected", "suspended", "all"] as const;
 
-// GET /api/admin/employers?status=pending — list employers (default pending).
-// Admin-only (users.role === 'admin').
 export async function GET(request: Request) {
+  const rl = rateLimit(request, { key: "admin-employers-get", limit: 30, windowMs: 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   try {
     await requireRole("admin");
   } catch (e) {
@@ -36,7 +37,6 @@ export async function GET(request: Request) {
     return Response.json({ error: "employers list failed" }, { status: 500 });
   }
 
-  // Attach account emails (best-effort).
   const rows = (data ?? []) as Record<string, unknown>[];
   const userIds = [...new Set(rows.map((r) => String(r.user_id ?? "")).filter(Boolean))];
   const emailByUser: Record<string, string> = {};
@@ -54,9 +54,9 @@ export async function GET(request: Request) {
   });
 }
 
-// POST /api/admin/employers { employerId, action: 'verify' | 'reject' }
-// verify -> verification_status='verified', reject -> 'rejected'. Admin-only.
 export async function POST(request: Request) {
+  const rl = rateLimit(request, { key: "admin-employers-post", limit: 30, windowMs: 10 * 60_000 });
+  if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   try {
     await requireRole("admin");
   } catch (e) {
@@ -91,7 +91,6 @@ export async function POST(request: Request) {
       metadata: { company_name: (data as { company_name?: string })?.company_name ?? null },
     });
   } catch {
-    // audit is best-effort
   }
   return Response.json({ employer: data });
 }

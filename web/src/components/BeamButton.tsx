@@ -11,11 +11,6 @@ type Props = {
   radius?: number;
 };
 
-/**
- * CTA wrapper with a border-beam sweep — grayscale variant (no purple),
- * button-sized `sm`, strength 0.7, pill radius matching `.btn`.
- * Theme-aware: flips to the dark variant when <html data-theme="dark">.
- */
 export default function BeamButton({ children, className, strength = 0.7, active = true, radius = 999 }: Props) {
   const [dark, setDark] = useState(false);
 
@@ -24,7 +19,6 @@ export default function BeamButton({ children, className, strength = 0.7, active
       try {
         setDark(document.documentElement.getAttribute("data-theme") === "dark");
       } catch {
-        /* ignore */
       }
     };
     read();
@@ -32,7 +26,6 @@ export default function BeamButton({ children, className, strength = 0.7, active
     try {
       mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     } catch {
-      /* ignore */
     }
     return () => mo.disconnect();
   }, []);

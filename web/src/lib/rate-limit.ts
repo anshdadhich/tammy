@@ -1,8 +1,3 @@
-// In-memory token-bucket rate limiter for API routes.
-// Per-instance only (resets on redeploy) — sufficient to stop casual
-// enumeration / spam / SSRF probing until Upstash/Redis lands.
-// Never throws; fail-open when headers missing.
-
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
@@ -42,7 +37,6 @@ export function rateLimitResponse(retryAfterMs: number) {
   );
 }
 
-// Prune stale buckets every 5 min (timer unref'd so it never blocks exit).
 declare global {
   var __tammyRateLimitPrune: NodeJS.Timeout | undefined;
 }

@@ -21,11 +21,9 @@ const saveSchema = z.object({
 
 const removeByIdSchema = z.object({ id: uuid });
 
-// GET /api/shortlists?employer_id=&candidate_id=&job_id= — list saved rows.
 export async function GET(request: Request) {
   const rl = rateLimit(request, { key: "shortlists-get", limit: 120, windowMs: 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
-  // Shortlists expose candidate contact info: employer session required.
   const denied = requireHr(getViewer(request));
   if (denied) return denied;
   const url = new URL(request.url);
@@ -34,7 +32,6 @@ export async function GET(request: Request) {
     candidate_id: url.searchParams.get("candidate_id") ?? undefined,
     job_id: url.searchParams.get("job_id") ?? undefined,
   };
-  // Drop empty strings so missing params stay optional.
   for (const k of Object.keys(raw) as (keyof typeof raw)[]) {
     if (raw[k] === "") raw[k] = undefined;
   }
@@ -42,7 +39,6 @@ export async function GET(request: Request) {
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
   }
-  // Forbid unfiltered dumps across all employers.
   if (!parsed.data.employer_id && !parsed.data.candidate_id && !parsed.data.job_id) {
     return Response.json({ error: "Filter by employer_id, candidate_id, or job_id." }, { status: 400 });
   }
@@ -63,7 +59,6 @@ export async function GET(request: Request) {
   return Response.json({ results: data ?? [] });
 }
 
-// POST /api/shortlists { candidate_id, job_id?, employer_id?, notes? }
 export async function POST(request: Request) {
   const rl = rateLimit(request, { key: "shortlists-post", limit: 30, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
@@ -85,7 +80,6 @@ export async function POST(request: Request) {
     if (!job) return Response.json({ error: "job not found" }, { status: 404 });
   }
 
-  // Manual dedupe (UNIQUE with NULL employer/job doesn't block dupes in Postgres).
   const { data: existing } = await db
     .from("shortlists")
     .select("id, employer_id, candidate_id, job_id, status, notes, created_at")
@@ -118,11 +112,10 @@ export async function POST(request: Request) {
       const tpl = newMatchEmail((cc as { full_name?: string })?.full_name ?? "there", "a role you match", "An employer");
       await sendEmail(em, tpl.subject, tpl.html);
     }
-  } catch { /* email never blocks */ }
+  } catch {  }
   return Response.json({ shortlist: data }, { status: 201 });
 }
 
-// DELETE /api/shortlists?id=  OR  body { id }  OR  body { candidate_id, job_id?, employer_id? }
 export async function DELETE(request: Request) {
   const rl = rateLimit(request, { key: "shortlists-delete", limit: 60, windowMs: 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);

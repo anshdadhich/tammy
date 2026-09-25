@@ -1,6 +1,4 @@
-// Wide events: ONE structured log per request, business context attached.
-// Inspired by loggingsucks.com canonical log lines. Tail-sampled: errors +
-// slow requests always kept, happy traffic sampled. Never throws.
+import { redactPii } from "@/lib/redact";
 
 type Ctx = Record<string, unknown>;
 
@@ -28,13 +26,12 @@ export function startWideEvent(route: string, method: string): {
       if (keep) {
         try {
           console.info(JSON.stringify({ wide_event: event }));
-        } catch { /* logging never breaks requests */ }
+        } catch {}
       }
     },
   };
 }
 
-// Wrap a route handler with a wide event. Handler receives `wev.add()` via 2nd arg.
 export function withWideEvent<T>(
   route: string,
   handler: (request: Request, wev: { add: (f: Ctx) => void }) => Promise<T>,
@@ -48,7 +45,7 @@ export function withWideEvent<T>(
       return res;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      wev.end({ status: 500, error: msg.slice(0, 500) });
+      wev.end({ status: 500, error: redactPii(msg.slice(0, 500)) });
       return Response.json({ error: "internal error" }, { status: 500 });
     }
   };

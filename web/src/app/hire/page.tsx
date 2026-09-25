@@ -46,7 +46,6 @@ const MOCK_ROWS = [
 export default function HirePage() {
   return (
     <PageShell active="/hire">
-      {/* Hero */}
       <section className="pt-20 lg:pt-28 pb-16">
         <div className="max-w-[1160px] mx-auto px-6">
           <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
@@ -80,7 +79,6 @@ export default function HirePage() {
               </div>
             </div>
 
-            {/* Static brief → results mock (illustrative) */}
             <div
               className="rise"
               style={{ "--d": "280ms" } as React.CSSProperties}
@@ -120,7 +118,6 @@ export default function HirePage() {
         </div>
       </section>
 
-      {/* Workflow */}
       <section className="py-14">
         <div className="max-w-[1160px] mx-auto px-6">
           <h2 className="text-[clamp(1.75rem,3.2vw,2.5rem)] font-semibold tracking-[-0.02em] leading-[1.12] text-ink">
@@ -151,7 +148,6 @@ export default function HirePage() {
         </div>
       </section>
 
-      {/* Score anatomy */}
       <section className="py-14">
         <div className="max-w-[1160px] mx-auto px-6">
           <div className="rounded-2xl bg-surface shadow-soft-md p-7 sm:p-10 grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
@@ -184,7 +180,6 @@ export default function HirePage() {
         </div>
       </section>
 
-      {/* CTA */}
       <section className="py-14 pb-24">
         <div className="max-w-[1160px] mx-auto px-6">
           <div className="rounded-2xl bg-surface shadow-soft-md p-8 sm:p-12 text-center">
