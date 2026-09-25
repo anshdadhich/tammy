@@ -4,9 +4,6 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ChevronDown, X } from "lucide-react";
 import { CANONICAL_SKILLS, normalizeSkill } from "@/lib/skills";
 
-const IDLE_LIMIT = 12;
-const MATCH_LIMIT = 40;
-
 export default function SkillPicker({
   id,
   label,
@@ -68,9 +65,9 @@ export default function SkillPicker({
   const pool = q
     ? CANONICAL_SKILLS.filter((s) => s.toLowerCase().includes(q))
     : CANONICAL_SKILLS;
-  const matches = pool
-    .filter((s) => !value.some((v) => v.toLowerCase() === s.toLowerCase()))
-    .slice(0, q ? MATCH_LIMIT : IDLE_LIMIT);
+  const matches = pool.filter(
+    (s) => !value.some((v) => v.toLowerCase() === s.toLowerCase()),
+  );
   const ai = matches.length ? Math.min(active, matches.length - 1) : -1;
 
   useEffect(() => {
