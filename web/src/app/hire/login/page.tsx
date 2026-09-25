@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import PageShell from "@/components/PageShell";
+import DitherEffect from "@/components/DitherEffect";
 import { readHrSession } from "@/lib/hr-session";
 import LoginForm from "./login-form";
 
@@ -14,32 +15,38 @@ export default async function HireLoginPage() {
 
   return (
     <PageShell active="/hire">
-      <section className="pt-20 lg:pt-28 pb-14">
-        <div className="max-w-[1160px] mx-auto px-6">
-          <h1
-            className="rise text-[clamp(2.5rem,5.6vw,4.25rem)] font-semibold tracking-[-0.03em] leading-[1.05] text-ink max-w-[17ch]"
-            style={{ "--d": "60ms" } as React.CSSProperties}
-          >
-            Open an employer session.
-          </h1>
-          <p
-            className="rise mt-6 text-[17px] leading-[1.6] text-muted max-w-[560px]"
-            style={{ "--d": "160ms" } as React.CSSProperties}
-          >
-            Sessions are per-device in this build: the email you enter becomes a
-            cookie, and search, shortlists, and contact channels read it. No
-            password yet.
-          </p>
+      <section className="relative overflow-hidden pt-14 pb-24 lg:pt-20">
+        <div className="bg-dither" aria-hidden="true">
+          <DitherEffect
+            colorFront="#1F2DE6"
+            colorBack="#ffffff"
+            scale={0.8}
+            className="dither-soft"
+          />
         </div>
-      </section>
-
-      <section className="pb-24">
-        <div className="max-w-[1160px] mx-auto px-6">
+        <div className="relative max-w-[1160px] mx-auto px-6">
           <div
-            className="rise max-w-xl mx-auto"
-            style={{ "--d": "280ms" } as React.CSSProperties}
+            className="rise mx-auto w-full max-w-xl rounded-2xl bg-surface shadow-soft-md p-7 sm:p-9"
+            style={{ "--d": "80ms" } as React.CSSProperties}
           >
-            <LoginForm initialSession={session} />
+            <p className="flex items-center gap-2.5 font-mono text-[12.5px] font-medium text-brand-text">
+              <span
+                aria-hidden="true"
+                className="inline-block h-[2px] w-6"
+                style={{ background: "var(--brand)" }}
+              />
+              Hire login
+            </p>
+            <h1 className="mt-4 text-[clamp(1.9rem,3.4vw,2.5rem)] font-semibold tracking-[-0.02em] leading-[1.08] text-ink">
+              First, your login.
+            </h1>
+            <p className="mt-3 text-[15.5px] leading-[1.6] text-muted">
+              Enter your email to open a session. Search, shortlists, and contact
+              channels unlock on this device — no password in this build.
+            </p>
+            <div className="mt-6">
+              <LoginForm initialSession={session} bare />
+            </div>
           </div>
         </div>
       </section>

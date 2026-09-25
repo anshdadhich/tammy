@@ -25,10 +25,15 @@ function clearHrCookie() {
 
 export default function LoginForm({
   initialSession,
+  bare = false,
 }: {
   initialSession: Session | null;
+  bare?: boolean;
 }) {
   const router = useRouter();
+  const cardClass = bare
+    ? ""
+    : "rounded-2xl bg-surface shadow-soft-md p-7 sm:p-9";
   const [session, setSession] = useState<Session | null>(initialSession);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -58,7 +63,7 @@ export default function LoginForm({
 
   if (session) {
     return (
-      <div className="rounded-2xl bg-surface shadow-soft-md p-7 sm:p-9">
+      <div className={cardClass}>
         <div className="flex items-center gap-2.5">
           <span
             className="pulse-dot inline-block w-2 h-2 rounded-full"
@@ -96,7 +101,7 @@ export default function LoginForm({
   }
 
   return (
-    <form onSubmit={signIn} className="rounded-2xl bg-surface shadow-soft-md p-7 sm:p-9">
+    <form onSubmit={signIn} className={cardClass}>
       <div className="grid gap-4">
         <div className="field">
           <label className="field-label" htmlFor="hr-name">

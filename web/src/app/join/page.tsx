@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import PageShell from "@/components/PageShell";
+import DitherEffect from "@/components/DitherEffect";
 import JoinWizard from "./join-wizard";
 
 export const metadata: Metadata = {
@@ -12,8 +13,16 @@ export default function JoinPage() {
   return (
     <PageShell>
       <h1 className="sr-only">Build your page</h1>
-      <section className="pt-12 lg:pt-16 pb-24">
-        <div className="max-w-[1160px] mx-auto px-6">
+      <section className="relative overflow-hidden pt-12 lg:pt-16 pb-24">
+        <div className="bg-dither" aria-hidden="true">
+          <DitherEffect
+            colorFront="#1F2DE6"
+            colorBack="#ffffff"
+            scale={0.8}
+            className="dither-soft"
+          />
+        </div>
+        <div className="relative max-w-[1160px] mx-auto px-6">
           <div
             className="rise max-w-4xl mx-auto"
             style={{ "--d": "60ms" } as React.CSSProperties}

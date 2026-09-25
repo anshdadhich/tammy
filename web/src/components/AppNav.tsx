@@ -1,32 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Menu, Moon, Sun, X } from "lucide-react";
-
-type ViewTransitionDoc = Document & {
-  startViewTransition?: (updateCallback: () => void) => { finished: Promise<void> };
-};
-
-const toggleTheme = () => {
-  const root = document.documentElement;
-  const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
-  const apply = () => {
-    root.setAttribute("data-theme", next);
-    try {
-      localStorage.setItem("tammy_theme", next);
-    } catch {
-    }
-  };
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const start = (document as ViewTransitionDoc).startViewTransition;
-  if (!reduce && typeof start === "function") {
-    start.call(document, apply);
-  } else {
-    apply();
-  }
-};
+import { toggleTheme } from "@/lib/theme";
+import {
+  SESSION_EVENT,
+  clearHrSession,
+  clearOwnerSession,
+  fetchOwnerSession,
+  readHrSession,
+  viewerInitials,
+  type ViewerSession,
+} from "@/lib/session-client";
 
 const LANDING_NAV = [
   { label: "Candidates", href: "/#candidates" },
@@ -35,14 +23,43 @@ const LANDING_NAV = [
   { label: "FAQ", href: "/#faq" },
 ] as const;
 
-const NAV_ITEMS: { label: string; href: string }[] = LANDING_NAV.map((n) => ({ ...n }));
+const JOIN_NAV = [
+  { label: "Home", href: "/" },
+  { label: "Build my page", href: "/join" },
+] as const;
+
+const HIRE_NAV = [
+  { label: "Home", href: "/" },
+  { label: "Hiring", href: "/hire" },
+] as const;
+
+const SIGNUP_OPTIONS = [
+  { label: "Get hired", href: "/join" },
+  { label: "Hiring someone", href: "/hire/login" },
+] as const;
+
+type NavItem = { label: string; href: string };
 
 export default function AppNav({ active: activeProp }: { active?: string } = {}) {
-  const [active, setActive] = useState<string>(activeProp ?? NAV_ITEMS[0]?.href ?? "/");
+  const pathname = usePathname();
+  const isJoin = pathname.startsWith("/join");
+  const isHire = pathname.startsWith("/hire");
+  const items: readonly NavItem[] = isJoin ? JOIN_NAV : isHire ? HIRE_NAV : LANDING_NAV;
+  const sectionActive = isJoin ? "/join" : isHire ? "/hire" : null;
+  const showAuth = !isJoin;
+
+  const [landingActive, setLandingActive] = useState<string>(
+    activeProp ?? LANDING_NAV[0]?.href ?? "/",
+  );
+  const active = sectionActive ?? landingActive;
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [viewer, setViewer] = useState<ViewerSession | null>(null);
   const [scrolled, setScrolled] = useState(false);
   const [hideNav, setHideNav] = useState(false);
   const reduceMotion = useReducedMotion();
+  const actionsRef = useRef<HTMLDivElement>(null);
 
   const lastY = useRef(0);
   useEffect(() => {
@@ -61,16 +78,63 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
   useEffect(() => {
     const sync = () => {
       const hash = window.location.hash;
-      if (hash && NAV_ITEMS.some((n) => n.href === `/${hash}`)) {
-        setActive(`/${hash}`);
+      if (hash && LANDING_NAV.some((n) => n.href === `/${hash}`)) {
+        setLandingActive(`/${hash}`);
         return;
       }
-      if (!hash) setActive(activeProp ?? NAV_ITEMS[0]?.href ?? "/");
+      if (!hash) setLandingActive(activeProp ?? LANDING_NAV[0]?.href ?? "/");
     };
     sync();
     window.addEventListener("hashchange", sync);
     return () => window.removeEventListener("hashchange", sync);
   }, [activeProp]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      const hr = readHrSession();
+      const pending = hr ? Promise.resolve(hr) : fetchOwnerSession();
+      pending.then((v) => {
+        if (alive) setViewer(v);
+      });
+    };
+    load();
+    window.addEventListener(SESSION_EVENT, load);
+    return () => {
+      alive = false;
+      window.removeEventListener(SESSION_EVENT, load);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authOpen && !profileOpen) return;
+    const onPointer = (e: PointerEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) {
+        setAuthOpen(false);
+        setProfileOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAuthOpen(false);
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [authOpen, profileOpen]);
+
+  const signOut = async () => {
+    clearHrSession();
+    await clearOwnerSession();
+    setViewer(null);
+    setProfileOpen(false);
+    setMobileOpen(false);
+  };
 
   return (
     <motion.header
@@ -84,7 +148,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
           href="/"
           className="site-brand site-brand-text"
           onClick={() => {
-            setActive(NAV_ITEMS[0]?.href ?? "/");
+            setLandingActive(LANDING_NAV[0]?.href ?? "/");
             setMobileOpen(false);
           }}
         >
@@ -93,13 +157,16 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
 
         <nav aria-label="Main navigation" className="site-navigation hidden md:flex">
           <div className="site-nav-links">
-            {NAV_ITEMS.map((item) => {
+            {items.map((item) => {
               const isActive = active === item.href;
               return (
                 <Link
                   key={item.href + item.label}
                   href={item.href}
-                  onClick={() => setActive(item.href)}
+                  onClick={() => {
+                    setLandingActive(item.href);
+                    setMobileOpen(false);
+                  }}
                   aria-current={isActive ? "page" : undefined}
                   className={`site-nav-link press${isActive ? " is-active" : ""}`}
                   style={{ position: "relative" }}
@@ -119,23 +186,100 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
           </div>
         </nav>
 
-        <div className="site-nav-actions">
-          <Link
-            href="/join"
-            className="site-login press h-10"
-            onClick={() => setMobileOpen(false)}
-          >
-            Signup
-          </Link>
-          <motion.span whileTap={{ scale: 0.96 }} className="inline-flex">
+        <div className="site-nav-actions" ref={actionsRef}>
+          {viewer ? (
+            <div className="nav-menu-wrap">
+              <button
+                type="button"
+                className="nav-avatar press"
+                aria-haspopup="menu"
+                aria-expanded={profileOpen}
+                aria-label="Account menu"
+                onClick={() => {
+                  setProfileOpen((v) => !v);
+                  setAuthOpen(false);
+                }}
+              >
+                {viewerInitials(viewer)}
+              </button>
+              {profileOpen ? (
+                <div className="nav-menu" role="menu">
+                  <Link
+                    href="/settings"
+                    role="menuitem"
+                    className="nav-menu-item"
+                    onClick={() => setProfileOpen(false)}
+                  >
+                    Settings
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="nav-menu-item"
+                    onClick={() => void signOut()}
+                  >
+                    Log out
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {showAuth ? (
+            <div className="nav-menu-wrap">
+              <button
+                type="button"
+                className="site-login press h-10"
+                aria-haspopup="menu"
+                aria-expanded={authOpen}
+                onClick={() => {
+                  setAuthOpen((v) => !v);
+                  setProfileOpen(false);
+                }}
+              >
+                Login or Sign up
+              </button>
+              {authOpen ? (
+                <div className="nav-menu" role="menu">
+                  {SIGNUP_OPTIONS.map((option) => (
+                    <Link
+                      key={option.href}
+                      href={option.href}
+                      role="menuitem"
+                      className="nav-menu-item"
+                      onClick={() => {
+                        setAuthOpen(false);
+                        setMobileOpen(false);
+                      }}
+                    >
+                      {option.label}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {showAuth ? (
+            <motion.span whileTap={{ scale: 0.96 }} className="inline-flex">
+              <Link
+                href="/join"
+                className="site-nav-cta site-nav-cta-dark press h-10"
+                onClick={() => setMobileOpen(false)}
+              >
+                Build my page
+              </Link>
+            </motion.span>
+          ) : null}
+          {showAuth ? (
             <Link
-              href="/hire"
-              className="site-nav-cta site-nav-cta-dark press h-10"
+              href="/hire/search"
+              className="site-login press h-10"
               onClick={() => setMobileOpen(false)}
             >
-              Book a demo
+              Search
             </Link>
-          </motion.span>
+          ) : null}
           <button
             type="button"
             className="theme-toggle press"
@@ -175,17 +319,20 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
             style={{ overflow: "hidden" }}
           >
             <div className="site-mobile-links">
-              {NAV_ITEMS.map((item, i) => (
+              {items.map((item, i) => (
                 <motion.div
                   key={item.href + item.label}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.25, delay: reduceMotion ? 0 : 0.05 + i * 0.05 }}
+                  transition={{
+                    duration: 0.25,
+                    delay: reduceMotion ? 0 : 0.05 + i * 0.05,
+                  }}
                 >
                   <Link
                     href={item.href}
                     onClick={() => {
-                      setActive(item.href);
+                      setLandingActive(item.href);
                       setMobileOpen(false);
                     }}
                     className={`site-mobile-link${active === item.href ? " is-active" : ""}`}
@@ -194,29 +341,61 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
                   </Link>
                 </motion.div>
               ))}
-              <motion.div
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: reduceMotion ? 0 : 0.28 }}
-                className="site-mobile-actions"
-              >
-                <Link
-                  href="/join"
-                  className="site-login press"
-                  style={{ justifyContent: "center" }}
-                  onClick={() => setMobileOpen(false)}
+              {showAuth ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.25,
+                    delay: reduceMotion ? 0 : 0.28,
+                  }}
+                  className="site-mobile-actions"
                 >
-                  Signup
-                </Link>
-                <Link
-                  href="/hire"
-                  className="site-nav-cta site-nav-cta-dark press"
-                  style={{ justifyContent: "center" }}
-                  onClick={() => setMobileOpen(false)}
-                >
-                  Book a demo
-                </Link>
-              </motion.div>
+                  <button
+                    type="button"
+                    className="site-login"
+                    style={{ justifyContent: "center" }}
+                    aria-expanded={authOpen}
+                    onClick={() => setAuthOpen((v) => !v)}
+                  >
+                    Login or Sign up
+                  </button>
+                  {authOpen ? (
+                    <div className="nav-menu nav-menu--inline" role="menu">
+                      {SIGNUP_OPTIONS.map((option) => (
+                        <Link
+                          key={option.href}
+                          href={option.href}
+                          role="menuitem"
+                          className="nav-menu-item"
+                          onClick={() => {
+                            setAuthOpen(false);
+                            setMobileOpen(false);
+                          }}
+                        >
+                          {option.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                  <Link
+                    href="/join"
+                    className="site-nav-cta"
+                    style={{ justifyContent: "center" }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Build my page
+                  </Link>
+                  <Link
+                    href="/hire/search"
+                    className="site-login"
+                    style={{ justifyContent: "center" }}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Search
+                  </Link>
+                </motion.div>
+              ) : null}
             </div>
           </motion.nav>
         ) : null}
