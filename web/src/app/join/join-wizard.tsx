@@ -659,6 +659,7 @@ function PickList({
   display,
   onHover,
   onPick,
+  onOther,
 }: {
   listId: string;
   items: readonly string[];
@@ -666,6 +667,7 @@ function PickList({
   display?: (v: string) => string;
   onHover: (i: number) => void;
   onPick: (i: number) => void;
+  onOther?: () => void;
 }) {
   useEffect(() => {
     if (active < 0) return;
@@ -714,6 +716,20 @@ function PickList({
           </button>
         ))
       )}
+      {onOther ? (
+        <button
+          type="button"
+          role="option"
+          aria-selected={false}
+          tabIndex={-1}
+          className="block w-full cursor-pointer border-0 px-3.5 py-2 text-left text-[14px] leading-[1.45] bg-transparent text-muted"
+          onMouseDown={(e) => e.preventDefault()}
+          onMouseEnter={() => onHover(-1)}
+          onClick={onOther}
+        >
+          Other — type my own
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -739,8 +755,10 @@ function PickCombo({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [free, setFree] = useState(false);
   const [active, setActive] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listId = `${id}-listbox`;
 
   const q = query.trim().toLowerCase();
@@ -752,13 +770,23 @@ function PickCombo({
   const close = useCallback(() => {
     setOpen(false);
     setQuery("");
+    setFree(false);
   }, []);
   useOutsideDismiss(open, wrapRef, close);
 
   const openList = () => {
     setOpen(true);
     setQuery("");
+    setFree(false);
     setActive(0);
+  };
+
+  const startOther = () => {
+    setFree(true);
+    setOpen(false);
+    setQuery("");
+    setActive(0);
+    inputRef.current?.focus();
   };
 
   const commit = (v: string) => {
@@ -773,6 +801,7 @@ function PickCombo({
       if (!open) {
         setOpen(true);
         setQuery("");
+        setFree(false);
         setActive(k === "ArrowDown" ? 0 : Math.max(0, items.length - 1));
         return;
       }
@@ -789,7 +818,9 @@ function PickCombo({
       if (open) {
         e.preventDefault();
         if (ai >= 0) commit(items[ai]);
-        else close();
+        else startOther();
+      } else if (free) {
+        e.preventDefault();
       }
       return;
     }
@@ -797,6 +828,9 @@ function PickCombo({
       if (open) {
         e.preventDefault();
         close();
+      } else if (free) {
+        e.preventDefault();
+        setFree(false);
       }
       return;
     }
@@ -814,6 +848,7 @@ function PickCombo({
     >
       <input
         id={id}
+        ref={inputRef}
         className="input"
         style={{ paddingRight: 38 }}
         role="combobox"
@@ -823,7 +858,7 @@ function PickCombo({
         aria-activedescendant={open && ai >= 0 ? `${listId}-${ai}` : undefined}
         aria-invalid={invalid ? true : undefined}
         value={value}
-        placeholder={placeholder}
+        placeholder={free ? "Type your own…" : placeholder}
         inputMode={inputMode}
         maxLength={maxLength}
         autoComplete="off"
@@ -836,6 +871,7 @@ function PickCombo({
         onChange={(e) => {
           const v = e.target.value;
           onChange(v);
+          if (free) return;
           setQuery(v);
           setActive(0);
           setOpen(true);
@@ -854,6 +890,7 @@ function PickCombo({
           active={ai}
           onHover={setActive}
           onPick={(i) => commit(items[i])}
+          onOther={startOther}
         />
       ) : null}
     </div>
@@ -1694,15 +1731,12 @@ export default function JoinWizard() {
                       req
                       error={errs[`experiences.${i}.title`]}
                     >
-                      <PickCombo
+                      <input
                         id={`exp-${i}-title`}
+                        className="input"
                         value={row.title}
-                        options={ROLE_SUGGESTIONS}
-                        onChange={(v) =>
-                          onExp(i, "title")({ target: { value: v } })
-                        }
+                        onChange={onExp(i, "title")}
                         placeholder="Software Engineer II"
-                        invalid={!!errs[`experiences.${i}.title`]}
                       />
                     </F>
                     <F label="Start" htmlFor={`exp-${i}-start`} hint="2022-04 or Apr 2022.">

@@ -30,12 +30,15 @@ export default function SkillPicker({
   const listId = `${fieldId}-listbox`;
   const [draft, setDraft] = useState("");
   const [open, setOpen] = useState(false);
+  const [free, setFree] = useState(false);
   const [active, setActive] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const add = (raw: string) => {
     const n = normalizeSkill(raw);
     setOpen(false);
+    setFree(false);
     if (!n) return;
     if (value.length >= max) return;
     if (value.some((v) => v.toLowerCase() === n.toLowerCase())) {
@@ -48,7 +51,18 @@ export default function SkillPicker({
 
   const remove = (skill: string) => onChange(value.filter((v) => v !== skill));
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => {
+    setOpen(false);
+    setFree(false);
+  }, []);
+
+  const startOther = () => {
+    setFree(true);
+    setOpen(false);
+    setDraft("");
+    setActive(0);
+    inputRef.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -115,6 +129,7 @@ export default function SkillPicker({
       >
         <input
           id={fieldId}
+          ref={inputRef}
           className="input"
           style={{ paddingRight: 38 }}
           role="combobox"
@@ -123,26 +138,28 @@ export default function SkillPicker({
           aria-autocomplete="list"
           aria-activedescendant={open && ai >= 0 ? `${listId}-${ai}` : undefined}
           value={draft}
-          placeholder={placeholder}
+          placeholder={free ? "Type your own…" : placeholder}
           maxLength={100}
           autoComplete="off"
           aria-invalid={error ? true : undefined}
           onFocus={() => {
             if (!open) {
               setOpen(true);
+              setFree(false);
               setActive(0);
             }
           }}
           onClick={() => {
             if (!open) {
               setOpen(true);
+              setFree(false);
               setActive(0);
             }
           }}
           onChange={(e) => {
             setDraft(e.target.value);
-            setOpen(true);
             setActive(0);
+            if (!free) setOpen(true);
           }}
           onBlur={() => add(draft)}
           onKeyDown={(e) => {
@@ -156,6 +173,7 @@ export default function SkillPicker({
               e.preventDefault();
               if (!open) {
                 setOpen(true);
+                setFree(false);
                 setActive(
                   e.key === "ArrowDown" ? 0 : Math.max(0, matches.length - 1),
                 );
@@ -170,6 +188,9 @@ export default function SkillPicker({
             } else if (e.key === "Escape" && open) {
               e.preventDefault();
               close();
+            } else if (e.key === "Escape" && free) {
+              e.preventDefault();
+              setFree(false);
             }
           }}
         />
@@ -213,6 +234,18 @@ export default function SkillPicker({
                 </button>
               ))
             )}
+            <button
+              type="button"
+              role="option"
+              aria-selected={false}
+              tabIndex={-1}
+              className="block w-full cursor-pointer border-0 px-3.5 py-2 text-left text-[14px] leading-[1.45] bg-transparent text-muted"
+              onMouseDown={(e) => e.preventDefault()}
+              onMouseEnter={() => setActive(-1)}
+              onClick={startOther}
+            >
+              Other — type my own
+            </button>
           </div>
         ) : null}
       </div>
