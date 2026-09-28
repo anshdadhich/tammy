@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getSessionUser } from "@/lib/supabase-user";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { normalizeEmail } from "@/lib/validators";
+import { readJsonBody } from "@/lib/http";
 
 const bodySchema = z.object({
   company_name: z.string().trim().min(2).max(200),
@@ -20,7 +21,9 @@ export async function POST(request: Request) {
   if (session.userRow.role === "admin") {
     return Response.json({ error: "Admins cannot register as employers." }, { status: 403 });
   }
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 16 * 1024);
+  if (!read.ok) return read.response;
+  const body = read.body;
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });

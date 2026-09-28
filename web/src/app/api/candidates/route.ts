@@ -5,6 +5,7 @@ import { candidateSchema, normalizeEmail } from "@/lib/validators";
 import { normalizeSkills } from "@/lib/skills";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { redactPii } from "@/lib/redact";
+import { readJsonBody } from "@/lib/http";
 import {
   bundleForViewer,
   guardOwnerAuth,
@@ -51,40 +52,6 @@ function stripShowFlags(obj: Record<string, unknown>): Record<string, unknown> {
   const out = { ...obj };
   for (const f of SHOW_FLAGS) delete out[f];
   return out;
-}
-
-function jsonContentTypeOk(request: Request): boolean {
-  const ct = request.headers.get("content-type") ?? "";
-  if (!ct) return true;
-  return ct.toLowerCase().includes("application/json");
-}
-
-async function readJsonBody(request: Request, maxBytes: number): Promise<{ ok: true; body: unknown } | { ok: false; response: Response }> {
-  if (!jsonContentTypeOk(request)) {
-    return { ok: false, response: Response.json({ error: "content-type must be application/json" }, { status: 415 }) };
-  }
-  const lenRaw = request.headers.get("content-length");
-  if (lenRaw !== null) {
-    const n = Number(lenRaw);
-    if (Number.isFinite(n) && n > maxBytes) {
-      return { ok: false, response: Response.json({ error: "request body too large" }, { status: 413 }) };
-    }
-  }
-  let text: string;
-  try {
-    text = await request.text();
-  } catch {
-    return { ok: false, response: Response.json({ error: "could not read request body" }, { status: 400 }) };
-  }
-  if (text.length === 0) return { ok: true, body: null };
-  if (Buffer.byteLength(text, "utf8") > maxBytes) {
-    return { ok: false, response: Response.json({ error: "request body too large" }, { status: 413 }) };
-  }
-  try {
-    return { ok: true, body: JSON.parse(text) as unknown };
-  } catch {
-    return { ok: false, response: Response.json({ error: "invalid JSON body" }, { status: 400 }) };
-  }
 }
 
 function nullPublicContact(c: Record<string, unknown>): Record<string, unknown> {

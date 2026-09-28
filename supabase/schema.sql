@@ -413,8 +413,6 @@ CREATE INDEX IF NOT EXISTS idx_searches_employer
   ON public.searches (employer_id);
 CREATE INDEX IF NOT EXISTS idx_searches_job
   ON public.searches (job_id);
-CREATE INDEX IF NOT EXISTS idx_matches_search
-  ON public.candidate_matches (search_id);
 CREATE INDEX IF NOT EXISTS idx_matches_job_score
   ON public.candidate_matches (job_id, score DESC);
 CREATE INDEX IF NOT EXISTS idx_matches_candidate
@@ -465,14 +463,15 @@ CREATE INDEX IF NOT EXISTS idx_chunks_content_trgm
 CREATE INDEX IF NOT EXISTS idx_chunks_content_fts
   ON public.profile_chunks USING gin (to_tsvector('english', content_text));
 
--- ----- vector (semantic search) -----
--- HNSW/cosine. Tune m/ef_construction for recall vs build time.
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw
+-- ----- vector (semantic search), partial: NULL embeddings are never queried -----
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw_nn
   ON public.profile_chunks USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 64);
-CREATE INDEX IF NOT EXISTS idx_job_req_embedding_hnsw
+  WITH (m = 16, ef_construction = 64)
+  WHERE embedding IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_job_req_embedding_hnsw_nn
   ON public.job_requirements USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 64);
+  WITH (m = 16, ef_construction = 64)
+  WHERE embedding IS NOT NULL;
 
 -- =============================================================
 -- 3. RLS — OPEN-CONTACT model
@@ -871,6 +870,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authentic
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
+-- Least-privilege correction: match_chunks is service-role-only (granted in
+-- match_chunks.sql). Re-running this file must not reopen it.
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
 
 CREATE TABLE IF NOT EXISTS public.open_source_contributions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

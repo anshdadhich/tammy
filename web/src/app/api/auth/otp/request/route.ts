@@ -2,6 +2,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { redactPii } from "@/lib/redact";
+import { readJsonBody } from "@/lib/http";
 
 const bodySchema = z.object({
   email: z.string().trim().email().max(320),
@@ -10,7 +11,9 @@ const bodySchema = z.object({
 export async function POST(request: Request) {
   const rl = rateLimit(request, { key: "auth-otp-request", limit: 10, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 4 * 1024);
+  if (!read.ok) return Response.json({ ok: true });
+  const body = read.body;
   const parsed = bodySchema.safeParse(body);
   const email = parsed.success ? parsed.data.email.trim().toLowerCase() : null;
   if (email) {

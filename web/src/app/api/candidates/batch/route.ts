@@ -13,9 +13,6 @@ export async function POST(request: Request) {
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const hr = await requireHrDb();
   if (hr instanceof Response) return hr;
-  if (hr.user.viewer.kind !== "hr") {
-    return Response.json({ error: "Employer session required." }, { status: 401 });
-  }
 
   const ct = request.headers.get("content-type") ?? "";
   if (ct && !ct.toLowerCase().includes("application/json")) {

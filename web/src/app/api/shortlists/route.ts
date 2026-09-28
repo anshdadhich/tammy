@@ -5,6 +5,7 @@ import { newMatchEmail, sendEmail } from "@/lib/email";
 import { requireHrDb, getSessionUser } from "@/lib/supabase-user";
 import { rateLimitRoute } from "@/lib/rate-limit";
 import { startWideEvent } from "@/lib/observe";
+import { readJsonBody } from "@/lib/http";
 import { withTimeout } from "@/lib/timeout";
 import { encodeCursor, decodeCursor } from "@/lib/cursor";
 
@@ -59,10 +60,6 @@ export async function GET(request: Request) {
   if (hr instanceof Response) {
     wev.end({ status: hr.status });
     return hr;
-  }
-  if (hr.user.viewer.kind !== "hr") {
-    wev.end({ status: 401 });
-    return Response.json({ error: "Employer session required." }, { status: 401 });
   }
   const url = new URL(request.url);
   const raw = {
@@ -137,11 +134,9 @@ export async function POST(request: Request) {
     wev.end({ status: hr.status });
     return hr;
   }
-  if (hr.user.viewer.kind !== "hr") {
-    wev.end({ status: 401 });
-    return Response.json({ error: "Employer session required." }, { status: 401 });
-  }
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 64 * 1024);
+  if (!read.ok) return read.response;
+  const body = read.body;
   const parsed = saveSchema.safeParse(body);
   if (!parsed.success) {
     wev.end({ status: 400 });
@@ -279,18 +274,16 @@ export async function DELETE(request: Request) {
     wev.end({ status: hr.status });
     return hr;
   }
-  if (hr.user.viewer.kind !== "hr") {
-    wev.end({ status: 401 });
-    return Response.json({ error: "Employer session required." }, { status: 401 });
-  }
   const db = hr.client;
   const employerId = hr.employerId;
   const url = new URL(request.url);
   const idParam = url.searchParams.get("id") ?? undefined;
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 64 * 1024);
+  if (!read.ok && read.status === 413) return read.response;
+  const body = (read.ok ? read.body : null) as { id?: unknown } | null;
 
   if (idParam ?? body?.id) {
-    const parsed = removeByIdSchema.safeParse({ id: idParam ?? body.id });
+    const parsed = removeByIdSchema.safeParse({ id: idParam ?? body?.id });
     if (!parsed.success) {
       wev.end({ status: 400 });
       return Response.json({ errors: parsed.error.flatten() }, { status: 400 });

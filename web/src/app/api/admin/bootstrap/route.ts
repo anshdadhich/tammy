@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { readJsonBody } from "@/lib/http";
 
 const MAX_EMAIL_LEN = 320;
 
@@ -33,7 +34,9 @@ export async function POST(request: Request) {
     );
   }
   const headerSecret = request.headers.get("x-bootstrap-secret") ?? "";
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 4 * 1024);
+  if (!read.ok) return read.response;
+  const body = read.body as { token?: unknown; email?: unknown } | null;
   const bodySecret = typeof body?.token === "string" ? body.token : "";
   const provided = headerSecret || bodySecret;
   if (!provided || !secretsEqual(provided, requiredSecret)) {

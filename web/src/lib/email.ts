@@ -102,7 +102,7 @@ function shell(title: string, body: string): string {
     + `<h2 style="font-size:20px;margin:0 0 12px">${title}</h2>`
     + body
     + `<hr style="border:none;border-top:1px solid #e4e4e7;margin:24px 0" />`
-    + `<p style="font-size:12px;color:#71717a">Reverse Hiring — you received this because you have a profile with us. Reply to opt out.</p>`
+    + `<p style="font-size:12px;color:#71717a">Reverse Hiring — account email about your profile. Manage visibility anytime from your talent page.</p>`
     + `</div>`;
 }
 

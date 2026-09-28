@@ -5,7 +5,7 @@ import PageShell from "@/components/PageShell";
 import BeamButton from "@/components/BeamButton";
 import { FaqList, HeroDemo, TraceFill } from "@/components/landing-client";
 import ProcessSteps from "@/components/ProcessSteps";
-import { getViewerAuth } from "@/lib/api-auth";
+import { getViewerRole } from "@/lib/supabase-user";
 
 const FAQS = [
   {
@@ -82,7 +82,7 @@ const DISCOVERY = [
 ];
 
 export default async function Landing() {
-  const viewer = await getViewerAuth();
+  const viewer = await getViewerRole();
   return (
     <PageShell footer>
 

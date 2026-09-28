@@ -4,6 +4,7 @@ import { getSessionUser, requireOwnerDb } from "@/lib/supabase-user";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { normalizeEmail } from "@/lib/validators";
 import { supabaseAdmin } from "@/lib/supabase";
+import { readJsonBody } from "@/lib/http";
 
 const bodySchema = z.object({
   id: z.string().uuid(),
@@ -14,7 +15,9 @@ export async function POST(request: Request) {
   const rl = rateLimit(request, { key: "session-email-change", limit: 10, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const session = await getSessionUser();
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 4 * 1024);
+  if (!read.ok) return read.response;
+  const body = read.body;
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });

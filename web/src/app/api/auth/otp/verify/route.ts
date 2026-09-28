@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { supabaseServer } from "@/lib/supabase-server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { redactPii } from "@/lib/redact";
+import { readJsonBody } from "@/lib/http";
 
 const bodySchema = z.object({
   email: z.string().trim().email().max(320),
@@ -94,7 +95,9 @@ async function linkUserRow(uid: string, email: string): Promise<void> {
 export async function POST(request: Request) {
   const rl = rateLimit(request, { key: "auth-otp-verify", limit: 10, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 4 * 1024);
+  if (!read.ok) return Response.json({ error: GENERIC_ERROR }, { status: 400 });
+  const body = read.body;
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     return Response.json({ error: GENERIC_ERROR }, { status: 400 });

@@ -7,6 +7,7 @@ import { requireHrDb, requireOwnerDb, getSessionUser } from "@/lib/supabase-user
 import { rateLimit, rateLimitRoute } from "@/lib/rate-limit";
 import { startWideEvent } from "@/lib/observe";
 import { withTimeout } from "@/lib/timeout";
+import { readJsonBody } from "@/lib/http";
 import { encodeCursor, decodeCursor } from "@/lib/cursor";
 
 const EMAIL_TIMEOUT_MS = 15000;
@@ -56,7 +57,12 @@ export async function POST(request: Request) {
     wev.end({ status: limited.status });
     return limited;
   }
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 64 * 1024);
+  if (!read.ok) {
+    wev.end({ status: read.status });
+    return read.response;
+  }
+  const body = read.body;
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     wev.end({ status: 400 });
@@ -66,10 +72,6 @@ export async function POST(request: Request) {
   if (hr instanceof Response) {
     wev.end({ status: hr.status });
     return hr;
-  }
-  if (hr.user.viewer.kind !== "hr") {
-    wev.end({ status: 401 });
-    return Response.json({ error: "Employer session required." }, { status: 401 });
   }
   const checks = supabaseAdmin();
   const db = hr.client;

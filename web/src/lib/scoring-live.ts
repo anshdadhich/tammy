@@ -156,19 +156,3 @@ export function metadataStringArray(meta: unknown, key: string): string[] {
 export function metadataTechnologies(meta: unknown): string[] {
   return metadataStringArray(meta, "technologies");
 }
-
-export function metadataDomainTags(meta: unknown): string[] {
-  const tags = metadataStringArray(meta, "domain_tags");
-  if (tags.length) return tags;
-  const rec = asRecord(meta);
-  const single = rec?.domain;
-  return typeof single === "string" && single.trim() ? [single.trim()] : [];
-}
-
-export function metadataProjectId(meta: unknown): string | null {
-  const rec = asRecord(meta);
-  if (!rec) return null;
-  const nested = asRecord(rec.metadata_json) ?? asRecord(rec.metadata);
-  const v = rec.project_id ?? nested?.project_id ?? rec.project_title ?? nested?.project_title;
-  return typeof v === "string" && v ? v : null;
-}

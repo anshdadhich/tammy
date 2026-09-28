@@ -255,13 +255,19 @@ export async function GET(request: Request) {
     }
     try {
       const [{ data: sl }, { data: mt }, { data: cl }] = await Promise.all([
-        db.from("shortlists").select("id").eq("candidate_id", folderId).limit(1),
-        db.from("candidate_matches").select("id").eq("candidate_id", folderId).limit(1),
-        db.from("contact_log").select("id").eq("candidate_id", folderId).limit(1),
+        db.from("shortlists").select("id").eq("candidate_id", folderId).eq("employer_id", hr.employerId).limit(1),
+        db.from("candidate_matches").select("id, search_id").eq("candidate_id", folderId).limit(50),
+        db.from("contact_log").select("id").eq("candidate_id", folderId).eq("employer_id", hr.employerId).limit(1),
       ]);
+      const matchedSearchIds = ((mt ?? []) as { id: string; search_id: string }[]).map((m) => m.search_id).filter(Boolean);
+      let matchedOwn = false;
+      if (matchedSearchIds.length) {
+        const { data: own } = await db.from("searches").select("id").in("id", matchedSearchIds).eq("employer_id", hr.employerId).limit(1);
+        matchedOwn = Array.isArray(own) && own.length > 0;
+      }
       const entitled =
         (Array.isArray(sl) && sl.length > 0) ||
-        (Array.isArray(mt) && mt.length > 0) ||
+        matchedOwn ||
         (Array.isArray(cl) && cl.length > 0);
       if (!entitled) {
         return err("no access to these files", 403);

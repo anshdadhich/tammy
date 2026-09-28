@@ -47,18 +47,32 @@ async function fetchWithRetry(
 ): Promise<Response> {
   let last: Response | null = null;
   let lastErr: unknown = null;
+  let retryAfterMs: number | null = null;
   for (let attempt = 0; attempt < tries; attempt++) {
     try {
       const signal = init.signal ?? AbortSignal.timeout(timeoutMs);
       const res = await fetch(url, { ...init, signal });
       if (res.ok) return res;
       last = res;
+      if (res.status === 429) {
+        const ra = res.headers.get("retry-after");
+        if (ra) {
+          const secs = Number(ra);
+          if (Number.isFinite(secs) && secs > 0) retryAfterMs = Math.min(secs * 1000, 60000);
+          else {
+            const date = Date.parse(ra);
+            if (Number.isFinite(date)) retryAfterMs = Math.min(Math.max(date - Date.now(), 0), 60000);
+          }
+        }
+      }
       if (res.status !== 429 && res.status < 500) break;
     } catch (e) {
       lastErr = e;
+      retryAfterMs = null;
     }
     if (attempt < tries - 1) {
-      await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+      await new Promise((r) => setTimeout(r, retryAfterMs ?? 400 * 2 ** attempt));
+      retryAfterMs = null;
     }
   }
   if (last) return last;

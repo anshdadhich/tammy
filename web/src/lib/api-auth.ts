@@ -10,7 +10,6 @@ export const OWNER_COOKIE = "tammy_owner";
 export const HR_COOKIE = "tammy_hr";
 export const HR_DISPLAY_COOKIE = "tammy_hr_display";
 
-const LOOKUP_TOKEN_TTL_MS = 10 * 60 * 1000;
 const EMAIL_CHANGE_TOKEN_TTL_MS = 15 * 60 * 1000;
 const MAX_EMAIL_LEN = 320;
 
@@ -126,10 +125,6 @@ function verifyNonce(
     return true;
   }
   return false;
-}
-
-export function issueLookupToken(id: string, email: string): string | null {
-  return issueNonce("owner-lookup", id, email, LOOKUP_TOKEN_TTL_MS);
 }
 
 export function issueEmailChangeToken(

@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { AuthError, requireRole } from "@/lib/auth";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { z } from "zod";
+import { readJsonBody } from "@/lib/http";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUS_VALUES = ["pending", "verified", "rejected", "suspended", "all"] as const;
@@ -63,7 +64,9 @@ export async function POST(request: Request) {
     const status = e instanceof AuthError ? e.status : 401;
     return Response.json({ error: (e as Error).message }, { status });
   }
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 4 * 1024);
+  if (!read.ok) return read.response;
+  const body = read.body;
   const parsed = z.object({ employerId: z.string().regex(UUID_RE), action: z.enum(["verify", "reject"]) }).safeParse(body);
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });

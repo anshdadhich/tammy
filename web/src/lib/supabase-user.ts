@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { supabaseServer } from "@/lib/supabase-server";
 import type { Viewer } from "@/lib/api-auth";
 import { redactPii } from "@/lib/redact";
@@ -78,7 +79,7 @@ export async function userDb(): Promise<SupabaseClient> {
   return supabaseServer();
 }
 
-export async function getSessionUser(): Promise<SessionUser | null> {
+export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   let client: SupabaseClient;
   try {
     client = await supabaseServer();
@@ -151,6 +152,35 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     candidateId,
     viewer: viewerFor(userRow, email, employer, candidateId),
   };
+});
+
+export async function getViewerRole(): Promise<{ kind: "owner"; id: string } | { kind: "hr" } | { kind: "anon" }> {
+  try {
+    const client = await supabaseServer();
+    const { data, error } = await client.auth.getUser();
+    if (error || !data.user?.id) return { kind: "anon" };
+    const { data: row } = await client
+      .from("users")
+      .select("id, role, status")
+      .eq("auth_id", data.user.id)
+      .maybeSingle();
+    const r = row as { id: string; role: string; status: string } | null;
+    if (!r || r.status !== "active") return { kind: "anon" };
+    if (r.role === "employer" || r.role === "admin") return { kind: "hr" };
+    if (r.role !== "candidate") return { kind: "anon" };
+    const { data: cand } = await client
+      .from("candidates")
+      .select("id")
+      .eq("user_id", r.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const cid = (cand as { id: string } | null)?.id ?? null;
+    if (!cid) return { kind: "anon" };
+    return { kind: "owner", id: cid };
+  } catch {
+    return { kind: "anon" };
+  }
 }
 
 export async function requireOwnerDb(candidateId: string, session?: SessionUser | null): Promise<OwnerDb | Response> {
@@ -204,10 +234,11 @@ export async function requireHrDb(session?: SessionUser | null): Promise<HrDb | 
       session = null;
     }
   }
-  if (!session || !session.userRow) {
+  if (!session || session.viewer.kind !== "hr" || !session.userRow) {
     return Response.json({ error: "Employer session required." }, { status: 401 });
   }
-  if (session.userRow.status !== "active") {
+  const userRow = session.userRow;
+  if (userRow.status !== "active") {
     return Response.json({ error: "Employer verification required." }, { status: 403 });
   }
   let client: SupabaseClient;
@@ -221,7 +252,7 @@ export async function requireHrDb(session?: SessionUser | null): Promise<HrDb | 
     const { data, error } = await client
       .from("employers")
       .select("id")
-      .eq("user_id", session.userRow.id)
+      .eq("user_id", userRow.id)
       .eq("verification_status", "verified")
       .limit(1)
       .maybeSingle();

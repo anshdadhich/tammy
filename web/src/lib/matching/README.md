@@ -6,7 +6,7 @@ Flow: `job -> embed -> match_chunks RPC (filtered vector + FTS) -> group per can
 |---|---|
 | `types.ts` | `CandidateChunk`, `ChunkMetadata`, `JobReq`, `SubScores`, `HybridHit`, `MatchScore`, `MatchLevel` |
 | `voyage.ts` | `embedTexts`, `embedChunks`, `embedQuery`, `buildJobQueryText`, dim asserts. Needs `VOYAGE_API_KEY`. |
-| `hybrid.ts` | `buildHardFilterWhere` (structured prefilter), `buildFtsTerms` (per-term keyword list feeding the RPC `p_fts_terms` OR arm), `combineRanks`. The vector arm runs inside `match_chunks` SQL, not here. |
+| `hybrid.ts` | `buildFtsQueryText` / `buildFtsTerms` (per-term keyword list feeding the RPC `p_fts_terms` OR arm). The vector arm runs inside `match_chunks` SQL, not here. |
 | `judge.ts` | `JudgeProvider`, `defaultOpenAIProvider`, `judgeCandidate`, `judgeTop` (parallel, timeouts, null-tolerant), `parseJudgeOutput`. |
 | `../scoring-live.ts` | Live rules scoring + `blendWithJudge` (0.7 rules + 0.3 judge, advisory). Called by `/api/search`. |
 

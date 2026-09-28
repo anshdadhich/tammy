@@ -86,8 +86,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS shortlists_cand_only
   ON public.shortlists (candidate_id) WHERE employer_id IS NULL AND job_id IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS shortlists_emp_cand_job_nn
   ON public.shortlists (employer_id, candidate_id, job_id) WHERE employer_id IS NOT NULL AND job_id IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS candidate_matches_search_cand
-  ON public.candidate_matches (search_id, candidate_id) WHERE search_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS candidate_matches_search_cand_full
+  ON public.candidate_matches (search_id, candidate_id);
 DO $$ BEGIN
   ALTER TABLE public.contact_log ADD CONSTRAINT contact_log_message_max CHECK (message IS NULL OR char_length(message) <= 4000);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -119,7 +119,6 @@ GRANT EXECUTE ON FUNCTION public.owns_candidate(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.candidate_is_visible(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.is_verified_employer() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.my_verified_employer_id() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT) TO authenticated;
 
 -- ---------- 8. storage: strict UUID first segment ----------
 DROP POLICY IF EXISTS files_owner_insert ON storage.objects;
@@ -205,16 +204,6 @@ CREATE INDEX IF NOT EXISTS idx_projects_tech_gin
   ON public.projects USING gin (tech_stack);
 CREATE INDEX IF NOT EXISTS idx_work_exp_tech_gin
   ON public.work_experiences USING gin (tech_stack);
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw_nn
-  ON public.profile_chunks USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 64)
-  WHERE embedding IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_job_req_embedding_hnsw_nn
-  ON public.job_requirements USING hnsw (embedding vector_cosine_ops)
-  WITH (m = 16, ef_construction = 64)
-  WHERE embedding IS NOT NULL;
 
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT, INT) TO authenticated;
-DO $$ BEGIN
-  GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT) TO authenticated;
-EXCEPTION WHEN undefined_function THEN NULL; END $$;
+GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;

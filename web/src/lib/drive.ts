@@ -7,11 +7,6 @@ export function isDriveLink(url: string): boolean {
   return /drive\.google\.com/i.test(url);
 }
 
-export function drivePreviewUrl(url: string): string | null {
-  const id = driveFileId(url);
-  return id ? `https://drive.google.com/file/d/${id}/preview` : null;
-}
-
 export function driveImageUrl(url: string, width = 800): string | null {
   const id = driveFileId(url);
   return id ? `https://drive.google.com/thumbnail?id=${id}&sz=w${width}` : null;

@@ -11,6 +11,7 @@ import { blendWithJudge, matchLevel, scoreCandidate, metadataTechnologies, type 
 import { withWideEvent } from "@/lib/observe";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { redactPii } from "@/lib/redact";
+import { readJsonBody } from "@/lib/http";
 
 const MATCH_COUNT = 200;
 const PER_CANDIDATE_CHUNKS = 3;
@@ -77,11 +78,10 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   const session = await getSessionUser();
   const hr = await requireHrDb(session);
   if (hr instanceof Response) return hr;
-  if (hr.user.viewer.kind !== "hr") {
-    return Response.json({ error: "Employer session required." }, { status: 401 });
-  }
   const reader = hr.client;
-  const body = await request.json().catch(() => null);
+  const read = await readJsonBody(request, 256 * 1024);
+  if (!read.ok) return read.response;
+  const body = read.body as { deep?: unknown; limit?: unknown; job?: unknown } | null;
   const deep = body?.deep === true;
   const rl = rateLimit(request, {
     key: deep ? "search-deep" : "search",
@@ -159,17 +159,21 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
         reader.from("work_experiences")
           .select("candidate_id, company_name, job_title, start_date, end_date, is_current, description, achievements, tech_stack")
           .in("candidate_id", ids)
-          .order("start_date", { ascending: false }),
+          .order("start_date", { ascending: false })
+          .limit(ids.length * MAX_EXP_ATTACH),
         reader.from("projects")
           .select("candidate_id, id, title, description, problem_statement, tech_stack, role_in_project, project_link, repo_link, deployment_link, impact_summary, project_type")
-          .in("candidate_id", ids),
+          .in("candidate_id", ids)
+          .limit(ids.length * MAX_PROJECTS_ATTACH),
         reader.from("education")
           .select("candidate_id, institution, degree, field_of_study, start_year, end_year, achievements")
           .in("candidate_id", ids)
-          .order("start_year", { ascending: false }),
+          .order("start_year", { ascending: false })
+          .limit(ids.length * MAX_EXP_ATTACH),
         reader.from("open_source_contributions")
           .select("candidate_id, repo_name, repo_url, description, pr_links, tech_stack, role")
-          .in("candidate_id", ids),
+          .in("candidate_id", ids)
+          .limit(ids.length * MAX_OSSTP_ATTACH),
       ]);
       const assign = (key: string, data: unknown, cap: number): void => {
         const buckets = new Map<string, Record<string, unknown>[]>();
@@ -369,7 +373,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       p_per_candidate: PER_CANDIDATE_CHUNKS,
     };
     try {
-      const { data, error } = await reader.rpc("match_chunks", baseParams);
+      const { data, error } = await db.rpc("match_chunks", baseParams);
       if (error) throw error;
       if (data) chunks = data as Chunk[];
     } catch (e) {
@@ -377,7 +381,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       console.error(`[search] filtered rpc failed, fallback detail=${redactPii(msg.slice(0, 200))}`);
       rpcFallback = true;
       try {
-        const { data, error } = await reader.rpc("match_chunks", {
+        const { data, error } = await db.rpc("match_chunks", {
           ...baseParams,
           p_domain: null,
           p_min_exp: null,
@@ -624,7 +628,12 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       const cid = String(r.id ?? "");
       return { candidate_id: cid, job: jobReq, candidateJson: { candidate: candById.get(cid) ?? r, projects: projsById.get(cid) ?? [] } };
     });
-    const judged = await judgeTop(inputs, defaultOpenAIProvider(), JUDGE_CONCURRENCY, { timeoutMs: JUDGE_TIMEOUT_MS });
+    const judged = (await Promise.race([
+      judgeTop(inputs, defaultOpenAIProvider(), JUDGE_CONCURRENCY, { timeoutMs: JUDGE_TIMEOUT_MS }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Deep judge overall deadline exceeded")), 40000),
+      ),
+    ])) as Array<JudgeResult | null>;
     const judgeNulls = judged.filter((jj) => jj == null).length;
     wev.add({ judge_nulls: judgeNulls, judged: judged.length });
     const merged = top.map((r, i) => {
