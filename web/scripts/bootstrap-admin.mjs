@@ -1,14 +1,6 @@
-import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
+import { loadEnv } from "./lib/env.mjs";
 
-function loadEnv(path) {
-  const out = {};
-  for (const line of readFileSync(path, "utf8").split("\n")) {
-    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-    if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, "");
-  }
-  return out;
-}
 const mask = (e) => (!e || !e.includes("@") ? "***" : e.slice(0, 2) + "***@" + e.split("@")[1]);
 const env = loadEnv(new URL("../.env.local", import.meta.url));
 const url = env.NEXT_PUBLIC_SUPABASE_URL;

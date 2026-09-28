@@ -92,12 +92,6 @@ export async function fetchOwnerSession(): Promise<ViewerSession | null> {
 
 export function clearHrSession() {
   clearDisplayCookie();
-  try {
-    void supabaseBrowser()
-      .auth.signOut()
-      .catch(() => undefined);
-  } catch {
-  }
   notifySessionChanged();
 }
 

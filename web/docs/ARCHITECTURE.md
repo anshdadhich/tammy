@@ -1,5 +1,13 @@
 # ReverseHiring — Implementation Architecture (code-truthful)
 
+> NOTE (2026-09-28): Supabase-Auth rewrite landed after this doc. Current truth:
+> passwordless OTP sessions (not HMAC cookies); `POST /api/contact` (singular)
+> does not exist — use `POST /api/contacts`; `_actions.tsx` is gone (admin acts
+> via `POST /api/admin/employers` directly); `lib/matching/scoring.ts` deleted
+> (live scoring is `lib/scoring-live.ts`); `lookup` returns `{exists, token}`,
+> never an id; `STRICT_HR_VERIFY` no longer gates anything (fail-closed always).
+> Sections below marked previous-UI remain historical.
+>
 > NOTE (2026-09-12): UI removed — `web/` is now API-only (`/api/*` + `GET /` JSON index).
 > Flows A/B/D/E and landing/admin/dashboard pages below describe the PREVIOUS
 > Next.js UI and no longer exist in code. Backend flows (API routes, `lib/`,

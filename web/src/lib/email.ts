@@ -37,6 +37,9 @@ function sanitizeSubject(subject: string): string {
 function resolveSiteUrl(): string {
   const raw = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
   const fallback = "https://example.com";
+  if (process.env.NODE_ENV === "production" && !raw) {
+    console.warn("[email] NEXT_PUBLIC_SITE_URL unset in production — links fall back to example.com");
+  }
   const candidate = raw || (process.env.NODE_ENV === "production" ? fallback : "http://localhost:3000");
   try {
     const u = new URL(candidate);

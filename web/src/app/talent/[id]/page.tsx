@@ -16,6 +16,7 @@ import PageShell from "@/components/PageShell";
 import Avatar from "@/components/Avatar";
 import VisibilityToggle from "./visibility-toggle";
 import SummaryRegenerate from "./summary-regenerate";
+import EmailChange from "./email-change";
 import { GET } from "@/app/api/candidates/route";
 import { getViewerAuth } from "@/lib/api-auth";
 import { driveImageUrl, isDriveLink } from "@/lib/drive";
@@ -774,6 +775,9 @@ export default async function TalentPage({
             <span className="meta-chip">Talent record</span>
             {isOwner ? (
               <VisibilityToggle id={c.id} initial={c.visibility_status ?? "visible"} />
+            ) : null}
+            {isOwner ? (
+              <EmailChange id={c.id} current={String(c.contact_email ?? "")} />
             ) : null}
           </div>
 

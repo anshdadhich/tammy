@@ -1,44 +1,21 @@
-# matching/ — pipeline module draft
+# matching/ — live retrieval and scoring
 
-Flow: `parse -> filter -> embed -> hybrid top30 -> rerank/rules -> judge top10 -> final`
-
-```
-JD text --[prompt 13#3]--> JobReq (types.ts)
-        --[hybrid.buildPrefilterQuery]--> candidate ids (<=2000, "Bouncer")
-        --[voyage.embedQuery + embedChunks]--> vectors (voyage-4-lite)
-        --[hybrid vector + keyword]--> ranked chunks
-        --[hybrid.combineRanks RRF]--> HybridHit[30] ("Scout")
-        --[scoring.* rules]--> SubScores + final 0..100 ("Reranker/rules")
-        --[judge.judgeTop x10 parallel]--> JudgeResult ("Judge")
-        --[scoring.blendWithJudge 0.7/0.3]--> MatchScore[10] ("Reporter")
-```
-
-## Files
+Flow: `job -> embed -> match_chunks RPC (filtered vector + FTS) -> group per candidate -> rules score (+evidence/gaps) -> optional judge top10 -> blend`
 
 | File | Covers |
 |---|---|
 | `types.ts` | `CandidateChunk`, `ChunkMetadata`, `JobReq`, `SubScores`, `HybridHit`, `MatchScore`, `MatchLevel` |
-| `voyage.ts` | `embedTexts` (`input_type` document/query), `embedChunks`, `embedQuery`, `buildJobQueryText`. Needs `VOYAGE_API_KEY`. |
-| `hybrid.ts` | `buildHardFilterWhere` / `buildPrefilterQuery`, `buildVectorSearchQuery` (pgvector `<=>`), `buildKeywordSearchQuery` (ILIKE + `pg_trgm`), `combineRanks` (RRF, top30). Returns `{text, values}` for any pg client. |
-| `judge.ts` | `JudgeProvider` interface, `defaultOpenAIProvider` (cheap model, default `gpt-4o-mini` via `JUDGE_MODEL`), `JUDGE_SYSTEM_PROMPT` (docs/13#4), `judgeCandidate`, `judgeTop` (parallel, null-tolerant), `parseJudgeOutput` (-> docs/13#5 shape). |
-| `scoring.ts` | `final = 0.25 semantic + 0.25 skill + 0.20 depth + 0.15 constraints + 0.10 seniority`; helpers `semanticFromDistance`, `skillScore` (evidence-weighted), `depthScore`, `constraintsScore`, `seniorityScore`, `fitLabel`, `blendWithJudge` (0.7 rules + 0.3 judge). |
-
-## Required Postgres setup (later migration)
-
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
--- profile_chunks(embedding vector(<dims>)) with HNSW index; GIN on text for trgm
-```
+| `voyage.ts` | `embedTexts`, `embedChunks`, `embedQuery`, `buildJobQueryText`, dim asserts. Needs `VOYAGE_API_KEY`. |
+| `hybrid.ts` | `buildHardFilterWhere` (structured prefilter), `buildFtsQueryText` (feeds the RPC `p_fts_query` arm), `combineRanks`. The vector arm runs inside `match_chunks` SQL, not here. |
+| `judge.ts` | `JudgeProvider`, `defaultOpenAIProvider`, `judgeCandidate`, `judgeTop` (parallel, timeouts, null-tolerant), `parseJudgeOutput`. |
+| `../scoring-live.ts` | Live rules scoring + `blendWithJudge` (0.7 rules + 0.3 judge, advisory). Called by `/api/search`. |
 
 ## Env
 
 - `VOYAGE_API_KEY` — embeddings
 - `OPENROUTER_API_KEY` (or `LLM_API_KEY`) + optional `JUDGE_MODEL`, `OPENROUTER_BASE_URL` — judge
 
-## Integration TODO (after Next.js scaffold)
+## Notes
 
-1. Add `pg` (or Drizzle) client + run builders in a `POST /api/search` route.
-2. Group ranked chunks by candidate before `combineRanks`; attach per-skill evidence counts for `skillScore`.
-3. Fast mode: skip `judgeTop`, return rule scores. Deep mode: `judgeTop(10)` then `blendWithJudge`.
-4. Persist `MatchScore` rows + cache repeat searches.
+- Retrieval filters (domain, experience, salary, location, availability, chunk types, FTS) are applied inside `supabase/match_chunks.sql` before ranking.
+- `POST /api/search` caches by `query_hash` and reuses stored query embeddings; deep-judge payloads are reused from recent same-hash searches.

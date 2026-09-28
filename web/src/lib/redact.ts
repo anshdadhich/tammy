@@ -18,7 +18,13 @@ function maskPhonesSegment(s: string): string {
   });
   out = out.replace(PHONE_LIKE_RE, (m) => {
     const digits = m.replace(/\D/g, "");
-    if (digits.length >= 10 && digits.length <= 15) return "[redacted-phone]";
+    if (digits.length >= 10 && digits.length <= 15) {
+      if (digits.length === 13) {
+        const v = Number(digits);
+        if (Number.isFinite(v) && v >= 1700000000000 && v <= 2100000000000) return m;
+      }
+      return "[redacted-phone]";
+    }
     return m;
   });
   return out;

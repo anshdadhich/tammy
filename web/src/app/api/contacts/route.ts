@@ -6,6 +6,8 @@ import { contactLoggedEmail, sendEmail } from "@/lib/email";
 import { requireHrDb, requireOwnerDb, getSessionUser } from "@/lib/supabase-user";
 import { rateLimit, rateLimitRoute } from "@/lib/rate-limit";
 import { startWideEvent } from "@/lib/observe";
+import { withTimeout } from "@/lib/timeout";
+import { encodeCursor, decodeCursor } from "@/lib/cursor";
 
 const EMAIL_TIMEOUT_MS = 15000;
 const IDEMPOTENCY_WINDOW_MS = 10 * 60_000;
@@ -27,36 +29,8 @@ const AUDIT_ACTIONS = ["search", "profile_view", "contact", "shortlist", "export
 
 type Db = ReturnType<typeof supabaseAdmin>;
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("email timeout")), ms);
-  });
-  return Promise.race([p, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
 function messageHash(channel: string, message: string): string {
   return createHash("sha256").update(`${channel}|${message}`, "utf8").digest("hex");
-}
-
-function encodeCursor(createdAt: string, id: string): string {
-  return Buffer.from(`${createdAt}|${id}`, "utf8").toString("base64url");
-}
-
-function decodeCursor(cursor: string): { createdAt: string; id: string } | null {
-  try {
-    const raw = Buffer.from(cursor, "base64url").toString("utf8");
-    const i = raw.lastIndexOf("|");
-    if (i <= 0) return null;
-    const createdAt = raw.slice(0, i);
-    const id = raw.slice(i + 1);
-    if (!createdAt || !id) return null;
-    return { createdAt, id };
-  } catch {
-    return null;
-  }
 }
 
 async function auditBestEffort(

@@ -160,7 +160,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
           Tammy
         </Link>
 
-        <nav aria-label="Main navigation" className="site-navigation hidden md:flex">
+        <nav aria-label="Main navigation" className="site-navigation hidden lg:flex">
           <div className="site-nav-links">
             {items.map((item) => {
               const isActive = active === item.href;
@@ -230,7 +230,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
             </div>
           ) : null}
 
-          {showAuth ? (
+          {showAuth && !viewer ? (
             <div className="nav-menu-wrap">
               <button
                 type="button"
@@ -265,7 +265,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
             </div>
           ) : null}
 
-          {showAuth ? (
+          {showAuth && (!viewer || viewer.kind === "owner") ? (
             <motion.span whileTap={{ scale: 0.96 }} className="inline-flex">
               <Link
                 href="/join"
@@ -276,7 +276,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
               </Link>
             </motion.span>
           ) : null}
-          {showAuth ? (
+          {viewer?.kind === "hr" ? (
             <Link
               href="/hire/search"
               className="site-login press h-10"
@@ -297,7 +297,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
           </button>
           <button
             type="button"
-            className="site-nav-burger md:hidden press"
+            className="site-nav-burger lg:hidden press"
             aria-expanded={mobileOpen}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             onClick={() => setMobileOpen((v) => !v)}
@@ -312,7 +312,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
           <motion.nav
             key="mobile-nav"
             aria-label="Mobile navigation"
-            className="site-mobile-nav md:hidden"
+            className="site-mobile-nav lg:hidden"
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -356,16 +356,18 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
                   }}
                   className="site-mobile-actions"
                 >
-                  <button
-                    type="button"
-                    className="site-login"
-                    style={{ justifyContent: "center" }}
-                    aria-expanded={authOpen}
-                    onClick={() => setAuthOpen((v) => !v)}
-                  >
-                    Login or Sign up
-                  </button>
-                  {authOpen ? (
+                  {!viewer ? (
+                    <button
+                      type="button"
+                      className="site-login"
+                      style={{ justifyContent: "center" }}
+                      aria-expanded={authOpen}
+                      onClick={() => setAuthOpen((v) => !v)}
+                    >
+                      Login or Sign up
+                    </button>
+                  ) : null}
+                  {!viewer && authOpen ? (
                     <div className="nav-menu nav-menu--inline" role="menu">
                       {SIGNUP_OPTIONS.map((option) => (
                         <Link
@@ -383,22 +385,46 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
                       ))}
                     </div>
                   ) : null}
-                  <Link
-                    href="/join"
-                    className="site-nav-cta"
-                    style={{ justifyContent: "center" }}
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    Build my page
-                  </Link>
-                  <Link
-                    href="/hire/search"
-                    className="site-login"
-                    style={{ justifyContent: "center" }}
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    Search
-                  </Link>
+                  {!viewer || viewer.kind === "owner" ? (
+                    <Link
+                      href="/join"
+                      className="site-nav-cta"
+                      style={{ justifyContent: "center" }}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      Build my page
+                    </Link>
+                  ) : null}
+                  {viewer?.kind === "hr" ? (
+                    <Link
+                      href="/hire/search"
+                      className="site-login"
+                      style={{ justifyContent: "center" }}
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      Search
+                    </Link>
+                  ) : null}
+                  {viewer ? (
+                    <>
+                      <Link
+                        href="/settings"
+                        className="site-login"
+                        style={{ justifyContent: "center" }}
+                        onClick={() => setMobileOpen(false)}
+                      >
+                        Settings
+                      </Link>
+                      <button
+                        type="button"
+                        className="site-login"
+                        style={{ justifyContent: "center" }}
+                        onClick={() => void signOut()}
+                      >
+                        Log out
+                      </button>
+                    </>
+                  ) : null}
                 </motion.div>
               ) : null}
             </div>

@@ -1,4 +1,4 @@
-import { userDb, requireHrDb, getSessionUser } from "@/lib/supabase-user";
+import { userDb, requireHrDb } from "@/lib/supabase-user";
 import { applyContactPrefs } from "@/lib/contact-prefs";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   try {
     text = await request.text();
   } catch {
-    return Response.json({ candidates: [] });
+    return Response.json({ error: "unreadable request body" }, { status: 400 });
   }
   if (text && Buffer.byteLength(text, "utf8") > MAX_JSON_BYTES) {
     return Response.json({ error: "request body too large" }, { status: 413 });
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   try {
     body = text ? (JSON.parse(text) as unknown) : null;
   } catch {
-    return Response.json({ candidates: [] });
+    return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
   const raw = Array.isArray((body as { ids?: unknown } | null)?.ids) ? (body as { ids: unknown[] }).ids : [];
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

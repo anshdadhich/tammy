@@ -5,6 +5,7 @@ import PageShell from "@/components/PageShell";
 import BeamButton from "@/components/BeamButton";
 import { FaqList, HeroDemo, TraceFill } from "@/components/landing-client";
 import ProcessSteps from "@/components/ProcessSteps";
+import { getViewerAuth } from "@/lib/api-auth";
 
 const FAQS = [
   {
@@ -80,7 +81,8 @@ const DISCOVERY = [
   },
 ];
 
-export default function Landing() {
+export default async function Landing() {
+  const viewer = await getViewerAuth();
   return (
     <PageShell footer>
 
@@ -99,14 +101,40 @@ export default function Landing() {
               className="rise flex flex-wrap items-center gap-3 mt-8"
               style={{ "--d": "160ms" } as React.CSSProperties}
             >
-              <BeamButton radius={999}>
-                <Link href="/join" className="btn btn-primary">
-                  Build my page
-                </Link>
-              </BeamButton>
-              <Link href="/hire" className="btn btn-secondary press">
-                I&apos;m hiring <ArrowRight className="w-4 h-4" aria-hidden="true" />
-              </Link>
+              {viewer.kind === "owner" ? (
+                <>
+                  <BeamButton radius={999}>
+                    <Link href={`/talent/${viewer.id}`} className="btn btn-primary">
+                      View my page
+                    </Link>
+                  </BeamButton>
+                  <Link href="/join" className="btn btn-secondary press">
+                    Edit page <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </Link>
+                </>
+              ) : viewer.kind === "hr" ? (
+                <>
+                  <BeamButton radius={999}>
+                    <Link href="/hire/search" className="btn btn-primary">
+                      Search candidates
+                    </Link>
+                  </BeamButton>
+                  <Link href="/hire" className="btn btn-secondary press">
+                    For employers <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <BeamButton radius={999}>
+                    <Link href="/join" className="btn btn-primary">
+                      Build my page
+                    </Link>
+                  </BeamButton>
+                  <Link href="/hire" className="btn btn-secondary press">
+                    I&apos;m hiring <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </Link>
+                </>
+              )}
             </div>
 
             <div className="rise mt-14 lg:mt-16" style={{ "--d": "280ms" } as React.CSSProperties}>

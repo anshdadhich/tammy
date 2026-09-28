@@ -53,6 +53,8 @@ for (const a of ACCOUNTS) {
   await db.from("users").insert({ auth_id: data.user.id, email: a.email, role: a.role, status: "active", email_verified: true });
 }
 const { data: emp } = await db.from("employers").insert({ company_name: "Test Labs", company_email: "employer@test.com", verification_status: "verified" }).select("id").single();
+const { data: empUser } = await db.from("users").select("id").eq("email", "employer@test.com").maybeSingle();
+if (empUser) await db.from("employers").update({ user_id: empUser.id }).eq("id", emp.id);
 await db.from("jobs").insert({
   employer_id: emp.id, title: "Backend Developer (Node/Postgres)", domain: "Software Development",
   seniority: "mid", description: "Build logistics APIs with Node.js and PostgreSQL. Realtime tracking with WebSockets and Redis a plus. Must own auth, schema design, deployment.",
@@ -68,6 +70,8 @@ const { data: cand } = await db.from("candidates").insert({
   visibility_status: "visible", consent_status: "granted",
   contact_email: "candidate@test.com", contact_phone: "+91 98765 43210",
 }).select("id").single();
+const { data: candUser } = await db.from("users").select("id").eq("email", "candidate@test.com").maybeSingle();
+if (candUser) await db.from("candidates").update({ user_id: candUser.id }).eq("id", cand.id);
 const { data: skillRows } = await db.from("skills").select("id,name").in("name", ["Node.js", "PostgreSQL", "Redis"]);
 if (skillRows?.length) await db.from("candidate_skills").insert(skillRows.map((s) => ({ candidate_id: cand.id, skill_id: s.id, source: "self_reported" })));
 const { data: proj } = await db.from("projects").insert({

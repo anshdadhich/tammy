@@ -19,10 +19,13 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
   }
-  if (!session || session.viewer.kind !== "owner" || session.viewer.id !== parsed.data.id) {
+  if (!session) {
+    return Response.json({ error: "Sign in to manage this profile." }, { status: 401 });
+  }
+  if (session.viewer.kind !== "owner" || session.viewer.id !== parsed.data.id) {
     return Response.json({ error: "Sign in as this profile owner first." }, { status: 403 });
   }
-  const gate = await requireOwnerDb(parsed.data.id);
+  const gate = await requireOwnerDb(parsed.data.id, session);
   if (gate instanceof Response) {
     return Response.json({ error: "Sign in as this profile owner first." }, { status: 403 });
   }

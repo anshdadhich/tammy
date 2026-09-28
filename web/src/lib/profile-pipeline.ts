@@ -6,6 +6,7 @@ import { embedChunks } from "@/lib/matching/voyage";
 import { profileReadyEmail, sendEmail } from "@/lib/email";
 import { analyzeProjectDepth, generateCandidateSummary } from "@/lib/ai";
 import { startWideEvent } from "@/lib/observe";
+import { withTimeout } from "@/lib/timeout";
 
 interface ProfileSubmittedData {
   candidateId: string;
@@ -20,22 +21,11 @@ function contentHash(s: string): string {
   return createHash("sha256").update(s, "utf8").digest("hex");
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("email timeout")), ms);
-  });
-  return Promise.race([p, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
 export const processProfile = inngest.createFunction(
   {
     id: "process-profile",
     triggers: [{ event: "candidate.profile.submitted" }],
     concurrency: { limit: 1, key: "event.data.candidateId" },
-    idempotency: "event.data.candidateId",
     retries: 2,
   },
   async ({ event, step }: { event: { data: ProfileSubmittedData }; step: { run: <T>(name: string, fn: () => Promise<T>) => Promise<T> } }) => {
@@ -54,6 +44,9 @@ export const processProfile = inngest.createFunction(
       return r.data as { id: string; headline: string | null; domain: string | null; total_experience_years: number | null; visibility_status?: string | null } | null;
     });
     if (!candidate) throw new NonRetriableError("candidate not found");
+    if (candidate.visibility_status && candidate.visibility_status !== "visible") {
+      return { ok: true, skipped: true as const, reason: "not visible" };
+    }
 
     const bundle = await step.run("fetch-context", async () => {
       const [{ data: projects }, { data: experiences }, { data: skillRows }] = await Promise.all([
@@ -124,11 +117,12 @@ export const processProfile = inngest.createFunction(
         })),
       });
       if (summary) {
-        await db.from("candidate_profiles").upsert({
+        const { error: sumErr } = await db.from("candidate_profiles").upsert({
           candidate_id: candidateId,
           summary_markdown: summary.markdown,
           summary_json: summary.json,
         }, { onConflict: "candidate_id" });
+        if (sumErr) throw sumErr;
       }
       return { ok: !!summary };
     });
@@ -143,7 +137,7 @@ export const processProfile = inngest.createFunction(
           impact: p.impact_summary ?? "",
         });
         if (!depth) return { ok: false, skipped: true as const };
-        await db.from("project_depth_analysis").upsert({
+        const { error: depthErr } = await db.from("project_depth_analysis").upsert({
           project_id: p.id,
           complexity_score: typeof depth.complexity_score === "number" ? depth.complexity_score : 5,
           technical_complexity: String(depth.technical_complexity ?? "medium"),
@@ -153,6 +147,7 @@ export const processProfile = inngest.createFunction(
           relevance_tags: (depth.relevance_tags as string[]) ?? [],
           raw_ai_analysis: depth,
         }, { onConflict: "project_id" });
+        if (depthErr) throw depthErr;
         return { ok: true };
       });
     }
@@ -235,7 +230,8 @@ export const processProfile = inngest.createFunction(
       if (experiences.length) q += 10;
       if (skills.length >= 3) q += 10;
       if (candidate.headline) q += 5;
-      await db.from("candidates").update({ profile_strength: Math.min(q, 100), freshness_updated_at: new Date().toISOString() }).eq("id", candidateId);
+      const { error: qErr } = await db.from("candidates").update({ profile_strength: Math.min(q, 100), freshness_updated_at: new Date().toISOString() }).eq("id", candidateId);
+      if (qErr) throw qErr;
     });
 
     const notified = await step.run("notify-ready", async () => {

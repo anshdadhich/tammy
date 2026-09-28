@@ -79,7 +79,7 @@ All email sends are wrapped in try/catch — missing `RESEND_API_KEY` never brea
 
 ## Deploy notes (Vercel + Supabase)
 
-- Supabase: create project → run SQL in order: `schema.sql` → `storage.sql` → `contact_prefs.sql` → `seed_skills.sql` → `match_chunks.sql` → `migrations/20260923_hardening.sql` → enable Auth (Email + OTP) → add Storage buckets if needed.
+- Supabase: create project → run SQL in order: `schema.sql` → `storage.sql` → `contact_prefs.sql` → `seed_skills.sql` → `match_chunks.sql` → `migrations/20260923_hardening.sql` → `migrations/20260928_role_guard.sql` → enable Auth (Email + OTP) → add Storage buckets if needed.
 - Vercel: import `web/` as the project root, set all env vars above (server: `SUPABASE_SERVICE_ROLE_KEY`, `VOYAGE_API_KEY`, `OPENROUTER_API_KEY`, `RESEND_API_KEY`; public: `NEXT_PUBLIC_SUPABASE_*`), deploy. Prod hardening: HR verification is fail-closed by default (no flag needed) + set `BOOTSTRAP_SECRET` (locks `/api/admin/bootstrap`).
 - Inngest: create an Inngest project, set `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` in Vercel, point Inngest to `https://<app>/api/webhooks/inngest` as the serving endpoint.
 - Post-deploy: re-run `seed_demo.sql` only for staging; never on prod (demo `@demo.local` rows).

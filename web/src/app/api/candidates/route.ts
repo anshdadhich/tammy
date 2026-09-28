@@ -304,6 +304,10 @@ export async function POST(request: Request) {
   if (!verifyCaptchaHook(rawBody)) {
     return Response.json({ error: "verification required" }, { status: 403 });
   }
+  const session = await getSessionUser();
+  if (session?.userRow && session.userRow.role === "employer") {
+    return Response.json({ error: "Employer accounts cannot create candidate profiles." }, { status: 403 });
+  }
   const parsed = candidateSchema.safeParse(rawBody);
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });

@@ -31,7 +31,7 @@ async function hrSignIn() {
     token_type: "bearer",
     user: tok.user ?? null,
   };
-  const jar = `sb-${ref}-auth-token=${Buffer.from(JSON.stringify(session), "utf8").toString("base64url")}`;
+  const jar = `sb-${ref}-auth-token=base64-${Buffer.from(JSON.stringify(session), "utf8").toString("base64url")}`;
   const me = await (await fetch(`${BASE}/api/session/hr`, { headers: { Cookie: jar } })).json().catch(() => null);
   ok("hr session via supabase auth", me?.email === HR_EMAIL.toLowerCase(), `(${me?.email ?? "no-session"})`);
   return me?.email ? jar : "";

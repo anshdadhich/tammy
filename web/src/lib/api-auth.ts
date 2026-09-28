@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { getSessionUser, requireHrDb, requireOwnerDb } from "@/lib/supabase-user";
+import { getSessionUser, requireOwnerDb } from "@/lib/supabase-user";
 
 export type Viewer =
   | { kind: "hr"; name: string; email: string }

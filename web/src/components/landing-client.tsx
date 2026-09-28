@@ -63,6 +63,8 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
   );
   const [matchMode, setMatchMode] = useState<"describe" | "search" | "deep">("search");
   const runningRef = useRef(false);
+  const modeRef = useRef<"describe" | "search" | "deep">("search");
+  const resumeAtRef = useRef(0);
 
   const runChecklist = useCallback(() => {
     if (runningRef.current) return;
@@ -82,6 +84,27 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
       }
     }, 380);
   }, []);
+
+  const goMode = useCallback(
+    (next: "describe" | "search" | "deep", manual: boolean) => {
+      modeRef.current = next;
+      setMatchMode(next);
+      if (manual) resumeAtRef.current = Date.now() + 12000;
+      if (next === "search") runChecklist();
+    },
+    [runChecklist],
+  );
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const order = ["describe", "search", "deep"] as const;
+    const timer = setInterval(() => {
+      if (document.hidden || Date.now() < resumeAtRef.current) return;
+      const next = order[(order.indexOf(modeRef.current) + 1) % order.length];
+      goMode(next, false);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [goMode]);
 
   return (
     <div className="grid lg:grid-cols-5 gap-10 lg:gap-14 items-start">
@@ -130,7 +153,7 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
         <div className="match-controls">
           <div className="match-mode-switcher">
             <button
-              onClick={() => setMatchMode("describe")}
+              onClick={() => goMode("describe", true)}
               className={`match-mode ${matchMode === "describe" ? "is-active" : ""}`}
               aria-pressed={matchMode === "describe"}
               style={{ position: "relative" }}
@@ -145,10 +168,7 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
               <span style={{ position: "relative" }}>Describe role</span>
             </button>
             <button
-              onClick={() => {
-                setMatchMode("search");
-                runChecklist();
-              }}
+              onClick={() => goMode("search", true)}
               className={`match-mode ${matchMode === "search" ? "is-active" : ""}`}
               aria-pressed={matchMode === "search"}
               style={{ position: "relative" }}
@@ -163,7 +183,7 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
               <span style={{ position: "relative" }}>Search</span>
             </button>
             <button
-              onClick={() => setMatchMode("deep")}
+              onClick={() => goMode("deep", true)}
               className={`match-mode ${matchMode === "deep" ? "is-active" : ""}`}
               aria-pressed={matchMode === "deep"}
               style={{ position: "relative" }}
@@ -180,8 +200,11 @@ export function HeroDemo({ dither }: { dither: React.ReactNode }) {
           </div>
           <button
             onClick={() => {
-              if (matchMode !== "search") setMatchMode("search");
-              runChecklist();
+              if (modeRef.current !== "search") goMode("search", true);
+              else {
+                resumeAtRef.current = Date.now() + 12000;
+                runChecklist();
+              }
             }}
             title="Re-run matching query"
             aria-label="Re-run matching query"

@@ -5,6 +5,8 @@ import { newMatchEmail, sendEmail } from "@/lib/email";
 import { requireHrDb, getSessionUser } from "@/lib/supabase-user";
 import { rateLimitRoute } from "@/lib/rate-limit";
 import { startWideEvent } from "@/lib/observe";
+import { withTimeout } from "@/lib/timeout";
+import { encodeCursor, decodeCursor } from "@/lib/cursor";
 
 const uuid = z.string().uuid("Must be a valid UUID");
 
@@ -29,34 +31,6 @@ const removeByIdSchema = z.object({ id: uuid });
 const AUDIT_ACTIONS = ["search", "profile_view", "contact", "shortlist", "export", "profile_update", "upload"] as const;
 
 type Db = ReturnType<typeof supabaseAdmin>;
-
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error("email timeout")), ms);
-  });
-  return Promise.race([p, timeout]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
-function encodeCursor(createdAt: string, id: string): string {
-  return Buffer.from(`${createdAt}|${id}`, "utf8").toString("base64url");
-}
-
-function decodeCursor(cursor: string): { createdAt: string; id: string } | null {
-  try {
-    const raw = Buffer.from(cursor, "base64url").toString("utf8");
-    const i = raw.lastIndexOf("|");
-    if (i <= 0) return null;
-    const createdAt = raw.slice(0, i);
-    const id = raw.slice(i + 1);
-    if (!createdAt || !id) return null;
-    return { createdAt, id };
-  } catch {
-    return null;
-  }
-}
 
 async function auditBestEffort(
   db: Db,
@@ -248,7 +222,27 @@ export async function POST(request: Request) {
         bg.end({ status: 200 });
         return;
       }
-      const tpl = newMatchEmail((cc as { full_name?: string })?.full_name ?? "there", "a role you match", "An employer");
+      let jobTitle = "a role you match";
+      let companyName = "An employer";
+      try {
+        if (job_id) {
+          const { data: jj } = await mailDb.from("jobs").select("title, employer_id").eq("id", job_id).maybeSingle();
+          const jt = (jj as { title?: string; employer_id?: string } | null)?.title;
+          if (jt && jt.trim()) jobTitle = jt.trim().slice(0, 120);
+          const eid = (jj as { employer_id?: string } | null)?.employer_id ?? employerId;
+          if (eid) {
+            const { data: ee } = await mailDb.from("employers").select("company_name").eq("id", eid).maybeSingle();
+            const cn = (ee as { company_name?: string } | null)?.company_name;
+            if (cn && cn.trim()) companyName = cn.trim().slice(0, 120);
+          }
+        } else {
+          const { data: ee } = await mailDb.from("employers").select("company_name").eq("id", employerId).maybeSingle();
+          const cn = (ee as { company_name?: string } | null)?.company_name;
+          if (cn && cn.trim()) companyName = cn.trim().slice(0, 120);
+        }
+      } catch {
+      }
+      const tpl = newMatchEmail((cc as { full_name?: string })?.full_name ?? "there", jobTitle, companyName);
       const result = await withTimeout(sendEmail(em, tpl.subject, tpl.html), EMAIL_TIMEOUT_MS);
       bg.add({
         email_outcome: result.skipped ? "skipped" : "sent",

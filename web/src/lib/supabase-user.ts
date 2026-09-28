@@ -190,7 +190,7 @@ export async function requireOwnerDb(candidateId: string, session?: SessionUser 
     }
   } catch (e) {
     logErr("owner check failed", e);
-    return Response.json({ error: "You can only modify your own profile." }, { status: 403 });
+    return Response.json({ error: "Something went wrong. Try again." }, { status: 500 });
   }
   return { client, user: session, candidateId };
 }
@@ -233,6 +233,6 @@ export async function requireHrDb(session?: SessionUser | null): Promise<HrDb | 
     return { client, user: session, employerId };
   } catch (e) {
     logErr("hr check failed", e);
-    return Response.json({ error: "Employer verification required." }, { status: 403 });
+    return Response.json({ error: "Something went wrong. Try again." }, { status: 500 });
   }
 }

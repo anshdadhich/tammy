@@ -215,16 +215,21 @@ export async function judgeCandidate(
   opts: { timeoutMs?: number } = {},
 ): Promise<JudgeResult> {
   const timeoutMs = opts.timeoutMs ?? JUDGE_TIMEOUT_MS;
-  const text = await Promise.race([
-    provider.complete({
-      system: JUDGE_SYSTEM_PROMPT,
-      user: buildJudgeUserPrompt(input.job, input.candidateJson),
-    }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Judge timed out after ${timeoutMs}ms`)), timeoutMs),
-    ),
-  ]);
-  return parseJudgeOutput(input.candidate_id, text);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const text = await Promise.race([
+      provider.complete({
+        system: JUDGE_SYSTEM_PROMPT,
+        user: buildJudgeUserPrompt(input.job, input.candidateJson),
+      }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Judge timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+    return parseJudgeOutput(input.candidate_id, text);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function judgeTop(
