@@ -1,6 +1,12 @@
+import { redactPii } from "@/lib/redact";
+
 const VOYAGE_URL = "https://api.voyageai.com/v1/embeddings";
 
 export const VOYAGE_DEFAULT_MODEL = "voyage-4-lite";
+
+export const EMBEDDING_MODEL = VOYAGE_DEFAULT_MODEL;
+export const EMBEDDING_DIM = 1024;
+export const VOYAGE_TIMEOUT_MS = 15000;
 
 export type VoyageInputType = "query" | "document";
 
@@ -11,16 +17,38 @@ interface VoyageEmbeddingResponse {
   usage?: { total_tokens: number };
 }
 
+export function assertEmbeddingDim(vec: unknown, expected = EMBEDDING_DIM): asserts vec is number[] {
+  if (!Array.isArray(vec) || vec.length !== expected) {
+    throw new Error(`Embedding dim mismatch: got ${Array.isArray(vec) ? vec.length : typeof vec}, expected ${expected}`);
+  }
+  for (const v of vec) {
+    if (typeof v !== "number" || !Number.isFinite(v)) {
+      throw new Error(`Embedding contains non-finite value, expected ${expected} finite numbers`);
+    }
+  }
+}
+
+export function toVectorLiteral(vec: number[], expected = EMBEDDING_DIM): string {
+  assertEmbeddingDim(vec, expected);
+  return `[${vec.join(",")}]`;
+}
+
 function apiKey(): string {
   const key = process.env.VOYAGE_API_KEY;
   if (!key) throw new Error("VOYAGE_API_KEY is not set");
   return key;
 }
 
-async function fetchWithRetry(url: string, init: RequestInit, tries = 3): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  tries = 3,
+  timeoutMs = VOYAGE_TIMEOUT_MS,
+): Promise<Response> {
   let last: Response | null = null;
   for (let attempt = 0; attempt < tries; attempt++) {
-    const res = await fetch(url, init);
+    const signal = init.signal ?? AbortSignal.timeout(timeoutMs);
+    const res = await fetch(url, { ...init, signal });
     if (res.ok) return res;
     last = res;
     if (res.status !== 429 && res.status < 500) break;
@@ -33,30 +61,35 @@ async function fetchWithRetry(url: string, init: RequestInit, tries = 3): Promis
 
 const queryCache = new Map<string, { vec: number[]; at: number }>();
 const QUERY_CACHE_TTL = 5 * 60 * 1000;
+const QUERY_CACHE_MAX = 500;
 
 export async function embedTexts(
   texts: string[],
-  opts: { input_type?: VoyageInputType; model?: string } = {},
+  opts: { input_type?: VoyageInputType; model?: string; timeoutMs?: number } = {},
 ): Promise<number[][]> {
   if (texts.length === 0) return [];
-  const { input_type = "document", model = VOYAGE_DEFAULT_MODEL } = opts;
+  const { input_type = "document", model = VOYAGE_DEFAULT_MODEL, timeoutMs = VOYAGE_TIMEOUT_MS } = opts;
 
   const clipped = texts.map((t) => (t.length > 8000 ? t.slice(0, 8000) : t));
 
-  const res = await fetchWithRetry(VOYAGE_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey()}`,
+  const res = await fetchWithRetry(
+    VOYAGE_URL,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey()}`,
+      },
+      body: JSON.stringify({ input: clipped, model, input_type }),
     },
-    body: JSON.stringify({ input: clipped, model, input_type }),
-  });
+    3,
+    timeoutMs,
+  );
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(
-      `Voyage embeddings failed (${res.status}): ${body.slice(0, 500)}`,
-    );
+    console.error(`[voyage] embeddings failed status=${res.status} inputs=${texts.length} detail=${redactPii(body.slice(0, 200))}`);
+    throw new Error(`Voyage embeddings failed (${res.status})`);
   }
 
   const json = (await res.json()) as VoyageEmbeddingResponse;
@@ -66,7 +99,9 @@ export async function embedTexts(
       `Voyage returned ${sorted.length} embeddings for ${texts.length} inputs`,
     );
   }
-  return sorted.map((d) => d.embedding);
+  const out = sorted.map((d) => d.embedding);
+  for (const vec of out) assertEmbeddingDim(vec);
+  return out;
 }
 
 export async function embedChunks(
@@ -79,13 +114,19 @@ export async function embedChunks(
 export async function embedQuery(
   text: string,
   model = VOYAGE_DEFAULT_MODEL,
+  opts: { timeoutMs?: number } = {},
 ): Promise<number[]> {
   const key = `${model}:${text.slice(0, 8000)}`;
   const hit = queryCache.get(key);
-  if (hit && Date.now() - hit.at < QUERY_CACHE_TTL) return hit.vec;
-  const [vec] = await embedTexts([text], { input_type: "query", model });
+  if (hit && Date.now() - hit.at < QUERY_CACHE_TTL) {
+    queryCache.delete(key);
+    queryCache.set(key, hit);
+    return hit.vec;
+  }
+  const [vec] = await embedTexts([text], { input_type: "query", model, timeoutMs: opts.timeoutMs });
+  assertEmbeddingDim(vec);
   queryCache.set(key, { vec, at: Date.now() });
-  if (queryCache.size > 200) {
+  if (queryCache.size > QUERY_CACHE_MAX) {
     const oldest = queryCache.keys().next().value;
     if (oldest) queryCache.delete(oldest);
   }

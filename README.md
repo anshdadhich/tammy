@@ -72,14 +72,14 @@ Checks `GET /` → 200 (JSON index) and `POST /api/search` with `{}` → 400.
 - `PUT /api/candidates` `{ id, ...fields }` → 202 (owner edit, replaces child rows)
 - `POST /api/search` `{ job, limit?, deep? }` → `{ results, queryText, searchId }`
 - `POST /api/shortlists` `{ candidate_id, job_id?, employer_id?, status?, notes? }` → emails candidate (best-effort)
-- `POST /api/candidates/lookup` `{ email }` → `{ exists, id? }` (rate-limited existence check; full bundles only via `GET /api/candidates?id=`)
+- `POST /api/candidates/lookup` `{ email }` → `{ exists }` or `{ exists: true, token }` (rate-limited existence check; id never disclosed; full bundles only via `GET /api/candidates?id=`)
 - `POST /api/contacts` `{ candidate_id, job_id?, employer_id?, channel?, message? }` → audit-logs + emails candidate (best-effort)
 
 All email sends are wrapped in try/catch — missing `RESEND_API_KEY` never breaks an API response.
 
 ## Deploy notes (Vercel + Supabase)
 
-- Supabase: create project → run SQL in order: `schema.sql` → `storage.sql` → `contact_prefs.sql` → `match_chunks.sql` → `migrations/20260923_hardening.sql` → enable Auth → add Storage buckets if needed.
-- Vercel: import `web/` as the project root, set all env vars above (server: `SUPABASE_SERVICE_ROLE_KEY`, `VOYAGE_API_KEY`, `OPENROUTER_API_KEY`, `RESEND_API_KEY`; public: `NEXT_PUBLIC_SUPABASE_*`), deploy. Prod hardening: set `STRICT_HR_VERIFY=1` + `BOOTSTRAP_SECRET` (locks `/api/admin/bootstrap`).
+- Supabase: create project → run SQL in order: `schema.sql` → `storage.sql` → `contact_prefs.sql` → `seed_skills.sql` → `match_chunks.sql` → `migrations/20260923_hardening.sql` → enable Auth (Email + OTP) → add Storage buckets if needed.
+- Vercel: import `web/` as the project root, set all env vars above (server: `SUPABASE_SERVICE_ROLE_KEY`, `VOYAGE_API_KEY`, `OPENROUTER_API_KEY`, `RESEND_API_KEY`; public: `NEXT_PUBLIC_SUPABASE_*`), deploy. Prod hardening: HR verification is fail-closed by default (no flag needed) + set `BOOTSTRAP_SECRET` (locks `/api/admin/bootstrap`).
 - Inngest: create an Inngest project, set `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` in Vercel, point Inngest to `https://<app>/api/webhooks/inngest` as the serving endpoint.
 - Post-deploy: re-run `seed_demo.sql` only for staging; never on prod (demo `@demo.local` rows).

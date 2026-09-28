@@ -10,6 +10,7 @@ import {
   SESSION_EVENT,
   clearHrSession,
   clearOwnerSession,
+  fetchHrSession,
   fetchOwnerSession,
   readHrSession,
   viewerInitials,
@@ -93,7 +94,11 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
     let alive = true;
     const load = () => {
       const hr = readHrSession();
-      const pending = hr ? Promise.resolve(hr) : fetchOwnerSession();
+      const pending = hr
+        ? Promise.resolve(hr)
+        : Promise.all([fetchHrSession(), fetchOwnerSession()]).then(
+            ([h, o]) => h ?? o,
+          );
       pending.then((v) => {
         if (alive) setViewer(v);
       });

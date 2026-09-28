@@ -7,6 +7,7 @@ import { applyTheme } from "@/lib/theme";
 import {
   clearHrSession,
   clearOwnerSession,
+  fetchHrSession,
   fetchOwnerSession,
   readHrSession,
   type ViewerSession,
@@ -20,7 +21,11 @@ export default function SettingsClient() {
   useEffect(() => {
     let alive = true;
     const hr = readHrSession();
-    const pending = hr ? Promise.resolve(hr) : fetchOwnerSession();
+    const pending = hr
+      ? Promise.resolve(hr)
+      : Promise.all([fetchHrSession(), fetchOwnerSession()]).then(
+          ([h, o]) => h ?? o,
+        );
     pending.then((v) => {
       if (alive) {
         setViewer(v);

@@ -1,104 +1,155 @@
-import { supabaseAdmin } from "@/lib/supabase";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { getSessionUser, requireHrDb, requireOwnerDb } from "@/lib/supabase-user";
 
 export type Viewer =
   | { kind: "hr"; name: string; email: string }
   | { kind: "owner"; id: string; email: string }
   | { kind: "anon" };
 
-export function getViewer(req: Request): Viewer {
+export const OWNER_COOKIE = "tammy_owner";
+export const HR_COOKIE = "tammy_hr";
+export const HR_DISPLAY_COOKIE = "tammy_hr_display";
+
+const LOOKUP_TOKEN_TTL_MS = 10 * 60 * 1000;
+const EMAIL_CHANGE_TOKEN_TTL_MS = 15 * 60 * 1000;
+const MAX_EMAIL_LEN = 320;
+
+type SessionPayload = {
+  v?: unknown;
+  kind?: unknown;
+  id?: unknown;
+  name?: unknown;
+  email?: unknown;
+  exp?: unknown;
+};
+
+export function getSessionSecret(): string | null {
+  const s = process.env.SESSION_SECRET;
+  if (s && s.length >= 16) return s;
+  if (process.env.NODE_ENV === "production") return null;
+  return "dev-only-insecure-session-secret";
+}
+
+function b64urlEncode(raw: string): string {
+  return Buffer.from(raw, "utf8").toString("base64url");
+}
+
+function b64urlDecode(part: string): string | null {
   try {
-    const cookie = req.headers.get("cookie") ?? "";
-    const jar = new Map<string, string>();
-    for (const part of cookie.split(";")) {
-      const i = part.indexOf("=");
-      if (i > 0) jar.set(part.slice(0, i).trim(), part.slice(i + 1).trim());
-    }
-
-    const ownerRaw = jar.get("tammy_owner");
-    if (ownerRaw) {
-      try {
-        const o = JSON.parse(decodeURIComponent(ownerRaw)) as {
-          id?: unknown;
-          email?: unknown;
-        };
-        if (typeof o.id === "string" && o.id && typeof o.email === "string") {
-          return { kind: "owner", id: o.id, email: o.email.toLowerCase() };
-        }
-      } catch {
-      }
-    }
-
-    const hrRaw = jar.get("tammy_hr");
-    if (hrRaw) {
-      try {
-        const h = JSON.parse(decodeURIComponent(hrRaw)) as {
-          name?: unknown;
-          email?: unknown;
-        };
-        if (typeof h.email === "string" && h.email) {
-          return {
-            kind: "hr",
-            name: typeof h.name === "string" ? h.name : "Employer",
-            email: h.email.toLowerCase(),
-          };
-        }
-      } catch {
-      }
-    }
+    return Buffer.from(part, "base64url").toString("utf8");
   } catch {
+    return null;
   }
-  return { kind: "anon" };
 }
 
-export function isHr(v: Viewer): boolean {
-  return v.kind === "hr";
+function tryDecode(v: string): string | null {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return null;
+  }
 }
 
-export function isOwnerOf(v: Viewer, candidateId: string): boolean {
-  return v.kind === "owner" && v.id === candidateId;
+function signaturesEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, "utf8");
+  const bb = Buffer.from(b, "utf8");
+  if (ab.length !== bb.length || ab.length === 0) return false;
+  try {
+    return timingSafeEqual(ab, bb);
+  } catch {
+    return false;
+  }
 }
 
-export function requireHr(v: Viewer): Response | null {
-  if (isHr(v)) return null;
-  return Response.json(
-    { error: "Employer session required." },
-    { status: 401 },
+function normalizeEmail(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const email = v.trim().toLowerCase();
+  if (!email || email.length > MAX_EMAIL_LEN || !email.includes("@")) return null;
+  return email;
+}
+
+function issueNonce(
+  purpose: string,
+  id: string,
+  email: string,
+  ttlMs: number,
+): string | null {
+  const secret = getSessionSecret();
+  if (!secret) return null;
+  const clean = normalizeEmail(email);
+  if (!clean || typeof id !== "string" || !id) return null;
+  const exp = Date.now() + ttlMs;
+  const body = b64urlEncode(
+    JSON.stringify({ v: 1, purpose, id, email: clean, exp }),
   );
+  const sig = createHmac("sha256", secret).update(`${purpose}.${body}`).digest("base64url");
+  return `${body}.${sig}`;
 }
 
-export function requireOwnerOf(
-  v: Viewer,
-  candidateId: string,
-): Response | null {
-  if (isOwnerOf(v, candidateId)) return null;
-  return Response.json(
-    { error: "You can only modify your own profile." },
-    { status: 403 },
-  );
+function verifyNonce(
+  token: string | undefined | null,
+  purpose: string,
+  id: string,
+  email: string,
+): boolean {
+  if (!token || typeof token !== "string") return false;
+  if (!getSessionSecret()) return false;
+  const clean = normalizeEmail(email);
+  if (!clean || !id) return false;
+  const variants = [token];
+  const dec = tryDecode(token);
+  if (dec && dec !== token) variants.push(dec);
+  for (const candidate of variants) {
+    const dot = candidate.lastIndexOf(".");
+    if (dot <= 0) continue;
+    const body = candidate.slice(0, dot);
+    const sig = candidate.slice(dot + 1);
+    if (!body || !sig) continue;
+    const secret = getSessionSecret();
+    if (!secret) return false;
+    const expected = createHmac("sha256", secret).update(`${purpose}.${body}`).digest("base64url");
+    if (!signaturesEqual(sig, expected)) continue;
+    const json = b64urlDecode(body);
+    if (!json) continue;
+    let obj: SessionPayload & { purpose?: unknown };
+    try {
+      obj = JSON.parse(json) as SessionPayload & { purpose?: unknown };
+    } catch {
+      continue;
+    }
+    if (obj.purpose !== purpose) continue;
+    if (obj.id !== id) continue;
+    if (normalizeEmail(obj.email) !== clean) continue;
+    if (typeof obj.exp !== "number" || !Number.isFinite(obj.exp) || Date.now() > obj.exp) {
+      continue;
+    }
+    return true;
+  }
+  return false;
 }
 
-export async function guardOwner(
-  request: Request,
+export function issueLookupToken(id: string, email: string): string | null {
+  return issueNonce("owner-lookup", id, email, LOOKUP_TOKEN_TTL_MS);
+}
+
+export function issueEmailChangeToken(
   candidateId: string,
-): Promise<Response | null> {
-  const viewer = getViewer(request);
-  if (viewer.kind === "anon") {
-    return Response.json({ error: "Sign in to manage this profile." }, { status: 401 });
-  }
-  if (!isOwnerOf(viewer, candidateId)) {
-    return Response.json(
-      { error: "You can only modify your own profile." },
-      { status: 403 },
-    );
-  }
-  const ok = await verifyOwnerEmail(candidateId, viewer.email);
-  if (!ok) {
-    return Response.json(
-      { error: "Session no longer matches this profile. Log in again." },
-      { status: 403 },
-    );
-  }
-  return null;
+  newEmail: string,
+): string | null {
+  return issueNonce("email-change", candidateId, newEmail, EMAIL_CHANGE_TOKEN_TTL_MS);
+}
+
+export function verifyEmailChangeToken(
+  token: string | undefined | null,
+  candidateId: string,
+  newEmail: string,
+): boolean {
+  return verifyNonce(token, "email-change", candidateId, newEmail);
+}
+
+export function clearSessionCookie(name: string): string {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${name}=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly;${secure}`;
 }
 
 const CONTACT_CHANNELS = [
@@ -157,46 +208,25 @@ export function bundleForViewer(
   };
 }
 
-export async function verifyOwnerEmail(
-  candidateId: string,
-  email: string,
-): Promise<boolean> {
-  const db = supabaseAdmin();
-  const { data } = await db
-    .from("candidates")
-    .select("contact_email")
-    .eq("id", candidateId)
-    .maybeSingle();
-  const row = data as { contact_email?: string } | null;
-  if (!row?.contact_email) return false;
-  return row.contact_email.toLowerCase() === email.toLowerCase();
-}
-
-export async function verifyHrEmail(email: string): Promise<boolean> {
-  if (process.env.STRICT_HR_VERIFY !== "1") return true;
+export async function getViewerAuth(): Promise<Viewer> {
   try {
-    const db = supabaseAdmin();
-    const lower = email.toLowerCase();
-    const { data } = await db
-      .from("employers")
-      .select("id")
-      .eq("verification_status", "verified")
-      .ilike("company_email", lower)
-      .limit(1)
-      .maybeSingle();
-    return !!(data as { id: string } | null)?.id;
+    const session = await getSessionUser();
+    if (!session) return { kind: "anon" };
+    return session.viewer;
   } catch {
-    return false;
+    return { kind: "anon" };
   }
 }
 
-export async function requireVerifiedHr(viewer: Viewer): Promise<Response | null> {
-  const denied = requireHr(viewer);
-  if (denied) return denied;
-  if (viewer.kind !== "hr") return denied;
-  const ok = await verifyHrEmail(viewer.email);
-  if (!ok) {
-    return Response.json({ error: "Employer verification required." }, { status: 403 });
+export async function guardOwnerAuth(
+  request: Request,
+  candidateId: string,
+): Promise<Response | null> {
+  const viewer = await getViewerAuth();
+  if (viewer.kind === "anon") {
+    return Response.json({ error: "Sign in to manage this profile." }, { status: 401 });
   }
+  const owned = await requireOwnerDb(candidateId);
+  if (owned instanceof Response) return owned;
   return null;
 }

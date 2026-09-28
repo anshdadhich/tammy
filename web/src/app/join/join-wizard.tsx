@@ -23,6 +23,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { candidateSchema, toFieldErrors } from "@/lib/validators";
+import { SESSION_EVENT } from "@/lib/session-client";
 import {
   DOMAINS,
   LOCATIONS,
@@ -1095,7 +1096,16 @@ export default function JoinWizard() {
   const [done, setDone] = useState<{ id: string; warnings: string[] } | null>(null);
   const [lookupBusy, setLookupBusy] = useState(false);
   const [lookupMsg, setLookupMsg] = useState<string | null>(null);
-  const [lookupId, setLookupId] = useState<string | null>(null);
+  const [otpPending, setOtpPending] = useState<{
+    candidateId: string;
+    mode: "created" | "exists";
+    message: string;
+    warnings: string[];
+  } | null>(null);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpErr, setOtpErr] = useState<string | null>(null);
+  const [otpInfo, setOtpInfo] = useState<string | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -1283,7 +1293,6 @@ export default function JoinWizard() {
     if (!EMAIL_RE.test(email) || lookupBusy) return;
     setLookupBusy(true);
     setLookupMsg(null);
-    setLookupId(null);
     try {
       const res = await fetch("/api/candidates/lookup", {
         method: "POST",
@@ -1291,8 +1300,7 @@ export default function JoinWizard() {
         body: JSON.stringify({ email }),
       });
       const body = (await res.json().catch(() => null)) as {
-        exists?: boolean;
-        id?: string;
+        exists?: unknown;
         error?: string;
       } | null;
       if (res.status === 429) {
@@ -1303,11 +1311,10 @@ export default function JoinWizard() {
         setLookupMsg(body?.error ?? "Lookup failed — try again.");
         return;
       }
-      if (body?.exists) {
+      if (body?.exists === true) {
         setLookupMsg(
           "A visible page already exists for this email — publishing hands control of it back to you.",
         );
-        setLookupId(typeof body.id === "string" ? body.id : null);
       } else {
         setLookupMsg("No page yet for this email — you are clear to publish.");
       }
@@ -1323,6 +1330,102 @@ export default function JoinWizard() {
     const map = parsed.success ? {} : toFieldErrors(parsed.error);
     setErrs(map);
     return map;
+  };
+
+  const startOtpClaim = async (
+    candidateId: string,
+    mode: "created" | "exists",
+    message: string,
+    warnings: string[],
+  ) => {
+    const email = draftRef.current.email.trim();
+    setOtpPending({ candidateId, mode, message, warnings });
+    setOtpCode("");
+    setOtpErr(null);
+    setOtpInfo(null);
+    try {
+      const res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      await res.json().catch(() => null);
+      if (!res.ok) {
+        setOtpErr("Could not send the verification code — use resend to retry.");
+        return;
+      }
+      setOtpInfo("Check your inbox for the verification code.");
+    } catch {
+      setOtpErr("Network error — use resend to retry.");
+    }
+  };
+
+  const resendOtpClaim = async () => {
+    if (!otpPending || otpBusy) return;
+    const email = draftRef.current.email.trim();
+    setOtpBusy(true);
+    setOtpErr(null);
+    try {
+      const res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      await res.json().catch(() => null);
+      if (!res.ok) {
+        setOtpErr("Could not resend the code — try again.");
+        return;
+      }
+      setOtpInfo("A fresh code is on its way.");
+    } catch {
+      setOtpErr("Network error — try again.");
+    } finally {
+      setOtpBusy(false);
+    }
+  };
+
+  const verifyOtpClaim = async () => {
+    if (!otpPending || otpBusy) return;
+    const token = otpCode.trim().replace(/\s+/g, "");
+    if (token.length < 6) {
+      setOtpErr("Enter the code from your email.");
+      return;
+    }
+    const email = draftRef.current.email.trim();
+    setOtpBusy(true);
+    setOtpErr(null);
+    try {
+      const res = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, token }),
+      });
+      const body = (await res.json().catch(() => null)) as {
+        ok?: unknown;
+        email?: unknown;
+        error?: string;
+      } | null;
+      if (!res.ok || body?.ok !== true) {
+        setOtpErr(body?.error ?? "That code did not work — try again.");
+        return;
+      }
+      const { candidateId, mode, message, warnings } = otpPending;
+      setOtpPending(null);
+      setOtpCode("");
+      setOtpErr(null);
+      setOtpInfo(null);
+      window.dispatchEvent(new Event(SESSION_EVENT));
+      if (mode === "created") {
+        setDone({ id: candidateId, warnings });
+        return;
+      }
+      setNotice(message || "A visible profile already exists for this email.");
+      setNoticeId(candidateId);
+    } catch {
+      setOtpErr("Network error — try again.");
+    } finally {
+      setOtpBusy(false);
+    }
   };
 
   const publish = async () => {
@@ -1360,31 +1463,21 @@ export default function JoinWizard() {
         return;
       }
       if (res.status === 409 && body?.candidateId) {
-        try {
-          await fetch("/api/session/owner", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: body.candidateId, email: draftRef.current.email.trim() }),
-          });
-        } catch {
-        }
-        setNotice(body.error ?? "A visible profile already exists for this email.");
-        setNoticeId(body.candidateId);
+        await startOtpClaim(
+          body.candidateId,
+          "exists",
+          body.error ?? "A visible profile already exists for this email.",
+          [],
+        );
         return;
       }
       if (res.status === 202 && body?.candidateId) {
-        try {
-          await fetch("/api/session/owner", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: body.candidateId, email: draftRef.current.email.trim() }),
-          });
-        } catch {
-        }
-        setDone({
-          id: body.candidateId,
-          warnings: Array.isArray(body.warnings) ? body.warnings : [],
-        });
+        await startOtpClaim(
+          body.candidateId,
+          "created",
+          "",
+          Array.isArray(body.warnings) ? body.warnings : [],
+        );
         return;
       }
       setNotice(body?.error ?? "Publish failed — try again.");
@@ -1564,15 +1657,7 @@ export default function JoinWizard() {
               </button>
               {lookupMsg ? (
                 <p className="text-[13.5px] text-body">
-                  {lookupMsg}{" "}
-                  {lookupId ? (
-                    <Link
-                      href={`/talent/${lookupId}`}
-                      className="underline font-semibold text-body"
-                    >
-                      Open it
-                    </Link>
-                  ) : null}
+                  {lookupMsg}
                 </p>
               ) : (
                 <span className="field-hint">
@@ -2538,6 +2623,62 @@ export default function JoinWizard() {
               >
                 Open your page
               </Link>
+            ) : null}
+          </span>
+        </div>
+      ) : null}
+
+      {otpPending ? (
+        <div className="notice mt-6" role="status">
+          <Info aria-hidden="true" />
+          <span className="grid gap-3 w-full">
+            <span>
+              {otpPending.mode === "created"
+                ? "Your page is ready — verify your email to finish publishing."
+                : "That email already has a page — verify it to take control."}{" "}
+              {otpInfo ?? `A code was sent to ${draft.email.trim()}.`}
+            </span>
+            <span className="flex flex-wrap items-center gap-2">
+              <input
+                id="j-otp-code"
+                className="input"
+                style={{ maxWidth: 220 }}
+                value={otpCode}
+                onChange={(e) => {
+                  setOtpCode(e.target.value);
+                  setOtpErr(null);
+                }}
+                placeholder="123456"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={64}
+                aria-label="Verification code"
+                aria-invalid={otpErr ? true : undefined}
+              />
+              <button
+                type="button"
+                className="btn btn-primary btn-sm press"
+                disabled={otpBusy}
+                onClick={() => void verifyOtpClaim()}
+              >
+                {otpBusy ? (
+                  <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                ) : null}
+                Verify code
+              </button>
+              <button
+                type="button"
+                className="btn-link"
+                disabled={otpBusy}
+                onClick={() => void resendOtpClaim()}
+              >
+                Resend
+              </button>
+            </span>
+            {otpErr ? (
+              <span className="field-error" role="alert">
+                {otpErr}
+              </span>
             ) : null}
           </span>
         </div>

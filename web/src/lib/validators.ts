@@ -231,3 +231,13 @@ export function toFieldErrors(error: z.ZodError): Record<string, string> {
   }
   return out;
 }
+
+export function normalizeEmail(v: unknown): string {
+  return String(v ?? "").trim().toLowerCase();
+}
+
+export const honeypotField = z
+  .string()
+  .max(2048)
+  .optional()
+  .default("");

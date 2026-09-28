@@ -129,3 +129,46 @@ export function blendWithJudge(rules0to100: number, judge0to100: number | null):
   if (judge0to100 == null) return rules0to100;
   return Math.round(rules0to100 * 0.7 + judge0to100 * 0.3);
 }
+
+function asRecord(v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  return v as Record<string, unknown>;
+}
+
+export function metadataStringArray(meta: unknown, key: string): string[] {
+  const rec = asRecord(meta);
+  if (!rec) return [];
+  const nested = asRecord(rec.metadata_json) ?? asRecord(rec.metadata);
+  const direct = rec[key];
+  const fromNested = nested?.[key];
+  const val = direct ?? fromNested;
+  const arr = Array.isArray(val) ? val : typeof val === "string" ? [val] : [];
+  const out: string[] = [];
+  for (const t of arr) {
+    if (typeof t === "string") {
+      const s = t.trim();
+      if (s) out.push(s);
+    }
+  }
+  return out;
+}
+
+export function metadataTechnologies(meta: unknown): string[] {
+  return metadataStringArray(meta, "technologies");
+}
+
+export function metadataDomainTags(meta: unknown): string[] {
+  const tags = metadataStringArray(meta, "domain_tags");
+  if (tags.length) return tags;
+  const rec = asRecord(meta);
+  const single = rec?.domain;
+  return typeof single === "string" && single.trim() ? [single.trim()] : [];
+}
+
+export function metadataProjectId(meta: unknown): string | null {
+  const rec = asRecord(meta);
+  if (!rec) return null;
+  const nested = asRecord(rec.metadata_json) ?? asRecord(rec.metadata);
+  const v = rec.project_id ?? nested?.project_id ?? rec.project_title ?? nested?.project_title;
+  return typeof v === "string" && v ? v : null;
+}

@@ -1,4 +1,5 @@
 import type { JobReq, MatchLevel } from "./types";
+import { redactPii } from "@/lib/redact";
 
 export interface JudgeInput {
   job: JobReq;
@@ -28,6 +29,14 @@ export interface JudgeProvider {
   name: string;
   complete(prompt: { system: string; user: string }): Promise<string>;
 }
+
+export interface JudgeCallOpts {
+  maxTokens?: number;
+  timeoutMs?: number;
+}
+
+export const JUDGE_MAX_TOKENS = 1200;
+export const JUDGE_TIMEOUT_MS = 25000;
 
 export const JUDGE_SYSTEM_PROMPT = `You are an expert Technical Hiring Manager. Evaluate the candidate for the role. No keyword matching — look for evidence of capability and depth.
 Score 4 dimensions (each 0-25):
@@ -65,42 +74,67 @@ export function cheapModel(): string {
 
 export function defaultOpenAIProvider(
   model = process.env.JUDGE_MODEL ?? DEFAULT_CHEAP_MODEL,
+  opts: JudgeCallOpts = {},
 ): JudgeProvider {
   const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.LLM_API_KEY ?? "";
   const baseUrl =
     process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const maxTokens = opts.maxTokens ?? JUDGE_MAX_TOKENS;
+  const timeoutMs = opts.timeoutMs ?? JUDGE_TIMEOUT_MS;
   return {
     name: `openai:${model}`,
     async complete({ system, user }) {
       if (!apiKey) throw new Error("OPENROUTER_API_KEY (or LLM_API_KEY) is not set");
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-          ...(siteUrl ? { "HTTP-Referer": siteUrl, "X-Title": "Reverse Hiring MVP" } : {}),
-        },
-        body: JSON.stringify({
-          model,
-          temperature: 0.2,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: user },
-          ],
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        throw new Error(`Judge LLM failed (${res.status}): ${body.slice(0, 500)}`);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        let res: Response;
+        try {
+          res = await fetch(`${baseUrl}/chat/completions`, {
+            method: "POST",
+            signal: AbortSignal.timeout(timeoutMs),
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+              ...(siteUrl ? { "HTTP-Referer": siteUrl, "X-Title": "Reverse Hiring MVP" } : {}),
+            },
+            body: JSON.stringify({
+              model,
+              temperature: 0.2,
+              max_tokens: maxTokens,
+              response_format: { type: "json_object" },
+              messages: [
+                { role: "system", content: system },
+                { role: "user", content: user },
+              ],
+            }),
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`[judge] transport error attempt=${attempt} detail=${redactPii(msg.slice(0, 200))}`);
+          throw e instanceof Error ? e : new Error("Judge LLM transport failed");
+        }
+        if (res.status === 429 || res.status >= 500) {
+          const body = await res.text().catch(() => "");
+          console.error(`[judge] retryable attempt=${attempt} status=${res.status} detail=${redactPii(body.slice(0, 200))}`);
+          if (attempt === 0) {
+            await new Promise((r) => setTimeout(r, 600));
+            continue;
+          }
+          throw new Error(`Judge LLM failed (${res.status})`);
+        }
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          console.error(`[judge] fatal status=${res.status} detail=${redactPii(body.slice(0, 200))}`);
+          throw new Error(`Judge LLM failed (${res.status})`);
+        }
+        const json = (await res.json()) as {
+          choices?: Array<{ message?: { content?: string } }>;
+        };
+        const content = json.choices?.[0]?.message?.content ?? "";
+        if (!content) throw new Error("Judge LLM returned empty content");
+        return content;
       }
-      const json = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string } }>;
-      };
-      const content = json.choices?.[0]?.message?.content ?? "";
-      if (!content) throw new Error("Judge LLM returned empty content");
-      return content;
+      throw new Error("Judge LLM failed");
     },
   };
 }
@@ -178,11 +212,18 @@ export function parseJudgeOutput(
 export async function judgeCandidate(
   input: JudgeInput,
   provider: JudgeProvider = defaultOpenAIProvider(),
+  opts: { timeoutMs?: number } = {},
 ): Promise<JudgeResult> {
-  const text = await provider.complete({
-    system: JUDGE_SYSTEM_PROMPT,
-    user: buildJudgeUserPrompt(input.job, input.candidateJson),
-  });
+  const timeoutMs = opts.timeoutMs ?? JUDGE_TIMEOUT_MS;
+  const text = await Promise.race([
+    provider.complete({
+      system: JUDGE_SYSTEM_PROMPT,
+      user: buildJudgeUserPrompt(input.job, input.candidateJson),
+    }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Judge timed out after ${timeoutMs}ms`)), timeoutMs),
+    ),
+  ]);
   return parseJudgeOutput(input.candidate_id, text);
 }
 
@@ -190,23 +231,28 @@ export async function judgeTop(
   inputs: JudgeInput[],
   provider: JudgeProvider = defaultOpenAIProvider(),
   concurrency = 10,
+  opts: { timeoutMs?: number } = {},
 ): Promise<Array<JudgeResult | null>> {
-  const queue = [...inputs];
+  const timeoutMs = opts.timeoutMs ?? JUDGE_TIMEOUT_MS;
   const out: Array<JudgeResult | null> = new Array(inputs.length).fill(null);
+  let next = 0;
   const workers = Array.from(
-    { length: Math.min(concurrency, inputs.length) },
+    { length: Math.min(Math.max(concurrency, 1), Math.max(inputs.length, 1)) },
     async () => {
-      while (queue.length) {
-        const idx = inputs.length - queue.length;
-        const item = queue.shift()!;
+      while (next < inputs.length) {
+        const idx = next;
+        next += 1;
+        const item = inputs[idx];
         try {
-          out[idx] = await judgeCandidate(item, provider);
-        } catch {
+          out[idx] = await judgeCandidate(item, provider, { timeoutMs });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error(`[judge] candidate failed idx=${idx} detail=${redactPii(msg.slice(0, 200))}`);
           out[idx] = null;
         }
       }
     },
   );
-  await Promise.all(workers);
+  await Promise.allSettled(workers);
   return out;
 }

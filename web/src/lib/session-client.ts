@@ -1,6 +1,8 @@
+import { supabaseBrowser } from "@/lib/supabase";
+
 export type ViewerSession = { kind: "hr" | "owner"; name?: string; email: string };
 
-const HR_COOKIE = "tammy_hr";
+const HR_DISPLAY_COOKIE = "tammy_hr_display";
 
 export const SESSION_EVENT = "tammy-session-changed";
 
@@ -8,15 +10,15 @@ function notifySessionChanged() {
   window.dispatchEvent(new Event(SESSION_EVENT));
 }
 
-export function readHrSession(): ViewerSession | null {
+function readDisplayCookie(): ViewerSession | null {
   if (typeof document === "undefined") return null;
   const entry = document.cookie
     .split("; ")
-    .find((c) => c.startsWith(`${HR_COOKIE}=`));
+    .find((c) => c.startsWith(`${HR_DISPLAY_COOKIE}=`));
   if (!entry) return null;
   try {
     const parsed = JSON.parse(
-      decodeURIComponent(entry.slice(HR_COOKIE.length + 1)),
+      decodeURIComponent(entry.slice(HR_DISPLAY_COOKIE.length + 1)),
     ) as { name?: unknown; email?: unknown };
     if (parsed && typeof parsed.email === "string" && parsed.email.includes("@")) {
       return {
@@ -33,9 +35,28 @@ export function readHrSession(): ViewerSession | null {
   return null;
 }
 
-export async function fetchOwnerSession(): Promise<ViewerSession | null> {
+function clearDisplayCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = `${HR_DISPLAY_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+}
+
+function metadataName(v: unknown): string | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const m = v as Record<string, unknown>;
+  for (const k of ["full_name", "name", "display_name"]) {
+    const s = m[k];
+    if (typeof s === "string" && s.trim()) return s.trim().slice(0, 100);
+  }
+  return undefined;
+}
+
+export function readHrSession(): ViewerSession | null {
+  return readDisplayCookie();
+}
+
+export async function fetchHrSession(): Promise<ViewerSession | null> {
   try {
-    const res = await fetch("/api/session/owner");
+    const res = await fetch("/api/session/hr");
     if (!res.ok) return null;
     const data = (await res.json().catch(() => null)) as {
       email?: unknown;
@@ -43,7 +64,7 @@ export async function fetchOwnerSession(): Promise<ViewerSession | null> {
     } | null;
     if (data && typeof data.email === "string" && data.email.includes("@")) {
       return {
-        kind: "owner",
+        kind: "hr",
         name:
           typeof data.name === "string" && data.name.trim() ? data.name : undefined,
         email: data.email,
@@ -54,14 +75,35 @@ export async function fetchOwnerSession(): Promise<ViewerSession | null> {
   return null;
 }
 
+export async function fetchOwnerSession(): Promise<ViewerSession | null> {
+  try {
+    const { data } = await supabaseBrowser().auth.getUser();
+    const email = data.user?.email;
+    if (!email || !email.includes("@")) return null;
+    return {
+      kind: "owner",
+      name: metadataName(data.user?.user_metadata),
+      email,
+    };
+  } catch {
+  }
+  return null;
+}
+
 export function clearHrSession() {
-  document.cookie = `${HR_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  clearDisplayCookie();
+  try {
+    void supabaseBrowser()
+      .auth.signOut()
+      .catch(() => undefined);
+  } catch {
+  }
   notifySessionChanged();
 }
 
 export async function clearOwnerSession() {
   try {
-    await fetch("/api/session/owner", { method: "DELETE" });
+    await supabaseBrowser().auth.signOut();
   } catch {
   }
   notifySessionChanged();

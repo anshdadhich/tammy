@@ -1,20 +1,48 @@
+import { createHash } from "node:crypto";
+import { NonRetriableError } from "inngest";
 import { inngest } from "@/lib/inngest";
 import { supabaseAdmin } from "@/lib/supabase";
 import { embedChunks } from "@/lib/matching/voyage";
 import { profileReadyEmail, sendEmail } from "@/lib/email";
 import { analyzeProjectDepth, generateCandidateSummary } from "@/lib/ai";
+import { startWideEvent } from "@/lib/observe";
 
 interface ProfileSubmittedData {
   candidateId: string;
+}
+
+const EMBEDDING_MODEL = "voyage-4-lite";
+const EXPECTED_EMBEDDING_DIM = 1024;
+const MAX_PROJECTS = 8;
+const EMAIL_TIMEOUT_MS = 15000;
+
+function contentHash(s: string): string {
+  return createHash("sha256").update(s, "utf8").digest("hex");
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("email timeout")), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 export const processProfile = inngest.createFunction(
   {
     id: "process-profile",
     triggers: [{ event: "candidate.profile.submitted" }],
+    concurrency: { limit: 1, key: "event.data.candidateId" },
+    idempotency: "event.data.candidateId",
+    retries: 2,
   },
   async ({ event, step }: { event: { data: ProfileSubmittedData }; step: { run: <T>(name: string, fn: () => Promise<T>) => Promise<T> } }) => {
     const candidateId = event.data.candidateId;
+    if (!candidateId || typeof candidateId !== "string") {
+      throw new NonRetriableError("invalid candidateId");
+    }
     const db = supabaseAdmin();
 
     const candidate = await step.run("fetch-candidate", async () => {
@@ -25,14 +53,16 @@ export const processProfile = inngest.createFunction(
         .single();
       return r.data as { id: string; headline: string | null; domain: string | null; total_experience_years: number | null; visibility_status?: string | null } | null;
     });
-    if (!candidate) throw new Error("candidate not found");
+    if (!candidate) throw new NonRetriableError("candidate not found");
 
     const bundle = await step.run("fetch-context", async () => {
       const [{ data: projects }, { data: experiences }, { data: skillRows }] = await Promise.all([
         db
           .from("projects")
           .select("id, title, description, tech_stack, impact_summary")
-          .eq("candidate_id", candidateId),
+          .eq("candidate_id", candidateId)
+          .order("created_at", { ascending: false })
+          .limit(MAX_PROJECTS),
         db
           .from("work_experiences")
           .select("company_name, job_title, description")
@@ -79,7 +109,7 @@ export const processProfile = inngest.createFunction(
       return base.filter((c) => c.content_text.replace(/\W+/g, "").length > 10);
     });
 
-    await step.run("summary-depth", async () => {
+    await step.run("summary", async () => {
       const summary = await generateCandidateSummary({
         role: candidate.headline ?? "",
         exp: String(candidate.total_experience_years ?? ""),
@@ -100,74 +130,99 @@ export const processProfile = inngest.createFunction(
           summary_json: summary.json,
         }, { onConflict: "candidate_id" });
       }
-      const queue = [...projects];
-      const workers = Array.from({ length: Math.min(4, queue.length || 1) }, async () => {
-        while (queue.length) {
-          const p = queue.shift()!;
-          const depth = await analyzeProjectDepth({
-            title: p.title,
-            description: p.description ?? "",
-            tech: (p.tech_stack ?? []).join(", "),
-            role: "",
-            impact: p.impact_summary ?? "",
-          });
-          if (depth) {
-            await db.from("project_depth_analysis").upsert({
-              project_id: p.id,
-              complexity_score: typeof depth.complexity_score === "number" ? depth.complexity_score : 5,
-              technical_complexity: String(depth.technical_complexity ?? "medium"),
-              architectural_concepts: (depth.architectural_concepts as string[]) ?? [],
-              evidence_quality: String(depth.evidence_quality ?? "moderate"),
-              autonomy_level: String(depth.autonomy_level ?? "unknown"),
-              relevance_tags: (depth.relevance_tags as string[]) ?? [],
-              raw_ai_analysis: depth,
-            }, { onConflict: "project_id" });
-          }
-        }
-      });
-      await Promise.all(workers);
+      return { ok: !!summary };
     });
 
+    for (const p of projects) {
+      await step.run(`project-depth-${p.id}`, async () => {
+        const depth = await analyzeProjectDepth({
+          title: p.title,
+          description: p.description ?? "",
+          tech: (p.tech_stack ?? []).join(", "),
+          role: "",
+          impact: p.impact_summary ?? "",
+        });
+        if (!depth) return { ok: false, skipped: true as const };
+        await db.from("project_depth_analysis").upsert({
+          project_id: p.id,
+          complexity_score: typeof depth.complexity_score === "number" ? depth.complexity_score : 5,
+          technical_complexity: String(depth.technical_complexity ?? "medium"),
+          architectural_concepts: (depth.architectural_concepts as string[]) ?? [],
+          evidence_quality: String(depth.evidence_quality ?? "moderate"),
+          autonomy_level: String(depth.autonomy_level ?? "unknown"),
+          relevance_tags: (depth.relevance_tags as string[]) ?? [],
+          raw_ai_analysis: depth,
+        }, { onConflict: "project_id" });
+        return { ok: true };
+      });
+    }
+
     await step.run("embed-store", async () => {
-      if (!chunks.length) return;
-      const { data: existing } = await db
-        .from("profile_chunks")
-        .select("content_text")
-        .eq("candidate_id", candidateId);
-      const oldTexts = new Set(((existing ?? []) as { content_text: string }[]).map((r) => r.content_text));
-      const same =
-        (existing?.length ?? -1) === chunks.length &&
-        chunks.every((c) => oldTexts.has(c.content_text));
-      if (same) return;
-      const texts: string[] = chunks.map((c: { content_text: string }) => c.content_text);
-      const vectors = await embedChunks(texts);
-      const rows = chunks.map((c: Record<string, unknown>, i: number) => ({
-        ...c,
-        embedding: `[${vectors[i].join(",")}]`,
-        embedding_model: "voyage-4-lite",
-        embedding_dim: vectors[i].length,
-      }));
-      const { error } = await db.from("profile_chunks").insert(rows);
-      if (error) throw error;
-      const freshTexts = new Set(texts);
-      const stale = (existing ?? [])
-        .map((r) => (r as { content_text: string }).content_text)
-        .filter((t) => !freshTexts.has(t));
-      if (stale.length) {
-        await db.from("profile_chunks").delete().eq("candidate_id", candidateId).in("content_text", stale);
-      }
-      if ((existing?.length ?? 0) + rows.length > chunks.length) {
-        const { data: all } = await db
-          .from("profile_chunks")
-          .select("id, content_text")
-          .eq("candidate_id", candidateId);
-        const seen = new Set<string>();
-        const dupIds: string[] = [];
-        for (const r of ((all ?? []) as { id: string; content_text: string }[])) {
-          if (seen.has(r.content_text)) dupIds.push(r.id);
-          else seen.add(r.content_text);
+      const wev = startWideEvent("inngest/process-profile", "run");
+      try {
+        if (!chunks.length) {
+          wev.add({ candidate_id: candidateId, embed_failed: false, degraded: false });
+          wev.end({ status: 200 });
+          return { embedded: 0 };
         }
-        if (dupIds.length) await db.from("profile_chunks").delete().in("id", dupIds);
+        const { data: existing } = await db
+          .from("profile_chunks")
+          .select("content_text, embedding_dim")
+          .eq("candidate_id", candidateId);
+        const oldHashes = new Set<string>();
+        for (const r of ((existing ?? []) as { content_text: string; embedding_dim: number | null }[])) {
+          if ((r.embedding_dim ?? EXPECTED_EMBEDDING_DIM) === EXPECTED_EMBEDDING_DIM) {
+            oldHashes.add(contentHash(r.content_text));
+          }
+        }
+        const changed = chunks.filter((c) => !oldHashes.has(contentHash(c.content_text)));
+        const fresh = new Set(chunks.map((c) => c.content_text));
+        const stale = ((existing ?? []) as { content_text: string }[])
+          .map((r) => r.content_text)
+          .filter((t) => !fresh.has(t));
+        if (!changed.length && !stale.length) {
+          wev.add({ candidate_id: candidateId, embed_failed: false, degraded: false });
+          wev.end({ status: 200 });
+          return { embedded: 0 };
+        }
+        let embedded = 0;
+        if (changed.length) {
+          const texts: string[] = changed.map((c: { content_text: string }) => c.content_text);
+          const vectors = await embedChunks(texts);
+          if (vectors.length !== texts.length) {
+            throw new NonRetriableError(`embedding count ${vectors.length} for ${texts.length} inputs`);
+          }
+          for (const v of vectors) {
+            if (!v.length || v.length !== EXPECTED_EMBEDDING_DIM) {
+              throw new NonRetriableError(`embedding dim ${v.length}, expected ${EXPECTED_EMBEDDING_DIM}`);
+            }
+          }
+          const rows = changed.map((c: Record<string, unknown>, i: number) => ({
+            ...c,
+            embedding: `[${vectors[i].join(",")}]`,
+            embedding_model: EMBEDDING_MODEL,
+            embedding_dim: vectors[i].length,
+          }));
+          const { error } = await db.from("profile_chunks").insert(rows);
+          if (error) throw error;
+          embedded = rows.length;
+        }
+        if (stale.length) {
+          const { error: delError } = await db
+            .from("profile_chunks")
+            .delete()
+            .eq("candidate_id", candidateId)
+            .in("content_text", stale);
+          if (delError) throw delError;
+        }
+        wev.add({ candidate_id: candidateId, embed_failed: false, degraded: false });
+        wev.end({ status: 200 });
+        return { embedded };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        wev.add({ candidate_id: candidateId, embed_failed: true, degraded: true });
+        wev.end({ status: 500, error: msg.slice(0, 200) });
+        throw e;
       }
     });
 
@@ -183,7 +238,10 @@ export const processProfile = inngest.createFunction(
       await db.from("candidates").update({ profile_strength: Math.min(q, 100), freshness_updated_at: new Date().toISOString() }).eq("id", candidateId);
     });
 
-    await step.run("notify-ready", async () => {
+    const notified = await step.run("notify-ready", async () => {
+      const wev = startWideEvent("inngest/process-profile", "run");
+      let outcome = "skipped";
+      let reason = "no recipient";
       try {
         const { data } = await db
           .from("candidates")
@@ -193,13 +251,20 @@ export const processProfile = inngest.createFunction(
         const c = data as { full_name?: string; contact_email?: string } | null;
         if (c?.contact_email) {
           const tpl = profileReadyEmail(c.full_name ?? "there", candidateId);
-          await sendEmail(c.contact_email, tpl.subject, tpl.html);
+          const result = await withTimeout(sendEmail(c.contact_email, tpl.subject, tpl.html), EMAIL_TIMEOUT_MS);
+          outcome = result.skipped ? "skipped" : "sent";
+          reason = result.skipped ? result.reason : (result.id ?? "ok");
         }
-      } catch {
+      } catch (e) {
+        outcome = "failed";
+        reason = (e instanceof Error ? e.message : String(e)).slice(0, 200);
       }
+      wev.add({ candidate_id: candidateId, email_outcome: outcome, email_reason: reason, degraded: outcome === "failed" });
+      wev.end({ status: outcome === "failed" ? 500 : 200 });
+      return { outcome, reason };
     });
 
-    return { candidateId, chunks: chunks.length };
+    return { candidateId, chunks: chunks.length, emailed: notified.outcome };
   },
 );
 

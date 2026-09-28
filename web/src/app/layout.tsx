@@ -13,10 +13,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+function resolveSiteUrl(): URL {
+  const fallback = new URL("https://example.com");
+  const raw = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+  if (!raw) {
+    return process.env.NODE_ENV === "production" ? fallback : new URL("http://localhost:3000");
+  }
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return fallback;
+    if (process.env.NODE_ENV === "production" && u.protocol !== "https:") return fallback;
+    return u;
+  } catch {
+    return process.env.NODE_ENV === "production" ? fallback : new URL("http://localhost:3000");
+  }
+}
+
+const siteUrl = resolveSiteUrl();
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
+  metadataBase: siteUrl,
   title: {
     default: "Tammy — Reverse Hiring Platform",
     template: "%s · Tammy",

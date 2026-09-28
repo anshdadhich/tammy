@@ -103,7 +103,11 @@ CREATE INDEX IF NOT EXISTS idx_contact_log_emp_created ON public.contact_log (em
 CREATE INDEX IF NOT EXISTS idx_contact_log_job ON public.contact_log (job_id) WHERE job_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_searches_query_created ON public.searches (query_text, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_matches_search_score ON public.candidate_matches (search_id, score DESC) WHERE search_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_oss_tech ON public.open_source_contributions USING gin (tech_stack);
+DO $$ BEGIN
+  IF to_regclass('public.open_source_contributions') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_oss_tech ON public.open_source_contributions USING gin (tech_stack);
+  END IF;
+END $$;
 DROP INDEX IF EXISTS public.idx_candidate_skills_candidate;
 
 -- ---------- 7. least-privilege grants ----------
@@ -153,3 +157,64 @@ CREATE POLICY files_employer_read ON storage.objects
     AND (storage.foldername(name))[1] ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     AND public.candidate_is_visible(((storage.foldername(name))[1])::uuid)
   );
+
+CREATE TABLE IF NOT EXISTS public.open_source_contributions (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  candidate_id  UUID NOT NULL REFERENCES public.candidates(id) ON DELETE CASCADE,
+  repo_name     TEXT NOT NULL,
+  repo_url      TEXT,
+  description   TEXT,
+  pr_links      TEXT[] NOT NULL DEFAULT '{}',
+  tech_stack    TEXT[] NOT NULL DEFAULT '{}',
+  role          TEXT NOT NULL DEFAULT 'Contributor',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS oss_candidate_idx
+  ON public.open_source_contributions (candidate_id);
+
+ALTER TABLE public.open_source_contributions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS oss_owner_all ON public.open_source_contributions;
+CREATE POLICY oss_owner_all ON public.open_source_contributions
+  FOR ALL TO authenticated
+  USING (public.owns_candidate(candidate_id) OR public.is_admin())
+  WITH CHECK (public.owns_candidate(candidate_id) OR public.is_admin());
+
+DROP POLICY IF EXISTS oss_employer_read ON public.open_source_contributions;
+CREATE POLICY oss_employer_read ON public.open_source_contributions
+  FOR SELECT TO authenticated
+  USING (public.candidate_is_visible(candidate_id) AND public.is_verified_employer());
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.open_source_contributions TO authenticated;
+
+ALTER TABLE public.searches ADD COLUMN IF NOT EXISTS query_hash TEXT;
+ALTER TABLE public.searches ADD COLUMN IF NOT EXISTS query_embedding vector(1024);
+
+CREATE INDEX IF NOT EXISTS idx_searches_query_hash
+  ON public.searches (query_hash);
+CREATE UNIQUE INDEX IF NOT EXISTS candidate_matches_search_cand_full
+  ON public.candidate_matches (search_id, candidate_id);
+CREATE INDEX IF NOT EXISTS idx_candidates_contact_email_lower
+  ON public.candidates (lower(contact_email));
+CREATE INDEX IF NOT EXISTS idx_chunks_metadata_gin
+  ON public.profile_chunks USING gin (metadata_json);
+CREATE INDEX IF NOT EXISTS idx_searches_filters_gin
+  ON public.searches USING gin (filters_json);
+CREATE INDEX IF NOT EXISTS idx_projects_tech_gin
+  ON public.projects USING gin (tech_stack);
+CREATE INDEX IF NOT EXISTS idx_work_exp_tech_gin
+  ON public.work_experiences USING gin (tech_stack);
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw_nn
+  ON public.profile_chunks USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64)
+  WHERE embedding IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_job_req_embedding_hnsw_nn
+  ON public.job_requirements USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64)
+  WHERE embedding IS NOT NULL;
+
+GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT, INT) TO authenticated;
+DO $$ BEGIN
+  GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT) TO authenticated;
+EXCEPTION WHEN undefined_function THEN NULL; END $$;

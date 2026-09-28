@@ -5,12 +5,48 @@ export type SendEmailResult =
   | { skipped: true; reason: string }
   | { skipped: false; id?: string };
 
+const STRICT_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function isValidEmail(v: string): boolean {
+  const s = v.trim();
+  if (!s || s.length > 254 || s.includes("\n") || s.includes("\r")) return false;
+  return STRICT_EMAIL_RE.test(s);
+}
+
+function extractEmailAddress(from: string): string | null {
+  const s = from.trim();
+  const m = s.match(/<([^<>]+)>\s*$/);
+  const addr = m ? m[1].trim() : s;
+  if (!isValidEmail(addr)) return null;
+  if (/[\r\n]/.test(s)) return null;
+  return addr;
+}
+
+function sanitizeSubject(subject: string): string {
+  return subject.replace(/[\r\n]+/g, " ").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 200);
+}
+
+function resolveSiteUrl(): string {
+  const raw = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+  const fallback = "https://example.com";
+  const candidate = raw || (process.env.NODE_ENV === "production" ? fallback : "http://localhost:3000");
+  try {
+    const u = new URL(candidate);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return fallback;
+    if (process.env.NODE_ENV === "production" && u.protocol !== "https:") return fallback;
+    if (process.env.NODE_ENV === "production" && /^(localhost|127\.|0\.0\.0\.0)/i.test(u.hostname)) return fallback;
+    return u.origin;
+  } catch {
+    return process.env.NODE_ENV === "production" ? fallback : "http://localhost:3000";
+  }
 }
 
 export async function sendEmail(
@@ -23,33 +59,38 @@ export async function sendEmail(
     console.warn("[email] RESEND_API_KEY missing — skipping send");
     return { skipped: true, reason: "RESEND_API_KEY missing" };
   }
-  if (!to || !to.includes("@")) {
+  const toAddr = String(to ?? "").trim();
+  if (!isValidEmail(toAddr)) {
     console.warn("[email] invalid recipient — skipping send");
     return { skipped: true, reason: "invalid recipient" };
   }
-  const safeSubject = subject.replace(/[\r\n]+/g, " ").slice(0, 200);
-  if (!safeSubject.trim()) {
+  const safeSubject = sanitizeSubject(subject);
+  if (!safeSubject) {
     return { skipped: true, reason: "empty subject" };
   }
   try {
     const resend = new Resend(apiKey);
-    const from =
-      process.env.RESEND_FROM ?? "Reverse Hiring <onboarding@resend.dev>";
+    const rawFrom = (process.env.RESEND_FROM ?? "Reverse Hiring <onboarding@resend.dev>").trim();
+    const fromAddr = extractEmailAddress(rawFrom);
+    if (!fromAddr) {
+      console.warn("[email] invalid sender — skipping send");
+      return { skipped: true, reason: "invalid sender" };
+    }
     const { data, error } = await resend.emails.send({
-      from,
-      to,
+      from: rawFrom,
+      to: toAddr,
       subject: safeSubject,
       html,
     });
     if (error) {
       console.error("[email] Resend error:", redactPii(error.message || "resend error"));
-      return { skipped: true, reason: error.message || "resend error" };
+      return { skipped: true, reason: "resend error" };
     }
     return { skipped: false, id: data?.id };
   } catch (e) {
     const msg = (e as Error).message;
     console.error("[email] send failed:", redactPii(msg));
-    return { skipped: true, reason: msg };
+    return { skipped: true, reason: "send failed" };
   }
 }
 
@@ -67,10 +108,10 @@ export function profileReadyEmail(name: string, candidateId?: string): {
   html: string;
 } {
   const safe = escapeHtml(name || "there");
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const site = resolveSiteUrl();
   const profilePath = candidateId ? `/talent/${encodeURIComponent(candidateId)}` : "/join";
   return {
-    subject: "Your Reverse Hiring profile is live",
+    subject: sanitizeSubject("Your Reverse Hiring profile is live"),
     html: shell(
       `Hi ${safe}, your profile is ready 🎉`,
       `<p>Your deep profile is now visible to verified employers. You don't need to apply anywhere — employers search the talent database and contact you directly (email/phone shown on match, open-contact model).</p>`
@@ -89,7 +130,7 @@ export function newMatchEmail(
   const safeJob = escapeHtml(jobTitle || "a role");
   const safeCompany = company ? ` at ${escapeHtml(company)}` : "";
   return {
-    subject: `You were shortlisted for ${jobTitle}`,
+    subject: sanitizeSubject(`You were shortlisted for ${String(jobTitle || "a role")}`),
     html: shell(
       `Hi ${safeName} — an employer shortlisted you 🎯`,
       `<p>You were shortlisted for <strong>${safeJob}</strong>${safeCompany}.</p>`
@@ -109,7 +150,7 @@ export function contactLoggedEmail(
   if (context.channel) bits.push(`via ${escapeHtml(context.channel)}`);
   const suffix = bits.length ? ` ${bits.join(" ")}` : "";
   return {
-    subject: "An employer reached out to you",
+    subject: sanitizeSubject("An employer reached out to you"),
     html: shell(
       `Hi ${safeName} — an employer contacted you 👋`,
       `<p>An employer reached out${suffix}.</p>`

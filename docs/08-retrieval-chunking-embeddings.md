@@ -36,6 +36,11 @@ Enables filtered vector search: domain=frontend + skill=React + exp>=2 + remote_
 - Negative signals: incomplete, no links, contradiction, salary mismatch, inactive → downrank
 - Freshness score: <30d high, 180d+ low
 
+## Source of truth
+Postgres is the source of truth: profiles, structured fields, and rows live there.
+The pipeline only manages derived retrieval artifacts (chunks, embeddings) and can be
+re-run from the profile rows at any time — search never reads anything but Postgres.
+
 ## Implementation
 MVP: Next.js + Postgres + pgvector + LLM API + embedding API + background queue (BullMQ/Celery) + auth + storage + email.
 On profile create/update (async): normalize → summary → project analysis → chunks → embeddings → active.

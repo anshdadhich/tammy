@@ -97,12 +97,12 @@ export interface MatchScore extends SubScores {
 export interface CandidateRow {
   id: string;
   total_experience_years: number | null;
-  location: string | null;
-  remote_ok: boolean | null;
+  location_city: string | null;
+  remote_preference: string | null;
   min_salary: number | null;
   salary_currency: string | null;
-  is_visible: boolean;
-  consent_to_match: boolean;
-  is_active: boolean;
+  visibility_status: string;
+  consent_status: string | null;
+  availability_status: string | null;
   updated_at: string;
 }

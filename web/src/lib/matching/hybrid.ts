@@ -1,37 +1,49 @@
 import type { HybridHit, JobReq } from "./types";
+import { toVectorLiteral } from "./voyage";
 
 export interface SqlQuery {
   text: string;
   values: unknown[];
 }
 
-export function buildHardFilterWhere(job: JobReq): SqlQuery {
+export const PREFILTER_MAX = 5000;
+export const VECTOR_LIMIT_MAX = 200;
+
+export function clampLimit(raw: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
+export function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
+
+export function buildHardFilterWhere(job: JobReq, alias = "c"): SqlQuery {
   const clauses: string[] = [
-    `c.is_visible = TRUE`,
-    `c.consent_to_match = TRUE`,
-    `c.is_active = TRUE`,
+    `${alias}.visibility_status = 'visible'`,
+    `(${alias}.consent_status IS NULL OR ${alias}.consent_status <> 'withdrawn')`,
   ];
   const values: unknown[] = [];
   let i = 1;
 
   if (job.experience_min != null) {
-    clauses.push(`COALESCE(c.total_experience_years, 0) >= $${i++}`);
+    clauses.push(`COALESCE(${alias}.total_experience_years, 0) >= $${i++}`);
     values.push(job.experience_min);
   }
 
   if (job.salary_max != null) {
     clauses.push(
-      `(c.min_salary IS NULL OR c.min_salary <= $${i++})`,
+      `(${alias}.min_salary IS NULL OR ${alias}.min_salary <= $${i++})`,
     );
     values.push(job.salary_max);
   }
 
   if (job.location && !job.remote_allowed) {
     clauses.push(
-      `(c.remote_ok = TRUE OR c.location ILIKE $${i++})`,
+      `(${alias}.remote_preference IN ('remote_only','flexible') OR ${alias}.location_city ILIKE $${i++} ESCAPE '\\')`,
     );
-    values.push(`%${job.location}%`);
-  } else if (job.location && job.remote_allowed) {
+    values.push(`%${escapeLike(job.location)}%`);
   }
 
   return { text: clauses.join("\n  AND "), values };
@@ -42,12 +54,13 @@ export function buildPrefilterQuery(
   limit = 2000,
 ): SqlQuery {
   const where = buildHardFilterWhere(job);
+  const safeLimit = clampLimit(limit, 1, PREFILTER_MAX, 2000);
   return {
     text: `SELECT c.id
 FROM candidates c
 WHERE ${where.text}
 ORDER BY c.updated_at DESC
-LIMIT ${Number(limit)}`,
+LIMIT ${safeLimit}`,
     values: where.values,
   };
 }
@@ -56,45 +69,68 @@ export function buildVectorSearchQuery(opts: {
   queryEmbedding: number[];
   job: JobReq;
   candidateIds?: string[];
+  chunkTypes?: string[];
   limitPerChunk?: number;
 }): SqlQuery {
-  const { queryEmbedding, job, candidateIds = [], limitPerChunk = 100 } = opts;
+  const { queryEmbedding, job, candidateIds = [], chunkTypes = [], limitPerChunk = 100 } = opts;
   const values: unknown[] = [];
   let i = 1;
 
-  const vecLiteral = `[${queryEmbedding.join(",")}]`;
+  const vecLiteral = toVectorLiteral(queryEmbedding);
 
   const filters: string[] = [];
   if (candidateIds.length > 0) {
     filters.push(`pc.candidate_id = ANY($${i++})`);
     values.push(candidateIds);
   }
+  if (chunkTypes.length > 0) {
+    filters.push(`pc.chunk_type = ANY($${i++})`);
+    values.push(chunkTypes);
+  }
   if (job.domain) {
     filters.push(
-      `((pc.metadata->>'domain_tags') ILIKE $${i++} OR (pc.metadata->>'domain_tags') IS NULL)`,
+      `(pc.metadata_json->'domain_tags' ? $${i} OR pc.metadata_json->'technologies' ? $${i} OR pc.metadata_json IS NULL OR pc.metadata_json = '{}'::jsonb)`,
     );
-    values.push(`%${job.domain}%`);
+    values.push(job.domain);
+    i += 1;
   }
-  const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+  const hard = buildHardFilterWhere(job);
+  for (const v of hard.values) {
+    values.push(v);
+  }
+  const hardSql = hard.text.replace(/\$\d+/g, () => `$${i++}`);
+  filters.push(hardSql);
+  filters.push(`pc.embedding IS NOT NULL`);
+
+  const vecParam = `$${i}`;
+  values.push(vecLiteral);
+  const whereSql = `WHERE ${filters.join(" AND ")}`;
+  const safeLimit = clampLimit(limitPerChunk, 1, VECTOR_LIMIT_MAX, 100);
 
   return {
-    text: `SELECT pc.id, pc.candidate_id, pc.chunk_type, pc.text, pc.metadata,
-       (pc.embedding <=> $${i}::vector) AS distance
+    text: `SELECT pc.id, pc.candidate_id, pc.chunk_type, pc.content_text, pc.metadata_json,
+       (pc.embedding <=> ${vecParam}::vector) AS distance
 FROM profile_chunks pc
+JOIN candidates c ON c.id = pc.candidate_id
 ${whereSql}
-ORDER BY pc.embedding <=> $${i}::vector
-LIMIT ${Number(limitPerChunk)}`,
-    values: [...values, vecLiteral],
+ORDER BY pc.embedding <=> ${vecParam}::vector
+LIMIT ${safeLimit}`,
+    values,
   };
+}
+
+export function buildFtsQueryText(job: JobReq, maxLen = 500): string {
+  const skills = [...job.must_have_skills, ...job.nice_to_have_skills];
+  return `${job.job_title} ${skills.join(" ")}`.slice(0, maxLen);
 }
 
 export function buildKeywordSearchQuery(opts: {
   job: JobReq;
   candidateIds?: string[];
+  chunkTypes?: string[];
   limitPerChunk?: number;
 }): SqlQuery {
-  const { job, candidateIds = [], limitPerChunk = 100 } = opts;
-  const skills = [...job.must_have_skills, ...job.nice_to_have_skills];
+  const { job, candidateIds = [], chunkTypes = [], limitPerChunk = 100 } = opts;
   const values: unknown[] = [];
   let i = 1;
 
@@ -103,27 +139,35 @@ export function buildKeywordSearchQuery(opts: {
     filters.push(`pc.candidate_id = ANY($${i++})`);
     values.push(candidateIds);
   }
+  if (chunkTypes.length > 0) {
+    filters.push(`pc.chunk_type = ANY($${i++})`);
+    values.push(chunkTypes);
+  }
 
-  const skillParam = `$${i++}`;
-  values.push(skills);
-  filters.push(`EXISTS (
-    SELECT 1 FROM unnest(${skillParam}::text[]) s
-    WHERE pc.text ILIKE '%' || s || '%'
-  )`);
+  const ftsParam = `$${i++}`;
+  values.push(buildFtsQueryText(job));
+  filters.push(`to_tsvector('english', pc.content_text) @@ plainto_tsquery('english', ${ftsParam})`);
 
-  const whereSql = `WHERE ${filters.join(" AND ")}`;
+  const hard = buildHardFilterWhere(job);
+  for (const v of hard.values) {
+    values.push(v);
+  }
+  const hardSql = hard.text.replace(/\$\d+/g, () => `$${i++}`);
+  filters.push(hardSql);
+
+  const rankParam = `$${i++}`;
+  values.push(buildFtsQueryText(job));
+  const safeLimit = clampLimit(limitPerChunk, 1, VECTOR_LIMIT_MAX, 100);
 
   return {
-    text: `SELECT pc.id, pc.candidate_id, pc.chunk_type, pc.text, pc.metadata,
-       GREATEST(
-         similarity(pc.text, $${i}),
-         similarity(COALESCE(pc.metadata->>'project_title',''), $${i})
-       ) AS kw_score
+    text: `SELECT pc.id, pc.candidate_id, pc.chunk_type, pc.content_text, pc.metadata_json,
+       ts_rank(to_tsvector('english', pc.content_text), plainto_tsquery('english', ${rankParam})) AS kw_score
 FROM profile_chunks pc
-${whereSql}
+JOIN candidates c ON c.id = pc.candidate_id
+WHERE ${filters.join(" AND ")}
 ORDER BY kw_score DESC
-LIMIT ${Number(limitPerChunk)}`,
-    values: [...values, `${job.job_title} ${skills.join(" ")}`],
+LIMIT ${safeLimit}`,
+    values,
   };
 }
 
@@ -146,6 +190,7 @@ export function combineRanks(
   keywordRanks: RankedChunk[],
   topN = 30,
 ): HybridHit[] {
+  const safeTopN = clampLimit(topN, 1, 200, 30);
   const byCandidate = new Map<string, HybridHit>();
   const chunkSets = new Map<string, Set<string>>();
 
@@ -179,8 +224,8 @@ export function combineRanks(
         e.keyword_score = r.kw_score ?? null;
       }
     }
-    const seen = chunkSets.get(r.candidate_id)!;
-    if (!seen.has(r.id)) {
+    const seen = chunkSets.get(r.candidate_id);
+    if (seen && !seen.has(r.id)) {
       seen.add(r.id);
       e.chunk_ids.push(r.id);
     }
@@ -191,5 +236,5 @@ export function combineRanks(
 
   return Array.from(byCandidate.values())
     .sort((a, b) => b.rrf_score - a.rrf_score)
-    .slice(0, topN);
+    .slice(0, safeTopN);
 }

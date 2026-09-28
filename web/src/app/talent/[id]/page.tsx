@@ -15,8 +15,9 @@ import {
 import PageShell from "@/components/PageShell";
 import Avatar from "@/components/Avatar";
 import VisibilityToggle from "./visibility-toggle";
+import SummaryRegenerate from "./summary-regenerate";
 import { GET } from "@/app/api/candidates/route";
-import { getViewer } from "@/lib/api-auth";
+import { getViewerAuth } from "@/lib/api-auth";
 import { driveImageUrl, isDriveLink } from "@/lib/drive";
 
 type Cand = {
@@ -122,6 +123,7 @@ const load = cache(
   ): Promise<{
     status: number;
     isOwner: boolean;
+    viewerKind: string;
     bundle: Bundle | null;
   }> => {
     const h = await headers();
@@ -137,14 +139,14 @@ const load = cache(
       `http://ssr.internal/api/candidates?id=${encodeURIComponent(id)}`,
       { headers: fwd },
     );
-    const viewer = getViewer(req);
+    const viewer = await getViewerAuth();
     const res = await GET(req);
     if (res.status !== 200) {
-      return { status: res.status, isOwner: false, bundle: null };
+      return { status: res.status, isOwner: false, viewerKind: viewer.kind, bundle: null };
     }
     const bundle = (await res.json()) as Bundle;
     const isOwner = viewer.kind === "owner" && viewer.id === id;
-    return { status: 200, isOwner, bundle };
+    return { status: 200, isOwner, viewerKind: viewer.kind, bundle };
   },
 );
 
@@ -154,9 +156,9 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  if (!UUID_RE.test(id)) return { title: "Profile not found" };
+  if (!UUID_RE.test(id)) return { title: "Profile not found", robots: { index: false, follow: false } };
   const { status, bundle } = await load(id);
-  if (status !== 200 || !bundle) return { title: "Profile not found" };
+  if (status !== 200 || !bundle) return { title: "Profile not found", robots: { index: false, follow: false } };
   const c = bundle.candidate;
   const description = (c.headline ?? "").trim() || undefined;
   return {
@@ -197,13 +199,43 @@ const MODE: Record<string, string> = {
   remote: "Remote",
 };
 
-function resolvePhoto(u?: string | null): string | null {
-  if (!u || !/^https?:\/\//.test(u)) return null;
+function safeHttpUrl(v: string | null | undefined): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!s) return null;
   try {
-    if (isDriveLink(u)) return driveImageUrl(u) || u;
+    const u = new URL(s);
+    if (u.protocol === "https:" || u.protocol === "http:") return u.toString();
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function safeMailto(v: string | null | undefined): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!s || /[\r\n<>]/.test(s)) return null;
+  if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(s)) return null;
+  return `mailto:${s}`;
+}
+
+function safeTel(v: string | null | undefined): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!s || /[\r\n<>]/.test(s)) return null;
+  if (!/^[+\d][\d\s\-().]{6,19}$/.test(s)) return null;
+  return `tel:${s.replace(/\s+/g, "")}`;
+}
+
+function resolvePhoto(u?: string | null): string | null {
+  const safe = safeHttpUrl(u);
+  if (!safe) return null;
+  try {
+    if (isDriveLink(safe)) return driveImageUrl(safe) || safe;
   } catch {
   }
-  return u;
+  return safe;
 }
 
 function salaryLine(c: Cand): string | null {
@@ -218,12 +250,9 @@ function salaryLine(c: Cand): string | null {
   return `${cur} ${c.min_salary.toLocaleString()} / ${freq}${c.salary_negotiable === false ? "" : " (negotiable)"}`;
 }
 
-const isHttp = (v: string | null | undefined): boolean =>
-  typeof v === "string" && v.trim().toLowerCase().startsWith("http");
-
 type Fact = { k: string; v: string; href?: string };
 
-function buildFacts(c: Cand, profile: Prof): Fact[] {
+function buildFacts(c: Cand, profile: Prof, viewerKind: string, isOwner: boolean): Fact[] {
   const out: Fact[] = [];
   const add = (k: string, v: unknown, href?: (s: string) => string | undefined) => {
     if (v === null || v === undefined) return;
@@ -231,6 +260,7 @@ function buildFacts(c: Cand, profile: Prof): Fact[] {
     if (!s) return;
     out.push(href ? { k, v: s, href: href(s) } : { k, v: s });
   };
+  const anon = viewerKind === "anon" && !isOwner;
   add("Full name", c.full_name);
   add("Headline", c.headline);
   add("Domain", c.domain);
@@ -243,26 +273,29 @@ function buildFacts(c: Cand, profile: Prof): Fact[] {
   add("Availability", c.availability_status);
   add("Notice period", c.notice_period);
   add("Open to relocation", c.open_to_relocation);
-  add("Minimum salary", c.min_salary);
-  add("Salary currency", c.salary_currency);
-  add("Salary frequency", c.salary_frequency);
-  add("Salary negotiable", c.salary_negotiable);
-  add("Email", c.contact_email, (s) => `mailto:${s}`);
-  add("Phone", c.contact_phone, (s) => `tel:${s}`);
-  add("LinkedIn", c.linkedin_url, (s) => (isHttp(s) ? s : undefined));
-  add("GitHub", c.github_url, (s) => (isHttp(s) ? s : undefined));
-  add("Portfolio", c.portfolio_url, (s) => (isHttp(s) ? s : undefined));
-  add("Resume", c.resume_url, (s) => (isHttp(s) ? s : undefined));
-  add("Photo", c.photo_url, (s) => (isHttp(s) ? s : undefined));
+  if (!anon) {
+    add("Minimum salary", c.min_salary);
+    add("Salary currency", c.salary_currency);
+    add("Salary frequency", c.salary_frequency);
+    add("Salary negotiable", c.salary_negotiable);
+  }
+  add("Email", c.contact_email, (s) => safeMailto(s) ?? undefined);
+  add("Phone", c.contact_phone, (s) => safeTel(s) ?? undefined);
+  add("LinkedIn", c.linkedin_url, (s) => safeHttpUrl(s) ?? undefined);
+  add("GitHub", c.github_url, (s) => safeHttpUrl(s) ?? undefined);
+  add("Portfolio", c.portfolio_url, (s) => safeHttpUrl(s) ?? undefined);
+  add("Resume", c.resume_url, (s) => safeHttpUrl(s) ?? undefined);
+  add("Photo", c.photo_url, (s) => safeHttpUrl(s) ?? undefined);
   add("Visibility", c.visibility_status);
-  add("Consent", c.consent_status);
+  if (isOwner) {
+    add("Consent", c.consent_status);
+  }
   add("Profile strength", c.profile_strength);
   add("Summary updated", profile?.updated_at);
   add("Profile refreshed", c.freshness_updated_at);
   add("Record created", c.created_at);
   add("Record updated", c.updated_at);
   add("Candidate id", c.id);
-  add("User id", c.user_id);
   return out;
 }
 
@@ -488,26 +521,34 @@ function Lines({ label, value }: { label: string; value?: string | null }) {
 
 function LinkRow({ items }: { items: (string | null | undefined)[] }) {
   const seen = new Set<string>();
-  const list: string[] = [];
+  const httpList: string[] = [];
+  const textList: string[] = [];
   for (const raw of items) {
     const href = (raw ?? "").trim();
     if (!href || seen.has(href)) continue;
     seen.add(href);
-    list.push(href);
+    const safe = safeHttpUrl(href);
+    if (safe) httpList.push(safe);
+    else textList.push(href.slice(0, 2048));
   }
-  if (!list.length) return null;
+  if (!httpList.length && !textList.length) return null;
   return (
     <div className="mt-2.5 flex flex-col gap-1.5 text-[12.5px]">
-      {list.map((href) => (
+      {httpList.map((href) => (
         <a
           key={href}
           href={href}
           className="underline decoration-muted underline-offset-2 transition-colors hover:text-brand-text break-all"
-          target={isHttp(href) ? "_blank" : undefined}
-          rel={isHttp(href) ? "noopener noreferrer" : undefined}
+          target="_blank"
+          rel="noopener noreferrer"
         >
           {href}
         </a>
+      ))}
+      {textList.map((t) => (
+        <span key={t} className="text-muted break-all">
+          {t}
+        </span>
       ))}
     </div>
   );
@@ -593,7 +634,7 @@ export default async function TalentPage({
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
-  const { status, isOwner, bundle } = await load(id);
+  const { status, isOwner, viewerKind, bundle } = await load(id);
   if (status === 404 || status === 400) notFound();
 
   if (status !== 200 || !bundle) {
@@ -625,10 +666,11 @@ export default async function TalentPage({
   const name = c.full_name?.trim() || "Candidate";
   const photo = resolvePhoto(c.photo_url);
   const summary = (bundle.profile?.summary_markdown ?? "").trim();
-  const salary = salaryLine(c);
+  const anonViewer = viewerKind === "anon" && !isOwner;
+  const salary = anonViewer ? null : salaryLine(c);
   const availability = c.availability_status ? AVAIL[c.availability_status] : null;
   const mode = c.remote_preference ? MODE[c.remote_preference] : null;
-  const facts = buildFacts(c, bundle.profile);
+  const facts = buildFacts(c, bundle.profile, viewerKind, isOwner);
 
   const skillEntries = bundle.skills.flatMap((s) => {
     const embedded = Array.isArray(s.skills) ? s.skills : s.skills ? [s.skills] : [];
@@ -643,23 +685,26 @@ export default async function TalentPage({
   });
 
   const channelBtns: ReactNode[] = [];
-  if (c.contact_email)
+  const emailHref = safeMailto(c.contact_email);
+  if (emailHref)
     channelBtns.push(
-      <a key="email" href={`mailto:${c.contact_email}`} className="btn btn-primary btn-sm press">
+      <a key="email" href={emailHref} className="btn btn-primary btn-sm press">
         <Mail size={14} aria-hidden="true" /> Email
       </a>,
     );
-  if (c.contact_phone)
+  const phoneHref = safeTel(c.contact_phone);
+  if (phoneHref && c.contact_phone)
     channelBtns.push(
-      <a key="phone" href={`tel:${c.contact_phone}`} className="btn btn-secondary btn-sm press">
-        {c.contact_phone}
+      <a key="phone" href={phoneHref} className="btn btn-secondary btn-sm press">
+        {String(c.contact_phone).slice(0, 32)}
       </a>,
     );
-  if (c.resume_url)
+  const resumeHref = safeHttpUrl(c.resume_url);
+  if (resumeHref)
     channelBtns.push(
       <a
         key="resume"
-        href={c.resume_url}
+        href={resumeHref}
         className="btn btn-secondary btn-sm press"
         target="_blank"
         rel="noopener noreferrer"
@@ -667,11 +712,12 @@ export default async function TalentPage({
         <FileText size={14} aria-hidden="true" /> Resume
       </a>,
     );
-  if (c.linkedin_url)
+  const liHref = safeHttpUrl(c.linkedin_url);
+  if (liHref)
     channelBtns.push(
       <a
         key="li"
-        href={c.linkedin_url}
+        href={liHref}
         className="btn btn-secondary btn-sm press"
         target="_blank"
         rel="noopener noreferrer"
@@ -679,11 +725,12 @@ export default async function TalentPage({
         LinkedIn <ExternalLink size={13} aria-hidden="true" />
       </a>,
     );
-  if (c.github_url)
+  const ghHref = safeHttpUrl(c.github_url);
+  if (ghHref)
     channelBtns.push(
       <a
         key="gh"
-        href={c.github_url}
+        href={ghHref}
         className="btn btn-secondary btn-sm press"
         target="_blank"
         rel="noopener noreferrer"
@@ -691,11 +738,12 @@ export default async function TalentPage({
         GitHub <ExternalLink size={13} aria-hidden="true" />
       </a>,
     );
-  if (c.portfolio_url)
+  const pfHref = safeHttpUrl(c.portfolio_url);
+  if (pfHref)
     channelBtns.push(
       <a
         key="pf"
-        href={c.portfolio_url}
+        href={pfHref}
         className="btn btn-secondary btn-sm press"
         target="_blank"
         rel="noopener noreferrer"
@@ -781,27 +829,31 @@ export default async function TalentPage({
             <div className="min-w-0">
               <Section title="Profile facts">
                 <dl className="grid gap-x-10 lg:grid-cols-2 sq-facts">
-                  {facts.map((f) => (
-                    <div className="sq-detail-row" key={f.k}>
-                      <dt>{f.k}</dt>
-                      <dd>
-                        {f.href ? (
-                          <a
-                            href={f.href}
-                            className="underline decoration-muted underline-offset-2 transition-colors hover:text-brand-text"
-                            target={f.href.startsWith("http") ? "_blank" : undefined}
-                            rel={
-                              f.href.startsWith("http") ? "noopener noreferrer" : undefined
-                            }
-                          >
-                            {f.v}
-                          </a>
-                        ) : (
-                          f.v
-                        )}
-                      </dd>
-                    </div>
-                  ))}
+                  {facts.map((f) => {
+                    const httpHref = f.href ? safeHttpUrl(f.href) : null;
+                    const mailHref = f.href && !httpHref ? safeMailto(f.href) : null;
+                    const telHref = f.href && !httpHref && !mailHref ? safeTel(f.href) : null;
+                    const renderHref = httpHref ?? mailHref ?? telHref;
+                    return (
+                      <div className="sq-detail-row" key={f.k}>
+                        <dt>{f.k}</dt>
+                        <dd>
+                          {renderHref ? (
+                            <a
+                              href={renderHref}
+                              className="underline decoration-muted underline-offset-2 transition-colors hover:text-brand-text"
+                              target={httpHref ? "_blank" : undefined}
+                              rel={httpHref ? "noopener noreferrer" : undefined}
+                            >
+                              {f.v}
+                            </a>
+                          ) : (
+                            f.v
+                          )}
+                        </dd>
+                      </div>
+                    );
+                  })}
                 </dl>
               </Section>
 
@@ -936,6 +988,15 @@ export default async function TalentPage({
               {summary ? (
                 <Section title="Summary">
                   <Markdownish text={summary} />
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="meta-chip">AI-generated</span>
+                    {bundle.profile?.updated_at ? (
+                      <span className="field-hint">
+                        Updated {String(bundle.profile.updated_at).slice(0, 10)}
+                      </span>
+                    ) : null}
+                    {isOwner ? <SummaryRegenerate id={c.id} /> : null}
+                  </div>
                 </Section>
               ) : null}
 

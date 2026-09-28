@@ -3,25 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CircleAlert, Info } from "lucide-react";
+import { ArrowRight, CircleAlert, Info, Loader2 } from "lucide-react";
+import { SESSION_EVENT, clearHrSession } from "@/lib/session-client";
 
 const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const COOKIE = "tammy_hr";
-const MAX_AGE = 60 * 60 * 24 * 30;
+const MAX_EMAIL_LEN = 320;
 
 type Session = { name?: string; email: string };
-
-function writeHrCookie(session: Session) {
-  const payload = encodeURIComponent(
-    JSON.stringify({ name: session.name ?? "", email: session.email }),
-  );
-  const secure = window.location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = `${COOKIE}=${payload}; path=/; max-age=${MAX_AGE}; SameSite=Lax${secure}`;
-}
-
-function clearHrCookie() {
-  document.cookie = `${COOKIE}=; path=/; max-age=0; SameSite=Lax`;
-}
 
 export default function LoginForm({
   initialSession,
@@ -37,28 +25,101 @@ export default function LoginForm({
   const [session, setSession] = useState<Session | null>(initialSession);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [stage, setStage] = useState<"email" | "code">("email");
   const [err, setErr] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  const signIn = (ev: React.FormEvent) => {
+  const sendCode = async (target: string): Promise<boolean> => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const res = await fetch("/api/auth/otp/request", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: target }),
+      });
+      await res.json().catch(() => null);
+      if (!res.ok) {
+        setErr("Could not send the code. Try again.");
+        return false;
+      }
+      setInfo("Check your inbox for the sign-in code.");
+      return true;
+    } catch {
+      setErr("Could not send the code. Try again.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const requestCode = async (ev: React.FormEvent) => {
     ev.preventDefault();
-    const trimmed = email.trim();
-    if (!EMAIL_OK.test(trimmed)) {
+    const trimmed = email.trim().toLowerCase();
+    if (trimmed.length > MAX_EMAIL_LEN || !EMAIL_OK.test(trimmed)) {
       setErr("Enter a valid work email.");
       return;
     }
+    setEmail(trimmed);
+    const ok = await sendCode(trimmed);
+    if (ok) setStage("code");
+  };
+
+  const verifyCode = async (ev: React.FormEvent) => {
+    ev.preventDefault();
+    const token = code.trim().replace(/\s+/g, "");
+    if (token.length < 6) {
+      setErr("Enter the code from your email.");
+      return;
+    }
     setErr(null);
-    const next: Session = { email: trimmed, name: name.trim() || undefined };
-    writeHrCookie(next);
-    setSession(next);
-    router.push("/hire/search");
-    router.refresh();
+    setBusy(true);
+    try {
+      const res = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), token }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        ok?: unknown;
+        email?: unknown;
+        error?: unknown;
+      } | null;
+      if (!res.ok || !data || typeof data.email !== "string") {
+        setErr(
+          typeof data?.error === "string" && data.error
+            ? data.error
+            : "That code did not work. Try again.",
+        );
+        return;
+      }
+      const next: Session = {
+        email: data.email,
+        name: name.trim() ? name.trim() : undefined,
+      };
+      setSession(next);
+      setInfo(null);
+      setCode("");
+      window.dispatchEvent(new Event(SESSION_EVENT));
+      router.push("/hire/search");
+      router.refresh();
+    } catch {
+      setErr("Could not verify the code. Try again.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const signOut = () => {
-    clearHrCookie();
+    clearHrSession();
     setSession(null);
-    setEmail("");
-    setName("");
+    setCode("");
+    setStage("email");
+    setErr(null);
+    setInfo(null);
+    router.refresh();
   };
 
   if (session) {
@@ -85,23 +146,111 @@ export default function LoginForm({
           <Link href="/hire/search" className="btn btn-primary press">
             Start a search <ArrowRight size={16} aria-hidden="true" />
           </Link>
-          <button type="button" className="btn btn-secondary press" onClick={signOut}>
+          <button
+            type="button"
+            className="btn btn-secondary press"
+            onClick={() => signOut()}
+            disabled={busy}
+          >
             Sign out
           </button>
         </div>
         <div className="notice mt-6">
           <Info aria-hidden="true" />
           <span>
-            The session lives in a cookie on this device. Clearing browser data
-            or pressing sign out ends it.
+            The session lives in a signed-in browser tab on this device. Use
+            sign out to end it.
           </span>
         </div>
       </div>
     );
   }
 
+  if (stage === "code") {
+    return (
+      <form onSubmit={(ev) => void verifyCode(ev)} className={cardClass}>
+        <div className="grid gap-4">
+          <div className="field">
+            <label className="field-label" htmlFor="hr-code">
+              Sign-in code
+              <span className="req" aria-hidden="true">
+                *
+              </span>
+            </label>
+            <input
+              id="hr-code"
+              className="input"
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setErr(null);
+              }}
+              placeholder="123456"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={64}
+              aria-invalid={err ? true : undefined}
+              required
+            />
+            {err ? (
+              <span className="field-error" role="alert">
+                {err}
+              </span>
+            ) : (
+              <span className="field-hint">
+                {info ?? `Sent to ${email}. It expires in a few minutes.`}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 mt-6">
+          <button
+            type="submit"
+            className="btn btn-primary press"
+            disabled={busy}
+          >
+            {busy ? (
+              <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+            ) : null}
+            Verify and continue <ArrowRight size={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary press"
+            disabled={busy}
+            onClick={() => void sendCode(email.trim().toLowerCase())}
+          >
+            Resend code
+          </button>
+          <button
+            type="button"
+            className="btn-link"
+            disabled={busy}
+            onClick={() => {
+              setStage("email");
+              setCode("");
+              setErr(null);
+              setInfo(null);
+            }}
+          >
+            Use a different email
+          </button>
+        </div>
+
+        <div className="notice mt-6">
+          <CircleAlert aria-hidden="true" />
+          <span>
+            Only verified employer inboxes can open a session. Codes are
+            single-use and expire quickly.
+          </span>
+        </div>
+      </form>
+    );
+  }
+
   return (
-    <form onSubmit={signIn} className={cardClass}>
+    <form onSubmit={(ev) => void requestCode(ev)} className={cardClass}>
       <div className="grid gap-4">
         <div className="field">
           <label className="field-label" htmlFor="hr-name">
@@ -143,21 +292,28 @@ export default function LoginForm({
             </span>
           ) : (
             <span className="field-hint">
-              Used to open the session — no password in this build.
+              We email you a one-time code — no password in this build.
             </span>
           )}
         </div>
       </div>
 
-      <button type="submit" className="btn btn-primary press mt-6 w-full sm:w-auto">
-        Continue to search <ArrowRight size={16} aria-hidden="true" />
+      <button
+        type="submit"
+        className="btn btn-primary press mt-6 w-full sm:w-auto"
+        disabled={busy}
+      >
+        {busy ? (
+          <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+        ) : null}
+        Email me a code <ArrowRight size={16} aria-hidden="true" />
       </button>
 
       <div className="notice mt-6">
         <CircleAlert aria-hidden="true" />
         <span>
-          This demo stores the session cookie on your device. No password, no
-          email verification — treat it as a seat, not an account.
+          Signing in proves control of the inbox. Only verified employer
+          inboxes unlock search, shortlists, and contact channels.
         </span>
       </div>
 
