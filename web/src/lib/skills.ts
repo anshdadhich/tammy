@@ -822,16 +822,6 @@ export const DOMAINS = [
   "Other",
 ] as const;
 
-export const SENIORITIES = [
-  "intern",
-  "junior",
-  "mid",
-  "senior",
-  "lead",
-] as const;
-
-export const REMOTE_PREFS = ["onsite", "hybrid", "remote"] as const;
-
 export const SALARY_FREQUENCIES = ["hourly", "monthly", "yearly"] as const;
 
 export const EMPLOYMENT_TYPES = [
