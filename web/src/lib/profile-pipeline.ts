@@ -90,7 +90,11 @@ export const processProfile = inngest.createFunction(
           candidate_id: candidateId,
           chunk_type: "summary",
           content_text: `${candidate.headline ?? ""} ${candidate.domain ?? ""} ${candidate.total_experience_years ?? ""}y Skills: ${skills.slice(0, 20).join(", ")}${expText ? ` Experience: ${expText}` : ""}`.trim().slice(0, 2000),
-          metadata_json: { domain: candidate.domain ?? null },
+          metadata_json: {
+            domain: candidate.domain ?? null,
+            domain_tags: candidate.domain ? [candidate.domain] : [],
+            technologies: skills.slice(0, 20),
+          },
         },
         ...projects.map((p) => ({
           candidate_id: candidateId,

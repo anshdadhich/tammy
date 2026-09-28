@@ -4,10 +4,10 @@ import { requireHrDb, getSessionUser } from "@/lib/supabase-user";
 import { jobSchema } from "@/lib/validators";
 import type { JobReq } from "@/lib/matching/types";
 import { buildJobQueryText, embedQuery, assertEmbeddingDim, toVectorLiteral, EMBEDDING_DIM } from "@/lib/matching/voyage";
-import { buildFtsQueryText } from "@/lib/matching/hybrid";
+import { buildFtsTerms } from "@/lib/matching/hybrid";
 import { applyContactPrefs } from "@/lib/contact-prefs";
 import { defaultOpenAIProvider, judgeTop, type JudgeInput, type JudgeResult } from "@/lib/matching/judge";
-import { blendWithJudge, scoreCandidate, metadataTechnologies, type ScoreContext } from "@/lib/scoring-live";
+import { blendWithJudge, matchLevel, scoreCandidate, metadataTechnologies, type ScoreContext } from "@/lib/scoring-live";
 import { withWideEvent } from "@/lib/observe";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { redactPii } from "@/lib/redact";
@@ -46,8 +46,8 @@ function canonicalFilters(job: JobReq): string {
   });
 }
 
-function searchHash(queryText: string, job: JobReq): string {
-  return createHash("sha256").update(`${normalizeQueryText(queryText)}\n${canonicalFilters(job)}`).digest("hex");
+function searchHash(queryText: string, job: JobReq, deep: boolean): string {
+  return createHash("sha256").update(`${normalizeQueryText(queryText)}\n${canonicalFilters(job)}\ndeep:${deep ? 1 : 0}`).digest("hex");
 }
 
 function parseStoredEmbedding(v: unknown): number[] | null {
@@ -105,14 +105,24 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
     description?: string;
   };
 
+  const seniorityBands: Record<string, { min: number; max: number }> = {
+    intern: { min: 0, max: 1 },
+    junior: { min: 0, max: 2 },
+    mid: { min: 2, max: 5 },
+    senior: { min: 5, max: 8 },
+    lead: { min: 7, max: 12 },
+    staff: { min: 8, max: 15 },
+  };
+  const seniorityBand = seniorityBands[(j.seniority ?? "").trim().toLowerCase()];
+  const rangeUnconstrained = (j.min_exp ?? 0) <= 0 && (j.max_exp ?? 50) >= 50;
   const jobReq: JobReq = {
     job_title: j.title,
     domain: j.domain,
     seniority: j.seniority,
     must_have_skills: j.must_have ?? [],
     nice_to_have_skills: j.nice_to_have ?? [],
-    experience_min: j.min_exp ?? null,
-    experience_max: j.max_exp ?? null,
+    experience_min: seniorityBand && rangeUnconstrained ? seniorityBand.min : (j.min_exp ?? null),
+    experience_max: seniorityBand && rangeUnconstrained ? seniorityBand.max : (j.max_exp ?? null),
     salary_min: j.salary_min ?? null,
     salary_max: j.salary_max ?? null,
     location: j.location ?? null,
@@ -122,7 +132,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   };
 
   const queryText = buildJobQueryText(jobReq);
-  const qhash = searchHash(queryText, jobReq);
+  const qhash = searchHash(queryText, jobReq, deep);
   const db = supabaseAdmin();
   wev.add({
     job_title: jobReq.job_title,
@@ -328,6 +338,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   type Chunk = { candidate_id: string; distance?: number; content_text?: string; chunk_type?: string; metadata_json?: unknown };
   let chunks: Chunk[] = [];
   let embedFailed = false;
+  let rpcFallback = false;
   let qvec: number[] | null = reusedEmbedding;
   if (!qvec) {
     try {
@@ -343,7 +354,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   wev.add({ embed_failed: embedFailed, embed_reused: reusedEmbedding != null });
 
   if (qvec) {
-    const fts = buildFtsQueryText(jobReq, 200);
+    const ftsTerms = buildFtsTerms(jobReq, 20);
     const baseParams = {
       query_embedding: toVectorLiteral(qvec, EMBEDDING_DIM),
       match_count: MATCH_COUNT,
@@ -354,7 +365,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       p_candidate_ids: null,
       p_availability: null,
       p_chunk_types: null,
-      p_fts_query: fts.trim() ? fts : null,
+      p_fts_terms: ftsTerms.length ? ftsTerms : null,
       p_per_candidate: PER_CANDIDATE_CHUNKS,
     };
     try {
@@ -364,10 +375,15 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error(`[search] filtered rpc failed, fallback detail=${redactPii(msg.slice(0, 200))}`);
+      rpcFallback = true;
       try {
         const { data, error } = await reader.rpc("match_chunks", {
-          query_embedding: toVectorLiteral(qvec, EMBEDDING_DIM),
-          match_count: MATCH_COUNT,
+          ...baseParams,
+          p_domain: null,
+          p_min_exp: null,
+          p_salary_max: null,
+          p_location: null,
+          p_fts_terms: null,
         });
         if (error) throw error;
         if (data) chunks = data as Chunk[];
@@ -494,6 +510,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       console.error(`[search] scoring failed detail=${redactPii(msg.slice(0, 200))}`);
     }
   }
+  let unrankedFallback = false;
   if (!rows.length) {
     const { data } = await reader
       .from("candidates")
@@ -502,11 +519,13 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       .order("created_at", { ascending: false })
       .limit(limit);
     rows = (data ?? []) as Record<string, unknown>[];
+    unrankedFallback = rows.length > 0;
   }
-  wev.add({ result_count: rows.length, chunk_hits: chunks.length });
+  wev.add({ result_count: rows.length, chunk_hits: chunks.length, unranked_fallback: unrankedFallback });
 
   let searchId: string | null = null;
   const searchPayload: Record<string, unknown> = {
+    employer_id: hr.employerId,
     query_text: queryText,
     filters_json: jobReq,
     result_count: rows.length,
@@ -568,8 +587,17 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
     await attachProfileRows(rows);
     await attachContacts(rows);
     const results = finalize(rows);
-    wev.add({ degraded: embedFailed });
-    return Response.json({ results, queryText, searchId, degraded: embedFailed || undefined });
+    const degradedOut = embedFailed || rpcFallback || unrankedFallback;
+    wev.add({ degraded: degradedOut });
+    return Response.json({ results, queryText, searchId, degraded: degradedOut || undefined });
+  }
+
+  if (unrankedFallback) {
+    await attachProfileRows(rows);
+    await attachContacts(rows);
+    const results = finalize(rows);
+    wev.add({ deep: true, degraded: true, unranked_fallback: true });
+    return Response.json({ results, queryText, searchId, deep: true, degraded: true, deepError: "No strong matches — showing recent profiles." });
   }
 
   try {
@@ -603,27 +631,28 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       const jj = judged[i];
       const rules = typeof r.overall_score === "number" ? (r.overall_score as number) : null;
       const jscore = jj && typeof jj.overall_score === "number" ? jj.overall_score : null;
-      return { ...r, judge: jj, overall_score: rules != null ? blendWithJudge(rules, jscore) : jscore };
+      const blended = rules != null ? blendWithJudge(rules, jscore) : jscore;
+      return { ...r, judge: jj, overall_score: blended, match_level: blended != null ? matchLevel(blended) : r.match_level };
     });
+    merged.sort((a, b) => (typeof b.overall_score === "number" ? b.overall_score : -1) - (typeof a.overall_score === "number" ? a.overall_score : -1));
     if (searchId) {
       await saveMatches(
-        merged.map((m, i) => {
+        merged.map((m) => {
           const mm = m as Record<string, unknown>;
           const jj = mm.judge as JudgeResult | null;
-          const rulesScore = typeof top[i]?.overall_score === "number" ? (top[i].overall_score as number) : null;
           return {
             candidate_id: String(mm.id ?? ""),
-            score: jj?.overall_score ?? rulesScore,
+            score: typeof mm.overall_score === "number" ? (mm.overall_score as number) : (jj?.overall_score ?? null),
             reasons: ((jj ?? {}) as unknown) as Record<string, unknown>,
           };
         }),
       );
     }
-    wev.add({ judged: merged.length, deep: true, degraded: embedFailed || judgeNulls === merged.length });
+    wev.add({ judged: merged.length, deep: true, degraded: embedFailed || rpcFallback || judgeNulls === merged.length });
     await attachProfileRows(merged);
     await attachContacts(merged);
     const results = finalize(merged);
-    return Response.json({ results, queryText, searchId, deep: true, degraded: (embedFailed || (merged.length > 0 && judgeNulls === merged.length)) || undefined });
+    return Response.json({ results, queryText, searchId, deep: true, degraded: (embedFailed || rpcFallback || (merged.length > 0 && judgeNulls === merged.length)) || undefined });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[search] deep judge failed detail=${redactPii(msg.slice(0, 200))}`);

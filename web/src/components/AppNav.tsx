@@ -45,6 +45,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
   const pathname = usePathname();
   const isJoin = pathname.startsWith("/join");
   const isHire = pathname.startsWith("/hire");
+  const isAuthPage = pathname.startsWith("/hire/login") || pathname.startsWith("/join");
   const items: readonly NavItem[] = isJoin ? JOIN_NAV : isHire ? HIRE_NAV : LANDING_NAV;
   const sectionActive = isJoin ? "/join" : isHire ? "/hire" : null;
   const showAuth = !isJoin;
@@ -143,7 +144,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
 
   return (
     <motion.header
-      className={`site-navbar-wrap${scrolled ? " is-scrolled" : ""}`}
+      className={`site-navbar-wrap${scrolled && !isAuthPage ? " is-scrolled" : ""}`}
       initial={false}
       animate={{ y: hideNav ? "-110%" : 0 }}
       transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
@@ -230,11 +231,30 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
             </div>
           ) : null}
 
+          {viewer?.kind === "hr" ? (
+            <Link
+              href="/hire/search"
+              className="site-login press h-10"
+              onClick={() => setMobileOpen(false)}
+            >
+              Search
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            className="theme-toggle press"
+            aria-label="Toggle color theme"
+            title="Toggle light / dark theme"
+            onClick={toggleTheme}
+          >
+            <Sun className="theme-icon-sun" aria-hidden="true" />
+            <Moon className="theme-icon-moon" aria-hidden="true" />
+          </button>
           {showAuth && !viewer ? (
             <div className="nav-menu-wrap">
               <button
                 type="button"
-                className="site-login press h-10"
+                className="site-nav-cta press h-10"
                 aria-haspopup="menu"
                 aria-expanded={authOpen}
                 onClick={() => {
@@ -242,7 +262,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
                   setProfileOpen(false);
                 }}
               >
-                Login or Sign up
+                Login / Sign up
               </button>
               {authOpen ? (
                 <div className="nav-menu" role="menu">
@@ -264,37 +284,6 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
               ) : null}
             </div>
           ) : null}
-
-          {showAuth && (!viewer || viewer.kind === "owner") ? (
-            <motion.span whileTap={{ scale: 0.96 }} className="inline-flex">
-              <Link
-                href="/join"
-                className="site-nav-cta site-nav-cta-dark press h-10"
-                onClick={() => setMobileOpen(false)}
-              >
-                Build my page
-              </Link>
-            </motion.span>
-          ) : null}
-          {viewer?.kind === "hr" ? (
-            <Link
-              href="/hire/search"
-              className="site-login press h-10"
-              onClick={() => setMobileOpen(false)}
-            >
-              Search
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            className="theme-toggle press"
-            aria-label="Toggle color theme"
-            title="Toggle light / dark theme"
-            onClick={toggleTheme}
-          >
-            <Sun className="theme-icon-sun" aria-hidden="true" />
-            <Moon className="theme-icon-moon" aria-hidden="true" />
-          </button>
           <button
             type="button"
             className="site-nav-burger lg:hidden press"
@@ -359,12 +348,12 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
                   {!viewer ? (
                     <button
                       type="button"
-                      className="site-login"
+                      className="site-nav-cta"
                       style={{ justifyContent: "center" }}
                       aria-expanded={authOpen}
                       onClick={() => setAuthOpen((v) => !v)}
                     >
-                      Login or Sign up
+                      Login / Sign up
                     </button>
                   ) : null}
                   {!viewer && authOpen ? (
@@ -384,16 +373,6 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
                         </Link>
                       ))}
                     </div>
-                  ) : null}
-                  {!viewer || viewer.kind === "owner" ? (
-                    <Link
-                      href="/join"
-                      className="site-nav-cta"
-                      style={{ justifyContent: "center" }}
-                      onClick={() => setMobileOpen(false)}
-                    >
-                      Build my page
-                    </Link>
                   ) : null}
                   {viewer?.kind === "hr" ? (
                     <Link

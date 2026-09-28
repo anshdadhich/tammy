@@ -1,4 +1,5 @@
 DROP FUNCTION IF EXISTS public.match_chunks(vector(1024), INT);
+DROP FUNCTION IF EXISTS public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT, INT);
 
 CREATE OR REPLACE FUNCTION public.match_chunks(
   query_embedding vector(1024),
@@ -10,7 +11,7 @@ CREATE OR REPLACE FUNCTION public.match_chunks(
   p_candidate_ids UUID[] DEFAULT NULL,
   p_availability TEXT DEFAULT NULL,
   p_chunk_types TEXT[] DEFAULT NULL,
-  p_fts_query TEXT DEFAULT NULL,
+  p_fts_terms TEXT[] DEFAULT NULL,
   p_per_candidate INT DEFAULT 3
 )
 RETURNS TABLE (
@@ -49,15 +50,18 @@ BEGIN
         OR pc.metadata_json IS NULL
         OR pc.metadata_json = '{}'::jsonb
         OR (pc.metadata_json ? 'domain_tags' AND pc.metadata_json->'domain_tags' ? p_domain)
-        OR (pc.metadata_json ? 'technologies' AND pc.metadata_json->'technologies' ? p_domain))
-      AND (p_min_exp IS NULL OR COALESCE(c.total_experience_years, 0) >= p_min_exp)
+        OR (pc.metadata_json ? 'technologies' AND pc.metadata_json->'technologies' ? p_domain)
+        OR (pc.metadata_json ? 'domain' AND pc.metadata_json->>'domain' = p_domain))
+      AND (p_min_exp IS NULL OR c.total_experience_years IS NULL OR COALESCE(c.total_experience_years, 0) >= p_min_exp)
       AND (p_salary_max IS NULL OR c.min_salary IS NULL OR c.min_salary <= p_salary_max)
       AND (p_location IS NULL
         OR c.remote_preference IN ('remote_only', 'flexible')
         OR c.location_city ILIKE '%' || p_location || '%')
       AND (p_availability IS NULL OR c.availability_status = p_availability)
-      AND (p_fts_query IS NULL
-        OR to_tsvector('english', pc.content_text) @@ plainto_tsquery('english', p_fts_query))
+      AND (p_fts_terms IS NULL OR EXISTS (
+        SELECT 1 FROM unnest(p_fts_terms) AS ft(term)
+        WHERE to_tsvector('english', pc.content_text) @@ plainto_tsquery('english', ft.term)
+      ))
     ORDER BY pc.embedding <=> query_embedding
     LIMIT v_limit * v_per
   )
@@ -69,5 +73,5 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT, INT) TO authenticated, service_role;
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT, INT) FROM anon, public;
+GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, public;

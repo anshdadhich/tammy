@@ -39,7 +39,6 @@ const JSON_LIMITS: Record<string, number> = {
   "candidates-put": 1024 * 1024,
   "candidates-patch": 256 * 1024,
   "candidates-delete": 256 * 1024,
-  "candidates-batch": 256 * 1024,
 };
 
 function isMissingColumnErr(err: { message?: string; code?: string } | null | undefined): boolean {
@@ -91,6 +90,10 @@ async function readJsonBody(request: Request, maxBytes: number): Promise<{ ok: t
 function nullPublicContact(c: Record<string, unknown>): Record<string, unknown> {
   const out = { ...c };
   for (const col of CONTACT_COLS) out[col] = null;
+  out.min_salary = null;
+  out.salary_currency = null;
+  out.salary_frequency = null;
+  out.salary_negotiable = null;
   return out;
 }
 
@@ -142,9 +145,13 @@ export async function GET(request: Request) {
     isOwnerVerified = !(gate instanceof Response);
   }
   let isHrVerified = false;
+  let hrEmployerId: string | null = null;
   if (viewer.kind === "hr") {
     const hr = await requireHrDb(session);
-    isHrVerified = !(hr instanceof Response);
+    if (!(hr instanceof Response)) {
+      isHrVerified = true;
+      hrEmployerId = hr.employerId;
+    }
   }
 
   if (String(candidate.visibility_status ?? "visible") !== "visible" && !isOwnerVerified) {
@@ -163,11 +170,36 @@ export async function GET(request: Request) {
   }
   const degraded = prefsDegraded(candidate);
 
+  let ownSearchIds: string[] | null = null;
+  if (privilegedLogs && !isOwnerVerified && hrEmployerId) {
+    try {
+      const { data: ownSearches } = await db.from("searches").select("id").eq("employer_id", hrEmployerId).limit(500);
+      ownSearchIds = ((ownSearches ?? []) as { id: string }[]).map((s) => s.id);
+    } catch {
+      ownSearchIds = [];
+    }
+  }
+
+  const contactLogQuery = () => {
+    let q = db.from("contact_log").select("id, channel, message, job_id, employer_id, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50);
+    if (!isOwnerVerified && hrEmployerId) q = q.eq("employer_id", hrEmployerId);
+    return q;
+  };
+  const matchesQuery = () => {
+    let q = db.from("candidate_matches").select("id, search_id, job_id, score, status, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50);
+    if (!isOwnerVerified && ownSearchIds) q = q.in("search_id", ownSearchIds.length ? ownSearchIds : ["00000000-0000-0000-0000-000000000000"]);
+    return q;
+  };
+  const shortlistsQuery = () => {
+    let q = db.from("shortlists").select("id, job_id, status, notes, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50);
+    if (!isOwnerVerified && hrEmployerId) q = q.eq("employer_id", hrEmployerId);
+    return q;
+  };
   const [{ data: profile }, { data: views }, { data: matches }, { data: shortlisted }, { data: projects }, { data: experiences }, { data: education }, { data: skillRows }] = await Promise.all([
     db.from("candidate_profiles").select("summary_markdown, summary_json, updated_at").eq("candidate_id", cid).maybeSingle(),
-    privilegedLogs ? db.from("contact_log").select("id, channel, message, job_id, employer_id, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] }),
-    privilegedLogs ? db.from("candidate_matches").select("id, search_id, job_id, score, status, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] }),
-    privilegedLogs ? db.from("shortlists").select("id, job_id, status, notes, created_at").eq("candidate_id", cid).order("created_at", { ascending: false }).limit(50) : Promise.resolve({ data: [] }),
+    privilegedLogs ? contactLogQuery() : Promise.resolve({ data: [] }),
+    privilegedLogs ? matchesQuery() : Promise.resolve({ data: [] }),
+    privilegedLogs ? shortlistsQuery() : Promise.resolve({ data: [] }),
     db.from("projects").select("id, title, description, problem_statement, tech_stack, role_in_project, project_link, repo_link, deployment_link, impact_summary, project_type").eq("candidate_id", cid),
     db.from("work_experiences").select("company_name, job_title, start_date, end_date, is_current, description, achievements, tech_stack").eq("candidate_id", cid),
     db.from("education").select("institution, degree, field_of_study, start_year, end_year, achievements").eq("candidate_id", cid),
@@ -209,6 +241,9 @@ export async function GET(request: Request) {
     skills: skillRows ?? [],
     depths,
   });
+  if (isOwnerVerified) {
+    (bundled as Record<string, unknown>).candidate = { ...candidate };
+  }
   if (degraded) {
     return Response.json({ ...bundled, contactPrefsDegraded: true });
   }
@@ -260,6 +295,23 @@ function sameRows(a: unknown[], b: unknown[]): boolean {
   const sa = a.map((r) => JSON.stringify(normJson(r))).sort();
   const sb = b.map((r) => JSON.stringify(normJson(r))).sort();
   return sa.every((s, i) => s === sb[i]);
+}
+
+async function restoreRows(
+  db: ReturnType<typeof supabaseAdmin>,
+  table: string,
+  candidateId: string,
+  prev: unknown[],
+  label: string,
+): Promise<void> {
+  try {
+    const rows = (prev as Record<string, unknown>[]).map((r) => ({ candidate_id: candidateId, ...r }));
+    if (!rows.length) return;
+    const { error } = await db.from(table).insert(rows);
+    if (error) throw error;
+  } catch (e) {
+    console.error(`[candidates] ${label} restore failed`, redactPii((e as Error)?.message ?? String(e)).slice(0, 200));
+  }
 }
 
 async function skillIdMap(
@@ -343,17 +395,17 @@ export async function POST(request: Request) {
     .from("candidates")
     .select("id")
     .eq("contact_email", email)
-    .eq("visibility_status", "visible")
     .limit(1)
     .maybeSingle();
   if ((dupe as { id: string } | null)?.id) {
     return Response.json(
-      { error: "A visible profile already exists for this email.", candidateId: (dupe as { id: string }).id },
+      { error: "A profile already exists for this email.", candidateId: (dupe as { id: string }).id },
       { status: 409 },
     );
   }
 
   let userId: string | null = null;
+  let createdUser = false;
   const existing = await db.from("users").select("id").eq("email", email).maybeSingle();
   if (existing.data) {
     userId = (existing.data as { id: string }).id;
@@ -368,6 +420,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "user create failed" }, { status: 500 });
     }
     userId = (user as { id: string }).id;
+    createdUser = true;
   }
 
   const remoteMap: Record<string, string> = { remote: "remote_only", hybrid: "hybrid", onsite: "onsite" };
@@ -388,8 +441,8 @@ export async function POST(request: Request) {
     salary_negotiable: c.negotiable ?? true,
     availability_status: avail,
     notice_period: (c.notice_period ?? "").trim().slice(0, 200) || null,
-    visibility_status: c.visibility ?? "visible",
-    consent_status: "granted",
+    visibility_status: "hidden",
+    consent_status: "pending",
     ...(c.show_email !== undefined ? { show_email: c.show_email } : {}),
     ...(c.show_phone !== undefined ? { show_phone: c.show_phone } : {}),
     ...(c.show_linkedin !== undefined ? { show_linkedin: c.show_linkedin } : {}),
@@ -508,6 +561,7 @@ export async function POST(request: Request) {
           field_of_study: e.field || null,
           start_year: yrs[0] ? Number(yrs[0]) : null,
           end_year: yrs[1] ? Number(yrs[1]) : null,
+          achievements: e.achievements || null,
         };
       });
       if (rows.length) {
@@ -536,7 +590,7 @@ export async function POST(request: Request) {
           warnings.push("skills: could not save (code SKL_SAVE)");
         }
       } else if (c.skills?.length) {
-        warnings.push("skills: none of those skill names are in our recognized list yet — they were skipped");
+        warnings.push("skills: some skill names were skipped");
       }
     }
   } catch (e) {
@@ -544,9 +598,19 @@ export async function POST(request: Request) {
     warnings.push("skills: could not save (code SKL_SAVE)");
   }
 
+  if (warnings.some((w) => /\(code [A-Z_]+\)/.test(w))) {
+    try {
+      if (candidateId) await db.from("candidates").delete().eq("id", candidateId);
+      if (createdUser && userId) await db.from("users").delete().eq("id", userId);
+    } catch {
+    }
+    return Response.json({ error: "Could not save the profile. Fix the highlighted fields and retry." }, { status: 500 });
+  }
+
   try {
     await inngest.send({ name: "candidate.profile.submitted", data: { candidateId } });
-  } catch {
+  } catch (e) {
+    console.error("[candidates] pipeline enqueue failed", redactPii((e as Error)?.message ?? String(e)).slice(0, 200));
   }
 
   return Response.json({ candidateId, status: "processing", warnings }, { status: 202 });
@@ -664,12 +728,20 @@ export async function PUT(request: Request) {
     if (present.has(flag)) patch[flag] = c[flag] === true;
   }
   if (present.has("phone")) patch.contact_phone = c.phone || null;
-  if (present.has("photo_url") && c.photo_url) patch.photo_url = c.photo_url;
+  if (present.has("photo_url")) {
+    const v = typeof c.photo_url === "string" ? c.photo_url.trim() : "";
+    patch.photo_url = v ? v : null;
+  }
   if (present.has("links")) {
-    patch.github_url = c.links?.github || null;
-    patch.linkedin_url = c.links?.linkedin || null;
-    if (c.links?.portfolio) patch.portfolio_url = c.links.portfolio;
-    if (c.links?.resume_url) patch.resume_url = c.links.resume_url;
+    const li = (rest.links ?? {}) as Record<string, unknown>;
+    const linkOrNull = (k: string): string | null => {
+      const v = li[k];
+      return typeof v === "string" && v.trim() ? v.trim() : null;
+    };
+    if ("github" in li) patch.github_url = linkOrNull("github");
+    if ("linkedin" in li) patch.linkedin_url = linkOrNull("linkedin");
+    if ("portfolio" in li) patch.portfolio_url = linkOrNull("portfolio");
+    if ("resume_url" in li) patch.resume_url = linkOrNull("resume_url");
   }
   if (present.has("email") && c.email) {
     const email = normalizeEmail(c.email);
@@ -682,21 +754,19 @@ export async function PUT(request: Request) {
           { status: 403 },
         );
       }
-      const found = await db.from("users").select("id").eq("email", email).maybeSingle();
-      if (found.data) {
+      const clash = await db.from("users").select("id").eq("email", email).maybeSingle();
+      if ((clash.data as { id: string } | null)?.id) {
         return Response.json(
           { error: "That email is already in use. Verify ownership first." },
           { status: 409 },
         );
       }
-      const { data: user } = await db
-        .from("users")
-        .insert({ email, role: "candidate" })
-        .select("id")
-        .single();
-      const newUserId = (user as { id: string } | null)?.id ?? null;
+      const { error: userErr } = await db.from("users").update({ email }).eq("id", prev.user_id);
+      if (userErr) {
+        console.error("[candidates] user email update failed", redactPii(userErr.message));
+        return Response.json({ error: "Could not change email. Try again." }, { status: 500 });
+      }
       patch.contact_email = email;
-      if (newUserId) patch.user_id = newUserId;
     }
   }
 
@@ -747,6 +817,7 @@ export async function PUT(request: Request) {
           if (error) {
             console.error("[candidates] experience replace failed", redactPii(error.message));
             putWarnings.push("experience: could not save (code EXP_SAVE)");
+            await restoreRows(db, "work_experiences", id, (expRows ?? []) as unknown[], "experience");
           }
         }
       }
@@ -784,6 +855,7 @@ export async function PUT(request: Request) {
           if (error) {
             console.error("[candidates] projects replace failed", redactPii(error.message));
             putWarnings.push("projects: could not save (code PRJ_SAVE)");
+            await restoreRows(db, "projects", id, (projRows ?? []) as unknown[], "projects");
           }
         }
       }
@@ -819,6 +891,7 @@ export async function PUT(request: Request) {
           if (error) {
             console.error("[candidates] oss replace failed", redactPii(error.message));
             putWarnings.push("open source: could not save (code OSS_SAVE)");
+            await restoreRows(db, "open_source_contributions", id, (ossRows ?? []) as unknown[], "oss");
           }
         }
       }
@@ -837,11 +910,12 @@ export async function PUT(request: Request) {
           field_of_study: e.field || null,
           start_year: yrs[0] ? Number(yrs[0]) : null,
           end_year: yrs[1] ? Number(yrs[1]) : null,
+          achievements: e.achievements || null,
         };
       });
       const { data: eduRows, error: eduFetchErr } = await db
         .from("education")
-        .select("institution, degree, field_of_study, start_year, end_year")
+        .select("institution, degree, field_of_study, start_year, end_year, achievements")
         .eq("candidate_id", id);
       if (eduFetchErr) throw eduFetchErr;
       if (!sameRows(nextEdu, (eduRows ?? []) as unknown[])) {
@@ -854,6 +928,7 @@ export async function PUT(request: Request) {
           if (error) {
             console.error("[candidates] education replace failed", redactPii(error.message));
             putWarnings.push("education: could not save (code EDU_SAVE)");
+            await restoreRows(db, "education", id, (eduRows ?? []) as unknown[], "education");
           }
         }
       }
@@ -887,9 +962,19 @@ export async function PUT(request: Request) {
             if (error) {
               console.error("[candidates] skills replace failed", redactPii(error.message));
               putWarnings.push("skills: could not save (code SKL_SAVE)");
+              const prevLinks = haveNames.flatMap((name) => {
+                const sid = byName.get(name);
+                return sid ? [{ candidate_id: id, skill_id: sid, source: "self_reported" }] : [];
+              });
+              if (prevLinks.length) {
+                try {
+                  await db.from("candidate_skills").upsert(prevLinks, { onConflict: "candidate_id,skill_id" });
+                } catch {
+                }
+              }
             }
           } else {
-            putWarnings.push("skills: none of those skill names are in our recognized list yet — they were skipped");
+            putWarnings.push("skills: some skill names were skipped");
           }
         }
       }
@@ -906,7 +991,8 @@ export async function PUT(request: Request) {
     }
     try {
       await inngest.send({ name: "candidate.profile.submitted", data: { candidateId: id } });
-    } catch {
+    } catch (e) {
+      console.error("[candidates] pipeline enqueue failed", redactPii((e as Error)?.message ?? String(e)).slice(0, 200));
     }
   }
 
@@ -918,7 +1004,7 @@ export async function DELETE(request: Request) {
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   const url = new URL(request.url);
   let body: unknown = null;
-  if (request.method !== "GET") {
+  {
     const ct = request.headers.get("content-type") ?? "";
     if (ct.toLowerCase().includes("application/json")) {
       const read = await readJsonBody(request, JSON_LIMITS["candidates-delete"]);

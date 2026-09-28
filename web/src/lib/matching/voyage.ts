@@ -46,17 +46,23 @@ async function fetchWithRetry(
   timeoutMs = VOYAGE_TIMEOUT_MS,
 ): Promise<Response> {
   let last: Response | null = null;
+  let lastErr: unknown = null;
   for (let attempt = 0; attempt < tries; attempt++) {
-    const signal = init.signal ?? AbortSignal.timeout(timeoutMs);
-    const res = await fetch(url, { ...init, signal });
-    if (res.ok) return res;
-    last = res;
-    if (res.status !== 429 && res.status < 500) break;
+    try {
+      const signal = init.signal ?? AbortSignal.timeout(timeoutMs);
+      const res = await fetch(url, { ...init, signal });
+      if (res.ok) return res;
+      last = res;
+      if (res.status !== 429 && res.status < 500) break;
+    } catch (e) {
+      lastErr = e;
+    }
     if (attempt < tries - 1) {
       await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
     }
   }
-  return last as Response;
+  if (last) return last;
+  throw lastErr instanceof Error ? lastErr : new Error("Voyage request failed");
 }
 
 const queryCache = new Map<string, { vec: number[]; at: number }>();

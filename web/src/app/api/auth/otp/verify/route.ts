@@ -138,5 +138,24 @@ export async function POST(request: Request) {
     console.error(`[auth-otp-verify] link failed detail=${redactPii(msg.slice(0, 200))}`);
     return Response.json({ error: "Something went wrong. Try again." }, { status: 500 });
   }
+  try {
+    const db = supabaseAdmin();
+    const { data: userRow } = await db.from("users").select("id").eq("auth_id", uid).maybeSingle();
+    const userId = (userRow as { id: string } | null)?.id ?? null;
+    if (userId) {
+      const { data: orphans } = await db
+        .from("candidates")
+        .select("id")
+        .eq("contact_email", authEmail)
+        .is("user_id", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const orphanId = ((orphans ?? []) as { id: string }[])[0]?.id ?? null;
+      if (orphanId) {
+        await db.from("candidates").update({ user_id: userId }).eq("id", orphanId).is("user_id", null);
+      }
+    }
+  } catch {
+  }
   return Response.json({ ok: true, email: authEmail });
 }

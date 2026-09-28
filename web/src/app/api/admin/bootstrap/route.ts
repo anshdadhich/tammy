@@ -56,6 +56,9 @@ export async function POST(request: Request) {
   }
   const db = supabaseAdmin();
   const existing = await db.from("users").select("id").eq("role", "admin").limit(1);
+  if (existing.error) {
+    return Response.json({ error: "bootstrap closed — try again" }, { status: 403 });
+  }
   const rows = existing.data as { id: string }[] | null;
   if (rows && rows.length > 0) {
     return Response.json({ error: "bootstrap closed — an admin already exists" }, { status: 403 });

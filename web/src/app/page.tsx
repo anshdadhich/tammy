@@ -130,7 +130,7 @@ export default async function Landing() {
                       Build my page
                     </Link>
                   </BeamButton>
-                  <Link href="/hire" className="btn btn-secondary press">
+                  <Link href="/hire/login" className="btn btn-secondary press">
                     I&apos;m hiring <ArrowRight className="w-4 h-4" aria-hidden="true" />
                   </Link>
                 </>

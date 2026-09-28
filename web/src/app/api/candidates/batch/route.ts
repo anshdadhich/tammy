@@ -83,7 +83,7 @@ export async function POST(request: Request) {
   const rows = (data ?? []) as (Row & Record<string, unknown>)[];
   const candidates = rows.map((r) => {
     const scrubbed = applyContactPrefs(r as Parameters<typeof applyContactPrefs>[0]) as unknown as Record<string, unknown>;
-    const photoRaw = scrubbed.photo_url ?? (degraded ? null : r.photo_url);
+    const photoRaw = r.show_photo === true && !degraded ? (typeof scrubbed.photo_url === "string" ? scrubbed.photo_url : r.photo_url) : null;
     return {
       id: r.id,
       name: r.full_name ?? "",
