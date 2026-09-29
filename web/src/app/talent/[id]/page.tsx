@@ -50,6 +50,7 @@ type Cand = {
   portfolio_url?: string | null;
   resume_url?: string | null;
   photo_url?: string | null;
+  contact_locked?: boolean | null;
   freshness_updated_at?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -804,6 +805,11 @@ export default async function TalentPage({
               <div className="flex flex-wrap items-center gap-2.5">
                 {channelBtns}
               </div>
+            ) : null}
+            {c.contact_locked && !isOwner ? (
+              <p className="field-hint mt-2">
+                Contact details unlock once you shortlist this candidate or log a contact.
+              </p>
             ) : null}
           </div>
 

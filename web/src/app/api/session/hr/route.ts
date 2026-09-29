@@ -4,7 +4,7 @@ import {
   HR_COOKIE,
   HR_DISPLAY_COOKIE,
 } from "@/lib/api-auth";
-import { userDb } from "@/lib/supabase-user";
+import { getSessionUser, userDb } from "@/lib/supabase-user";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 function clearDisplayCookie(): string {
@@ -15,12 +15,14 @@ function clearDisplayCookie(): string {
 export async function GET() {
   const viewer = await getViewerAuth();
   if (viewer.kind === "hr") {
+    const session = await getSessionUser();
     return Response.json({
       email: viewer.email,
       name: viewer.name && viewer.name.trim() ? viewer.name : null,
+      isAdmin: session?.userRow?.role === "admin",
     });
   }
-  return Response.json({ email: null, name: null });
+  return Response.json({ email: null, name: null, isAdmin: false });
 }
 
 export async function POST(request: Request) {

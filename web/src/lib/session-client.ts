@@ -1,6 +1,6 @@
 import { supabaseBrowser } from "@/lib/supabase";
 
-export type ViewerSession = { kind: "hr" | "owner"; name?: string; email: string };
+export type ViewerSession = { kind: "hr" | "owner"; name?: string; email: string; isAdmin?: boolean };
 
 const HR_DISPLAY_COOKIE = "tammy_hr_display";
 
@@ -61,6 +61,7 @@ export async function fetchHrSession(): Promise<ViewerSession | null> {
     const data = (await res.json().catch(() => null)) as {
       email?: unknown;
       name?: unknown;
+      isAdmin?: unknown;
     } | null;
     if (data && typeof data.email === "string" && data.email.includes("@")) {
       return {
@@ -68,6 +69,7 @@ export async function fetchHrSession(): Promise<ViewerSession | null> {
         name:
           typeof data.name === "string" && data.name.trim() ? data.name : undefined,
         email: data.email,
+        isAdmin: data.isAdmin === true,
       };
     }
   } catch {

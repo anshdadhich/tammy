@@ -5,7 +5,8 @@ import { jobSchema } from "@/lib/validators";
 import type { JobReq } from "@/lib/matching/types";
 import { buildJobQueryText, embedQuery, assertEmbeddingDim, toVectorLiteral, EMBEDDING_DIM } from "@/lib/matching/voyage";
 import { buildFtsTerms } from "@/lib/matching/hybrid";
-import { applyContactPrefs } from "@/lib/contact-prefs";
+import { applyContactPrefs, lockContacts, revealedCandidateIds } from "@/lib/contact-prefs";
+import { checkSearchQuota } from "@/lib/quotas";
 import { defaultOpenAIProvider, judgeTop, type JudgeInput, type JudgeResult } from "@/lib/matching/judge";
 import { blendWithJudge, matchLevel, scoreCandidate, metadataTechnologies, type ScoreContext } from "@/lib/scoring-live";
 import { withWideEvent } from "@/lib/observe";
@@ -79,6 +80,15 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   const hr = await requireHrDb(session);
   if (hr instanceof Response) return hr;
   const reader = hr.client;
+  const quota = await checkSearchQuota(hr.employerId);
+  wev.add({ quota_plan: quota.plan, quota_used: quota.used, quota_limit: quota.limit });
+  if (!quota.ok) {
+    return Response.json(
+      { error: "Monthly search limit reached for your plan.", upgrade: true, used: quota.used, limit: quota.limit, plan: quota.plan },
+      { status: 429 },
+    );
+  }
+  const revealedIds = await revealedCandidateIds(supabaseAdmin(), hr.employerId);
   const read = await readJsonBody(request, 256 * 1024);
   if (!read.ok) return read.response;
   const body = read.body as { deep?: unknown; limit?: unknown; job?: unknown } | null;
@@ -224,7 +234,11 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
   };
 
   const finalize = (rows: Record<string, unknown>[]): Record<string, unknown>[] =>
-    rows.map((r) => applyContactPrefs(r as Parameters<typeof applyContactPrefs>[0]) as unknown as Record<string, unknown>);
+    rows.map((r) => {
+      const withPrefs = applyContactPrefs(r as Parameters<typeof applyContactPrefs>[0]) as unknown as Record<string, unknown>;
+      if (revealedIds && !revealedIds.has(String(r.id ?? ""))) return lockContacts(withPrefs);
+      return withPrefs;
+    });
 
   const findRecentSearch = async (): Promise<{ id: string; created_at: string; query_embedding: unknown } | null> => {
     try {

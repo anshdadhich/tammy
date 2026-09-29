@@ -3,6 +3,7 @@ import { AuthError, requireRole } from "@/lib/auth";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { z } from "zod";
 import { readJsonBody } from "@/lib/http";
+import { PLAN_LIMITS, setEmployerPlan, type PlanName } from "@/lib/quotas";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUS_VALUES = ["pending", "verified", "rejected", "suspended", "all"] as const;
@@ -67,12 +68,24 @@ export async function POST(request: Request) {
   const read = await readJsonBody(request, 4 * 1024);
   if (!read.ok) return read.response;
   const body = read.body;
-  const parsed = z.object({ employerId: z.string().regex(UUID_RE), action: z.enum(["verify", "reject"]) }).safeParse(body);
+  const parsed = z.object({
+    employerId: z.string().regex(UUID_RE),
+    action: z.enum(["verify", "reject", "set_plan"]),
+    plan: z.enum(["free", "basic", "pro"]).optional(),
+  }).safeParse(body);
   if (!parsed.success) {
     return Response.json({ errors: parsed.error.flatten() }, { status: 400 });
   }
   const { employerId, action } = parsed.data;
   const db = supabaseAdmin();
+  if (action === "set_plan") {
+    if (!parsed.data.plan || !(parsed.data.plan in PLAN_LIMITS)) {
+      return Response.json({ error: "plan must be free, basic, or pro" }, { status: 400 });
+    }
+    const ok = await setEmployerPlan(employerId, parsed.data.plan as PlanName);
+    if (!ok) return Response.json({ error: "plan update failed" }, { status: 500 });
+    return Response.json({ employerId, plan: parsed.data.plan });
+  }
   const { data, error } = await db
     .from("employers")
     .update({

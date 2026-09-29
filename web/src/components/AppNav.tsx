@@ -218,6 +218,16 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
                   >
                     Settings
                   </Link>
+                  {viewer.isAdmin ? (
+                    <Link
+                      href="/admin"
+                      role="menuitem"
+                      className="nav-menu-item"
+                      onClick={() => setProfileOpen(false)}
+                    >
+                      Admin
+                    </Link>
+                  ) : null}
                   <button
                     type="button"
                     role="menuitem"

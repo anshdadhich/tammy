@@ -2,6 +2,7 @@ import { z } from "zod";
 import { inngest } from "@/lib/inngest";
 import { supabaseAdmin } from "@/lib/supabase";
 import { candidateSchema, normalizeEmail } from "@/lib/validators";
+import { revealedCandidateIds, lockContacts } from "@/lib/contact-prefs";
 import { normalizeSkills } from "@/lib/skills";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { redactPii } from "@/lib/redact";
@@ -134,6 +135,12 @@ export async function GET(request: Request) {
     effective = { ...candidate, user_id: null, consent_status: null };
   } else {
     effective = nullPublicContact({ ...candidate, user_id: null, consent_status: null });
+  }
+  if (isHrVerified && !isOwnerVerified && hrEmployerId) {
+    const revealed = await revealedCandidateIds(db, hrEmployerId);
+    if (!revealed.has(cid)) {
+      effective = lockContacts(effective);
+    }
   }
   const degraded = prefsDegraded(candidate);
 
