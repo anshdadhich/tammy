@@ -58,6 +58,7 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
   const [authOpen, setAuthOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [viewer, setViewer] = useState<ViewerSession | null>(initialViewer);
+  const [syncedInitialViewer, setSyncedInitialViewer] = useState(initialViewer);
   const [scrolled, setScrolled] = useState(false);
   const [hideNav, setHideNav] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -91,12 +92,13 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
     return () => window.removeEventListener("hashchange", sync);
   }, [activeProp]);
 
-  useEffect(() => {
-    // The server resolved the viewer for this route. Re-fetching on mount
-    // caused a signed-in user to briefly see anonymous actions and repeated
-    // auth work on every page visit.
+  // Apply new server-rendered identity during render, before React paints the
+  // old actions for a route transition. An effect here creates a visible frame
+  // where a signed-in user sees Login / Sign up before the avatar appears.
+  if (initialViewer !== syncedInitialViewer) {
+    setSyncedInitialViewer(initialViewer);
     setViewer(initialViewer);
-  }, [initialViewer]);
+  }
 
   useEffect(() => {
     let alive = true;

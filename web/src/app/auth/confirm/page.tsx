@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase-server";
+import { getVerifiedClaims } from "@/lib/supabase-claims";
 import { ensureUserRow, safeNextPath } from "@/lib/auth-link";
 import { redactPii } from "@/lib/redact";
 import ConfirmHashClient from "./confirm-hash-client";
@@ -46,7 +47,7 @@ export default async function AuthConfirmPage({
         });
         if (error) throw error;
       }
-      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+      const { data: claimsData, error: claimsError } = await getVerifiedClaims(supabase);
       if (claimsError) throw claimsError;
       const userId = claimsData?.claims?.sub;
       const email = claimsData?.claims?.email ?? claimsData?.claims?.user_metadata?.email;

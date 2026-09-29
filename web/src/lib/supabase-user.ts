@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cache } from "react";
 import { supabaseServer } from "@/lib/supabase-server";
+import { getVerifiedClaims } from "@/lib/supabase-claims";
 import type { Viewer } from "@/lib/api-auth";
 import { redactPii } from "@/lib/redact";
 
@@ -94,7 +95,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     // asymmetric JWT keys. getUser always adds an Auth API round trip to page
     // rendering; getClaims still falls back to the server when local
     // verification is not available.
-    const { data, error } = await client.auth.getClaims();
+    const { data, error } = await getVerifiedClaims(client);
     if (error || !data?.claims) return null;
     const claims = data.claims;
     if (typeof claims.sub !== "string" || !claims.sub) return null;
@@ -117,7 +118,9 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   let employer: EmployerRow | null = null;
   let candidateId: string | null = null;
   if (userRow) {
-    const wantEmployer = userRow.role === "employer" || userRow.role === "admin";
+    // Admin navigation never uses a company label; skip this extra database
+    // round trip on the most expensive admin page request.
+    const wantEmployer = userRow.role === "employer";
     const wantCandidate = userRow.role === "candidate";
     const [employerRes, candidateRes] = await Promise.all([
       wantEmployer

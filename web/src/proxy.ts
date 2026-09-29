@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getVerifiedClaims } from "@/lib/supabase-claims";
 
 /**
  * Refreshes Supabase Auth cookies on incoming requests so
@@ -40,7 +41,7 @@ export async function proxy(request: NextRequest) {
   // sessions. getClaims falls back to Auth when local verification is not
   // available; route-level authorization remains in lib/supabase-user.ts.
   try {
-    await supabase.auth.getClaims();
+    await getVerifiedClaims(supabase);
   } catch {
     // ignore: middleware must not fail closed on auth errors
   }

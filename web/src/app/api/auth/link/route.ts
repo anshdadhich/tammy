@@ -1,4 +1,5 @@
 import { supabaseServer } from "@/lib/supabase-server";
+import { getVerifiedClaims } from "@/lib/supabase-claims";
 import { ensureUserRow } from "@/lib/auth-link";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { redactPii } from "@/lib/redact";
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
     // getUser() adds an Auth API round trip after the browser has already
     // established the session; getClaims() validates the cookie token and is
     // local for projects using asymmetric signing keys.
-    const { data, error } = await supabase.auth.getClaims();
+    const { data, error } = await getVerifiedClaims(supabase);
     if (error) throw error;
     const id = data?.claims?.sub;
     const email = data?.claims?.email ?? data?.claims?.user_metadata?.email;

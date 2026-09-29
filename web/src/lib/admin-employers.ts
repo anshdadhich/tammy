@@ -21,7 +21,7 @@ export async function listAdminEmployers(
   let query = db
     .from("employers")
     .select(
-      "id, user_id, company_name, company_email, website, linkedin_url, company_size, industry, verification_status, created_at",
+      "id, company_name, company_email, website, linkedin_url, company_size, industry, verification_status, created_at, account:users!employers_user_id_fkey(email)",
     )
     .order("created_at", { ascending: true })
     .limit(Math.min(Math.max(Math.floor(limit), 1), 100));
@@ -31,23 +31,11 @@ export async function listAdminEmployers(
   if (error) throw error;
 
   const rows = (data ?? []) as (Omit<AdminEmployer, "account_email"> & {
-    user_id: string | null;
+    account: { email: string } | null;
   })[];
-  const userIds = [...new Set(rows.map((row) => row.user_id).filter((id): id is string => Boolean(id)))];
-  const emailByUser = new Map<string, string>();
-  if (userIds.length) {
-    const { data: users, error: usersError } = await db
-      .from("users")
-      .select("id, email")
-      .in("id", userIds);
-    if (usersError) throw usersError;
-    for (const user of (users ?? []) as { id: string; email: string }[]) {
-      emailByUser.set(user.id, user.email);
-    }
-  }
 
-  return rows.map(({ user_id, ...row }) => ({
+  return rows.map(({ account, ...row }) => ({
     ...row,
-    account_email: user_id ? emailByUser.get(user_id) ?? null : null,
+    account_email: account?.email ?? null,
   }));
 }

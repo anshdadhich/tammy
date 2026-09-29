@@ -56,7 +56,6 @@ export default function AdminEmployers({ initialRows }: { initialRows: Employer[
   const load = useCallback(async (status: typeof filter) => {
     setErr(null);
     setLoaded(false);
-    setRows([]);
     try {
       const res = await fetch(`/api/admin/employers?status=${status}&limit=100`);
       const body = (await res.json().catch(() => null)) as { employers?: Employer[]; error?: string } | null;
@@ -102,7 +101,8 @@ export default function AdminEmployers({ initialRows }: { initialRows: Employer[
     }
   };
 
-  const act = async (employerId: string, action: "verify" | "reject") => {    if (busy) return;
+  const act = async (employerId: string, action: "verify" | "reject") => {
+    if (busy) return;
     setBusy(employerId + action);
     setErr(null);
     try {
@@ -130,7 +130,7 @@ export default function AdminEmployers({ initialRows }: { initialRows: Employer[
   };
 
   return (
-    <div>
+    <div aria-busy={!loaded}>
       <div className="flex flex-wrap items-center gap-2 mb-6" role="tablist" aria-label="Verification status filter">
         {(["pending", "verified", "rejected", "all"] as const).map((s) => (
           <button
@@ -156,9 +156,16 @@ export default function AdminEmployers({ initialRows }: { initialRows: Employer[
         </p>
       ) : null}
       {!loaded ? (
-        <p className="text-body">Loading…</p>
-      ) : rows.length === 0 ? (
-        <p className="empty-note">No employers in this bucket.</p>
+        <p className="field-hint mb-3" role="status">
+          Updating employer list… Existing rows stay visible until the new filter loads.
+        </p>
+      ) : null}
+      {rows.length === 0 ? (
+        loaded ? (
+          err ? null : <p className="empty-note">No employers in this bucket.</p>
+        ) : (
+          <p className="text-body" role="status">Loading employers…</p>
+        )
       ) : (
         <ul className="grid gap-3">
           {rows.map((r) => (
