@@ -41,5 +41,11 @@ export async function readNavViewer(): Promise<ViewerSession | null> {
   if (session.viewer.kind === "owner") {
     return { kind: "owner", email: session.viewer.email };
   }
+  // Authenticated but profile-less (fresh OTP inbox, no candidate row and no
+  // employer row): mirror the client's fetchOwnerSession fallback so the nav
+  // still paints the avatar instead of flashing logged-out.
+  if (session.email) {
+    return { kind: "owner", email: session.email };
+  }
   return null;
 }
