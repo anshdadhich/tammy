@@ -111,38 +111,48 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     userRow = null;
   }
   let employer: EmployerRow | null = null;
-  if (userRow) {
-    try {
-      const { data, error } = await client
-        .from("employers")
-        .select(EMPLOYER_COLS)
-        .eq("user_id", userRow.id)
-        .order("created_at", { ascending: false })
-        .limit(10);
-      if (error) throw error;
-      const rows = (data as EmployerRow[] | null) ?? [];
-      employer = rows.find((r) => r.verification_status === "verified") ?? rows[0] ?? null;
-    } catch (e) {
-      logErr("employer read failed", e);
-      employer = null;
-    }
-  }
   let candidateId: string | null = null;
-  if (userRow && userRow.role === "candidate") {
-    try {
-      const { data, error } = await client
-        .from("candidates")
-        .select("id")
-        .eq("user_id", userRow.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      candidateId = ((data as { id: string } | null)?.id) ?? null;
-    } catch (e) {
-      logErr("candidate read failed", e);
-      candidateId = null;
-    }
+  if (userRow) {
+    const wantEmployer = userRow.role === "employer" || userRow.role === "admin";
+    const wantCandidate = userRow.role === "candidate";
+    const [employerRes, candidateRes] = await Promise.all([
+      wantEmployer
+        ? client
+            .from("employers")
+            .select(EMPLOYER_COLS)
+            .eq("user_id", userRow.id)
+            .order("created_at", { ascending: false })
+            .limit(10)
+            .then(
+              (r) => ({ ok: true as const, rows: (r.data as EmployerRow[] | null) ?? [] }),
+              (e: unknown) => {
+                logErr("employer read failed", e);
+                return { ok: false as const, rows: [] as EmployerRow[] };
+              },
+            )
+        : Promise.resolve({ ok: true as const, rows: [] as EmployerRow[] }),
+      wantCandidate
+        ? client
+            .from("candidates")
+            .select("id")
+            .eq("user_id", userRow.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle()
+            .then(
+              (r) => {
+                if (r.error) throw r.error;
+                return ((r.data as { id: string } | null)?.id) ?? null;
+              },
+              (e: unknown) => {
+                logErr("candidate read failed", e);
+                return null;
+              },
+            )
+        : Promise.resolve(null),
+    ]);
+    employer = employerRes.rows.find((r) => r.verification_status === "verified") ?? employerRes.rows[0] ?? null;
+    candidateId = candidateRes;
   }
   return {
     authId,
