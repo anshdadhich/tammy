@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { JWK } from "@supabase/auth-js";
 
-type Jwks = { keys: JsonWebKey[] };
+type Jwks = { keys: JWK[] };
 type CacheState = {
   value: Jwks | null;
   expiresAt: number;
@@ -35,12 +36,20 @@ async function readJwks(): Promise<Jwks | null> {
       if (!response.ok) return null;
       const body = (await response.json()) as { keys?: unknown };
       if (!Array.isArray(body.keys) || body.keys.length === 0) return null;
-      const keys = body.keys.filter(
-        (key): key is JsonWebKey =>
-          !!key && typeof key === "object" &&
-          typeof (key as { kid?: unknown }).kid === "string" &&
-          typeof (key as { kty?: unknown }).kty === "string",
-      );
+      const keys = body.keys
+        .filter(
+          (key): key is Record<string, unknown> & { kid: string; kty: string } =>
+            !!key && typeof key === "object" &&
+            typeof (key as { kid?: unknown }).kid === "string" &&
+            typeof (key as { kty?: unknown }).kty === "string",
+        )
+        .map(
+          (key) =>
+            ({
+              ...key,
+              key_ops: Array.isArray(key.key_ops) ? key.key_ops : ["verify"],
+            }) as JWK,
+        );
       if (keys.length === 0) return null;
       const value = { keys };
       state.value = value;

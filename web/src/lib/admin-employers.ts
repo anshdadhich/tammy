@@ -31,11 +31,13 @@ export async function listAdminEmployers(
   if (error) throw error;
 
   const rows = (data ?? []) as (Omit<AdminEmployer, "account_email"> & {
-    account: { email: string } | null;
+    account: { email: string }[] | { email: string } | null;
   })[];
 
   return rows.map(({ account, ...row }) => ({
     ...row,
-    account_email: account?.email ?? null,
+    account_email: Array.isArray(account)
+      ? account[0]?.email ?? null
+      : account?.email ?? null,
   }));
 }
