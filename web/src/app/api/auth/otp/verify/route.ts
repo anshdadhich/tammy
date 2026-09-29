@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
+import { ensureUserRow } from "@/lib/auth-link";
 import { supabaseServer } from "@/lib/supabase-server";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { redactPii } from "@/lib/redact";
@@ -17,79 +18,7 @@ function normalizeToken(v: string): string {
 }
 
 async function linkUserRow(uid: string, email: string): Promise<void> {
-  const db = supabaseAdmin();
-  const { data: byAuth, error: authErr } = await db
-    .from("users")
-    .select("id, email, auth_id")
-    .eq("auth_id", uid)
-    .maybeSingle();
-  if (authErr) throw authErr;
-  const authRow = byAuth as { id: string; email: string; auth_id: string | null } | null;
-  if (authRow?.id) {
-    if (typeof authRow.email === "string" && authRow.email.toLowerCase() !== email) {
-      const { data: clash, error: clashErr } = await db
-        .from("users")
-        .select("id")
-        .eq("email", email)
-        .maybeSingle();
-      if (clashErr) throw clashErr;
-      const clashRow = clash as { id: string } | null;
-      if (!clashRow || clashRow.id === authRow.id) {
-        const { error: updErr } = await db
-          .from("users")
-          .update({ email, email_verified: true })
-          .eq("id", authRow.id);
-        if (updErr) throw updErr;
-      }
-    } else {
-      const { error: updErr } = await db
-        .from("users")
-        .update({ email_verified: true })
-        .eq("id", authRow.id);
-      if (updErr) throw updErr;
-    }
-    return;
-  }
-  const { data: byEmail, error: emailErr } = await db
-    .from("users")
-    .select("id, auth_id")
-    .eq("email", email)
-    .maybeSingle();
-  if (emailErr) throw emailErr;
-  const emailRow = byEmail as { id: string; auth_id: string | null } | null;
-  if (emailRow?.id) {
-    if (!emailRow.auth_id) {
-      const { error: updErr } = await db
-        .from("users")
-        .update({ auth_id: uid, email_verified: true })
-        .eq("id", emailRow.id);
-      if (updErr) throw updErr;
-    }
-    return;
-  }
-  const { error: insErr } = await db
-    .from("users")
-    .insert({ email, auth_id: uid, role: "candidate", email_verified: true });
-  if (insErr) {
-    if ((insErr as { code?: string }).code === "23505") {
-      const { data: retry, error: retryErr } = await db
-        .from("users")
-        .select("id, auth_id")
-        .eq("email", email)
-        .maybeSingle();
-      if (retryErr) throw retryErr;
-      const retryRow = retry as { id: string; auth_id: string | null } | null;
-      if (retryRow?.id && !retryRow.auth_id) {
-        const { error: linkErr } = await db
-          .from("users")
-          .update({ auth_id: uid, email_verified: true })
-          .eq("id", retryRow.id);
-        if (linkErr) throw linkErr;
-      }
-      return;
-    }
-    throw insErr;
-  }
+  return ensureUserRow(uid, email);
 }
 
 export async function POST(request: Request) {

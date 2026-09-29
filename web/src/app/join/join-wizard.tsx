@@ -1347,14 +1347,14 @@ export default function JoinWizard() {
       const res = await fetch("/api/auth/otp/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, next: "/join" }),
       });
       await res.json().catch(() => null);
       if (!res.ok) {
         setOtpErr("Could not send the verification code - use resend to retry.");
         return;
       }
-      setOtpInfo("Check your inbox for the verification code.");
+      setOtpInfo("Check your inbox for the verification code — or click the sign-in link in the same email.");
     } catch {
       setOtpErr("Network error - use resend to retry.");
     }
@@ -1369,7 +1369,7 @@ export default function JoinWizard() {
       const res = await fetch("/api/auth/otp/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, next: "/join" }),
       });
       await res.json().catch(() => null);
       if (!res.ok) {

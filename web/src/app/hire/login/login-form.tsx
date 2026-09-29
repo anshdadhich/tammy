@@ -44,14 +44,14 @@ export default function LoginForm({
       const res = await fetch("/api/auth/otp/request", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: target }),
+        body: JSON.stringify({ email: target, next: "/hire/search" }),
       });
       await res.json().catch(() => null);
       if (!res.ok) {
         setErr("Could not send the code. Try again.");
         return false;
       }
-      setInfo("Check your inbox for the sign-in code.");
+      setInfo("Check your inbox for the sign-in code — or click the sign-in link in the same email.");
       return true;
     } catch {
       setErr("Could not send the code. Try again.");
