@@ -872,7 +872,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 -- Least-privilege correction: match_chunks is service-role-only (granted in
 -- match_chunks.sql). Re-running this file must not reopen it.
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
 
 CREATE TABLE IF NOT EXISTS public.open_source_contributions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

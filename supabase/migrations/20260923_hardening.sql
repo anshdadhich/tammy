@@ -205,5 +205,5 @@ CREATE INDEX IF NOT EXISTS idx_projects_tech_gin
 CREATE INDEX IF NOT EXISTS idx_work_exp_tech_gin
   ON public.work_experiences USING gin (tech_stack);
 
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+GRANT EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;

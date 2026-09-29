@@ -873,7 +873,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 -- Least-privilege correction: match_chunks is service-role-only (granted in
 -- match_chunks.sql). Re-running this file must not reopen it.
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
 
 CREATE TABLE IF NOT EXISTS public.open_source_contributions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1124,10 +1124,14 @@ ON CONFLICT (name) DO UPDATE SET
   category = EXCLUDED.category;
 
 -- ================= FILE 5 of 11: supabase/match_chunks.sql =================
-DROP FUNCTION IF EXISTS public.match_chunks(vector(1024), INT);
-DROP FUNCTION IF EXISTS public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT, INT);
+DO $$ DECLARE r RECORD; BEGIN
+  FOR r IN SELECT p.oid::regprocedure AS sig
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_chunks'
+  LOOP EXECUTE 'DROP FUNCTION IF EXISTS ' || r.sig; END LOOP;
+END $$;
 
-CREATE OR REPLACE FUNCTION public.match_chunks(
+CREATE FUNCTION public.match_chunks(
   query_embedding vector(1024),
   match_count INT DEFAULT 30,
   p_domain TEXT DEFAULT NULL,
@@ -1199,8 +1203,8 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+GRANT EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
 
 -- ================= FILE 6 of 11: supabase/oss_contributions.sql =================
 -- Open source contributions (candidate's OSS work, separate from projects).
@@ -1442,8 +1446,8 @@ CREATE INDEX IF NOT EXISTS idx_projects_tech_gin
 CREATE INDEX IF NOT EXISTS idx_work_exp_tech_gin
   ON public.work_experiences USING gin (tech_stack);
 
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+GRANT EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
 
 -- ================= FILE 8 of 11: supabase/migrations/20260928_role_guard.sql =================
 -- Role / verification guard: subjective RLS WITH CHECK clauses alone let an

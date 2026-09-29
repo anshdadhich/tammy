@@ -1,7 +1,11 @@
-DROP FUNCTION IF EXISTS public.match_chunks(vector(1024), INT);
-DROP FUNCTION IF EXISTS public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT, INT);
+DO $$ DECLARE r RECORD; BEGIN
+  FOR r IN SELECT p.oid::regprocedure AS sig
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_chunks'
+  LOOP EXECUTE 'DROP FUNCTION IF EXISTS ' || r.sig; END LOOP;
+END $$;
 
-CREATE OR REPLACE FUNCTION public.match_chunks(
+CREATE FUNCTION public.match_chunks(
   query_embedding vector(1024),
   match_count INT DEFAULT 30,
   p_domain TEXT DEFAULT NULL,
@@ -73,5 +77,5 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector(1024), INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+GRANT EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
+REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
