@@ -735,6 +735,29 @@ export async function PUT(request: Request) {
           { status: 409 },
         );
       }
+      // Keep Supabase Auth in sync: OTPs route to the Auth user's email, so
+      // updating only public rows would strand future codes at the old inbox
+      // and orphan any login attempted from the new address.
+      const { data: ownerRow } = await db
+        .from("users")
+        .select("id, auth_id")
+        .eq("id", prev.user_id)
+        .maybeSingle();
+      const ownerAuthId = (ownerRow as { auth_id: string | null } | null)?.auth_id ?? null;
+      if (ownerAuthId) {
+        const { error: authErr } = await db.auth.admin.updateUserById(ownerAuthId, { email });
+        if (authErr) {
+          const msg = authErr.message ?? "";
+          if (/already|exists|taken|duplicate/i.test(msg)) {
+            return Response.json(
+              { error: "That email is already in use. Verify ownership first." },
+              { status: 409 },
+            );
+          }
+          console.error("[candidates] auth email update failed", redactPii(msg).slice(0, 200));
+          return Response.json({ error: "Could not change email. Try again." }, { status: 500 });
+        }
+      }
       const { error: userErr } = await db.from("users").update({ email }).eq("id", prev.user_id);
       if (userErr) {
         console.error("[candidates] user email update failed", redactPii(userErr.message));

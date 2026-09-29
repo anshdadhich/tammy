@@ -36,9 +36,14 @@ export function clientIp(request: Request): string {
     .split(",")
     .map((s) => s.trim().slice(0, 45))
     .filter((s) => s.length > 0);
-  const edgeHop = hops.length > 0 ? hops[hops.length - 1] : "";
+  // First hop is the original client (proxies append to the right). The last
+  // hop is our own edge proxy — using it collapses every visitor into one
+  // shared bucket (≈10 OTP sends per 10 min site-wide). First hop is
+  // client-spoofable, so treat per-IP limits as advisory; per-email
+  // principal caps remain the real backstop.
+  const clientHop = hops.length > 0 ? hops[0] : "";
   const direct = (h.get("x-real-ip") ?? "").trim().slice(0, 45);
-  const candidate = edgeHop || direct;
+  const candidate = clientHop || direct;
   if (candidate && IP_PATTERN.test(candidate)) return candidate;
   return "unknown";
 }

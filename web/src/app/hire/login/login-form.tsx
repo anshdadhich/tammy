@@ -14,9 +14,11 @@ type Session = { name?: string; email: string };
 export default function LoginForm({
   initialSession,
   bare = false,
+  initialError = null,
 }: {
   initialSession: Session | null;
   bare?: boolean;
+  initialError?: string | null;
 }) {
   const router = useRouter();
   const cardClass = bare
@@ -27,7 +29,7 @@ export default function LoginForm({
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [stage, setStage] = useState<"email" | "code" | "company">("email");
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(initialError);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [company, setCompany] = useState("");

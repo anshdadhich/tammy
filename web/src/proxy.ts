@@ -7,7 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * created by OTP verify, /auth/confirm, or the client hash handler.
  * Enforces nothing — route-level checks stay in lib/supabase-user.ts.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   // Misconfigured env must never break pages — auth just stays anon.

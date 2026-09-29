@@ -19,7 +19,9 @@ export default function AuthHashHandler() {
 
   useEffect(() => {
     const hash = window.location.hash;
-    if (!hash || !hash.includes("access_token")) return;
+    // Pure error hashes (#error=access_denied&error_code=otp_expired) carry
+    // no access_token — they must still be surfaced, not swallowed.
+    if (!hash || (!hash.includes("access_token") && !hash.includes("error="))) return;
     // Avoid double-processing (StrictMode / re-mounts).
     if (sessionStorage.getItem("tammy_auth_hash_seen") === hash) return;
     sessionStorage.setItem("tammy_auth_hash_seen", hash);

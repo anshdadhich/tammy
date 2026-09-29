@@ -10,8 +10,22 @@ export const metadata: Metadata = {
     "Open an employer session on this device - then search the pool, shortlist matches, and see contact channels.",
 };
 
-export default async function HireLoginPage() {
+export default async function HireLoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ error?: string }>;
+}) {
   const session = await readHrSession();
+  const rawError = (await searchParams)?.error ?? null;
+  // Auth redirects forward machine-readable failures here (?error=...);
+  // map them to human copy so expired/invalid links are never silent.
+  const initialError = !rawError
+    ? null
+    : /expir/i.test(rawError)
+      ? "That sign-in link expired. Enter your email below for a fresh one."
+      : rawError.length > 200
+        ? "That sign-in link did not work. Enter your email below for a fresh one."
+        : rawError;
 
   return (
     <PageShell active="/hire">
@@ -45,7 +59,7 @@ export default async function HireLoginPage() {
               channels unlock on this device - no password in this build.
             </p>
             <div className="mt-6">
-              <LoginForm initialSession={session} bare />
+              <LoginForm initialSession={session} initialError={initialError} bare />
             </div>
           </div>
         </div>
