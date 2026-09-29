@@ -214,14 +214,15 @@ export async function getViewerAuth(): Promise<Viewer> {
 }
 
 export async function guardOwnerAuth(
-  request: Request,
+  _request: Request,
   candidateId: string,
 ): Promise<Response | null> {
-  const viewer = await getViewerAuth();
+  const session = await getSessionUser();
+  const viewer = session?.viewer ?? { kind: "anon" as const };
   if (viewer.kind === "anon") {
     return Response.json({ error: "Sign in to manage this profile." }, { status: 401 });
   }
-  const owned = await requireOwnerDb(candidateId);
+  const owned = await requireOwnerDb(candidateId, session);
   if (owned instanceof Response) return owned;
   return null;
 }

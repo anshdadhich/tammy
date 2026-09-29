@@ -1,4 +1,6 @@
-# ReverseHiring - Implementation Architecture (code-truthful)
+# ReverseHiring - Historical Architecture Notes
+
+> This document is an archived implementation audit, not the current architecture specification. It contains old UI flows and claims that no longer match the repository. Current UI routes are listed in `web/README.md`; inspect `web/src/app/`, `web/src/lib/`, and the active SQL files before changing behavior. Keep this archive for migration history; do not treat its “deleted” labels or historical risk list as current without checking the code.
 
 > NOTE (2026-09-28): Supabase-Auth rewrite landed after this doc. Current truth:
 > passwordless OTP sessions (not HMAC cookies); `POST /api/contact` (singular)

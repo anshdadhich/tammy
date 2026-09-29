@@ -46,12 +46,15 @@ export default async function AuthConfirmPage({
         });
         if (error) throw error;
       }
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user?.id || !user.email?.includes("@")) redirect("/hire/login?error=invalid_link");
+      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+      if (claimsError) throw claimsError;
+      const userId = claimsData?.claims?.sub;
+      const email = claimsData?.claims?.email ?? claimsData?.claims?.user_metadata?.email;
+      if (typeof userId !== "string" || typeof email !== "string" || !email.includes("@")) {
+        redirect("/hire/login?error=invalid_link");
+      }
       try {
-        await ensureUserRow(user.id, user.email);
+        await ensureUserRow(userId, email);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error(`[auth-confirm] link failed detail=${redactPii(msg.slice(0, 200))}`);

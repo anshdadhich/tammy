@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase";
-import { SESSION_EVENT } from "@/lib/session-client";
 
 /**
  * Handles legacy implicit-flow magiclinks that land on "/" with
@@ -18,22 +17,28 @@ export default function AuthHashHandler() {
   const router = useRouter();
 
   useEffect(() => {
+    // /auth/confirm has its own hash consumer so it can honor the `next`
+    // destination. Processing there twice races two setSession() calls.
+    if (window.location.pathname === "/auth/confirm") return;
     const hash = window.location.hash;
     // Pure error hashes (#error=access_denied&error_code=otp_expired) carry
     // no access_token — they must still be surfaced, not swallowed.
     if (!hash || (!hash.includes("access_token") && !hash.includes("error="))) return;
-    // Avoid double-processing (StrictMode / re-mounts).
-    if (sessionStorage.getItem("tammy_auth_hash_seen") === hash) return;
-    sessionStorage.setItem("tammy_auth_hash_seen", hash);
-
     const params = new URLSearchParams(hash.slice(1));
     const accessToken = params.get("access_token");
     const refreshToken = params.get("refresh_token");
     const err = params.get("error");
     const errDesc = params.get("error_description");
 
-    // Strip tokens from the URL immediately so they don't linger in history.
-    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    // Remove both the secret fragment and stale auth error query immediately.
+    // Some legacy provider links include error=invalid_link alongside a valid
+    // implicit session; a successful session must clear that stale error.
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.hash = "";
+    cleanUrl.searchParams.delete("error");
+    cleanUrl.searchParams.delete("error_description");
+    cleanUrl.searchParams.delete("error_code");
+    window.history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search);
 
     (async () => {
       try {
@@ -50,11 +55,16 @@ export default function AuthHashHandler() {
         if (sessErr) throw sessErr;
         // Ensure public.users row (mirrors OTP verify linking).
         try {
-          await fetch("/api/auth/link", { method: "POST" });
+          const linkResponse = await fetch("/api/auth/link", { method: "POST" });
+          if (!linkResponse.ok) {
+            // The auth session remains valid even if app-profile linking needs
+            // attention; server-rendered pages can still identify the session.
+            console.warn(`[auth-hash] profile link failed status=${linkResponse.status}`);
+          }
         } catch {
-          // Non-fatal: session cookie is set; pages degrade to anon until next login.
+          // A network failure while creating the app row does not invalidate
+          // the Supabase session that was just established.
         }
-        window.dispatchEvent(new Event(SESSION_EVENT));
         router.refresh();
       } catch {
         router.push("/hire/login?error=expired_link");

@@ -2,8 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Refreshes Supabase Auth cookies on every page/API request so
- * server components (supabaseServer().auth.getUser()) see the session
+ * Refreshes Supabase Auth cookies on incoming requests so
+ * server components can read the current session
  * created by OTP verify, /auth/confirm, or the client hash handler.
  * Enforces nothing — route-level checks stay in lib/supabase-user.ts.
  */
@@ -36,10 +36,11 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // Touch the session so expired tokens refresh and cookies stay in sync.
-  // Never blocks the request — anon pages still render.
+  // Verify claims locally for asymmetric JWT keys and refresh near-expiry
+  // sessions. getClaims falls back to Auth when local verification is not
+  // available; route-level authorization remains in lib/supabase-user.ts.
   try {
-    await supabase.auth.getUser();
+    await supabase.auth.getClaims();
   } catch {
     // ignore: middleware must not fail closed on auth errors
   }

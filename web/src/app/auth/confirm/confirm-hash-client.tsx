@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase";
-import { SESSION_EVENT } from "@/lib/session-client";
 
 /**
  * Client half of /auth/confirm: converts implicit-flow links
@@ -33,8 +32,15 @@ export default function ConfirmHashClient({ next }: { next: string }) {
       return;
     }
 
-    // Strip tokens from the URL before any network work.
-    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    // Strip tokens and any stale provider error from the URL before network
+    // work. Old redirect configurations can include both a hash session and
+    // error=invalid_link even though the hash session itself is valid.
+    const cleanUrl = new URL(window.location.href);
+    cleanUrl.hash = "";
+    cleanUrl.searchParams.delete("error");
+    cleanUrl.searchParams.delete("error_description");
+    cleanUrl.searchParams.delete("error_code");
+    window.history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search);
 
     (async () => {
       try {
@@ -45,11 +51,13 @@ export default function ConfirmHashClient({ next }: { next: string }) {
         });
         if (sessErr) throw sessErr;
         try {
-          await fetch("/api/auth/link", { method: "POST" });
+          const response = await fetch("/api/auth/link", { method: "POST" });
+          if (!response.ok) {
+            console.warn(`[auth-confirm] profile link failed status=${response.status}`);
+          }
         } catch {
-          // Non-fatal: session cookie is set; pages degrade until next login.
+          // A profile-link request failure does not invalidate the session.
         }
-        window.dispatchEvent(new Event(SESSION_EVENT));
         router.replace(next);
       } catch {
         setMessage("That link expired — taking you back to login…");

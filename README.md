@@ -6,7 +6,7 @@ no unlock gate; `contact_log` is audit-only).
 
 Monorepo layout: `web/` (Next.js app: portfolio pages + HR search + JSON API) + `supabase/` (SQL) + `docs/` (blueprint).
 
-Flow: landing `/` only - all app UI routes (`/join`, `/talent/[id]`, `/hire/*`, `/start`, `/u/*`) were removed; the JSON API and background pipeline remain fully functional.
+The app includes the candidate profile flow, employer search, admin verification, and JSON API. Current UI routes are listed in `web/README.md`; route files under `web/src/app/` are the source of truth.
 
 ## Quickstart
 
@@ -44,7 +44,7 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-Pages: `/` (landing) only - UI routes (`/join`, `/talent/[id]`, `/hire/search`, `/hire/dashboard`, legacy `/start`, `/u/*`) were removed; the JSON API is unchanged.
+Pages include `/`, `/join`, `/talent/[id]`, `/hire`, `/hire/login`, `/hire/search`, `/admin`, `/settings`, and `/auth/confirm`.
 
 ### 4. Inngest dev (background pipeline: normalize → summary → depth → chunks → embed)
 
@@ -64,7 +64,7 @@ BASE_URL=http://localhost:3000 bash web/scripts/smoke.sh
 #   $env:BASE_URL="http://localhost:3000"; powershell -File web/scripts/smoke.ps1
 ```
 
-Checks `GET /` → 200 (JSON index) and `POST /api/search` with `{}` → 400.
+Checks `GET /` → 200 and expected unauthenticated API responses.
 
 ## API cheatsheet
 

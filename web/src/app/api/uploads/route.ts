@@ -20,6 +20,12 @@ const KIND_BUCKET = {
 } as const;
 type Kind = keyof typeof KIND_BUCKET;
 
+const SHOW_COLUMN_BY_BUCKET = {
+  resumes: "show_resume",
+  photos: "show_photo",
+  portfolios: "show_portfolio",
+} as const;
+
 const KIND_EXT: Record<Kind, readonly string[]> = {
   resume: ["pdf"],
   photo: ["jpg", "jpeg", "png"],
@@ -243,14 +249,21 @@ export async function GET(request: Request) {
   if (viewer.kind === "hr") {
     const hr = await requireHrDb(session);
     if (hr instanceof Response) return hr;
-    const { data: cand } = await db
+    const showColumn = SHOW_COLUMN_BY_BUCKET[bucket];
+    const { data: cand, error: candidateError } = await db
       .from("candidates")
-      .select("visibility_status")
+      .select(`visibility_status, ${showColumn}`)
       .eq("id", folderId)
       .maybeSingle();
-    const visibility = (cand as { visibility_status?: string | null } | null)
-      ?.visibility_status;
-    if (!cand || (visibility ?? "visible") !== "visible") {
+    const candidate = cand as
+      | { visibility_status?: string | null; [key: string]: unknown }
+      | null;
+    if (
+      candidateError ||
+      !candidate ||
+      (candidate.visibility_status ?? "visible") !== "visible" ||
+      candidate[showColumn] !== true
+    ) {
       return err("candidate not found", 404);
     }
     try {

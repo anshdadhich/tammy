@@ -14,16 +14,19 @@ export async function POST(request: Request) {
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
   try {
     const supabase = await supabaseServer();
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
+    // This endpoint only needs the verified identity to create the app row.
+    // getUser() adds an Auth API round trip after the browser has already
+    // established the session; getClaims() validates the cookie token and is
+    // local for projects using asymmetric signing keys.
+    const { data, error } = await supabase.auth.getClaims();
     if (error) throw error;
-    if (!user?.id || !user.email?.includes("@")) {
+    const id = data?.claims?.sub;
+    const email = data?.claims?.email ?? data?.claims?.user_metadata?.email;
+    if (typeof id !== "string" || typeof email !== "string" || !email.includes("@")) {
       return Response.json({ error: "No session." }, { status: 401 });
     }
-    await ensureUserRow(user.id, user.email);
-    return Response.json({ ok: true, email: user.email.trim().toLowerCase() });
+    await ensureUserRow(id, email);
+    return Response.json({ ok: true, email: email.trim().toLowerCase() });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[auth-link] failed detail=${redactPii(msg.slice(0, 200))}`);

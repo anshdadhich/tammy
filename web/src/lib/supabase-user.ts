@@ -102,7 +102,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     email = normalizeEmail(claims.email) ?? normalizeEmail(claims.user_metadata?.email);
     if (!email) return null;
   } catch (e) {
-    logErr("getUser failed", e);
+    logErr("claims validation failed", e);
     return null;
   }
   let userRow: UserRow | null = null;

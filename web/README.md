@@ -1,6 +1,6 @@
 # Tammy - file once, get discovered
 
-Next.js App Router: candidate portfolio pages + HR chat search + JSON API.
+Next.js App Router app for candidate profiles, employer search, admin verification, and the JSON API.
 
 ## Run
 
@@ -11,9 +11,15 @@ npm run dev     # http://localhost:3000
 
 ## Pages
 
-- `/` - landing (candidates / employers / match engine / FAQ sections)
-
-All other UI routes (`/join`, `/start`, `/hire/*`, `/talent/*`, `/u/*`) were removed; only the landing page and the JSON API remain. Former nav/CTA links to those routes now 404.
+- `/` - product landing page
+- `/join` - candidate profile onboarding and editing
+- `/talent/[id]` - candidate dossier
+- `/hire` - employer landing page
+- `/hire/login` - employer sign-in and verification
+- `/hire/search` - employer candidate search
+- `/admin` - employer verification queue
+- `/settings` - session and theme settings
+- `/auth/confirm` - passwordless email link confirmation
 
 ## Endpoints
 
@@ -25,6 +31,10 @@ All other UI routes (`/join`, `/start`, `/hire/*`, `/talent/*`, `/u/*`) were rem
 - `POST /api/contacts` (HR outreach, audit + best-effort email)
 - `POST /api/uploads` (photo/resume, after the candidate row exists)
 - `POST /api/webhooks/inngest` (background worker endpoint)
+
+The API also includes OTP auth, profile lookup and batch reads, file uploads,
+session management, and admin endpoints. Route handlers under `src/app/api/`
+are the source of truth for exact request and response contracts.
 
 ## Smoke
 
