@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   let query = db
     .from("employers")
     .select(
-      "id, user_id, company_name, company_email, website, company_size, industry, verification_status, created_at, updated_at",
+      "id, user_id, company_name, company_email, website, linkedin_url, company_size, industry, verification_status, created_at, updated_at",
     )
     .order("created_at", { ascending: true })
     .limit(pageLimit);

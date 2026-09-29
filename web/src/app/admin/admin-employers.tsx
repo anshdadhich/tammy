@@ -7,12 +7,42 @@ type Employer = {
   company_name: string | null;
   company_email: string | null;
   website: string | null;
+  linkedin_url: string | null;
   company_size: string | null;
   industry: string | null;
   verification_status: string | null;
   created_at: string | null;
   account_email: string | null;
 };
+
+function registrableHost(v: string | null): string | null {
+  if (!v) return null;
+  try {
+    const u = new URL(v.startsWith("http") ? v : `https://${v}`);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    if (!host.includes(".")) return null;
+    return host;
+  } catch {
+    return null;
+  }
+}
+
+function emailDomain(v: string | null): string | null {
+  if (!v) return null;
+  const at = v.toLowerCase().indexOf("@");
+  if (at < 0) return null;
+  const host = v.slice(at + 1).replace(/^www\./, "");
+  if (!host.includes(".")) return null;
+  return host;
+}
+
+function domainMatch(e: Employer): boolean {
+  const site = registrableHost(e.website);
+  if (!site) return false;
+  const mail = emailDomain(e.account_email ?? e.company_email);
+  if (!mail) return false;
+  return site === mail || site.endsWith(`.${mail}`) || mail.endsWith(`.${site}`);
+}
 
 export default function AdminEmployers() {
   const [rows, setRows] = useState<Employer[]>([]);
@@ -130,9 +160,44 @@ export default function AdminEmployers() {
               className="rounded-2xl bg-surface border border-line p-5 flex flex-wrap items-center justify-between gap-4"
             >
               <div className="min-w-0">
-                <p className="font-semibold text-ink">{r.company_name ?? "Unnamed company"}</p>
+                <p className="font-semibold text-ink">
+                  {r.company_name ?? "Unnamed company"}{" "}
+                  {domainMatch(r) ? (
+                    <span className="meta-chip" title="Work email domain matches the company website">
+                      domain match
+                    </span>
+                  ) : (
+                    <span className="meta-chip" title="Work email domain does not match the company website">
+                      no domain match
+                    </span>
+                  )}
+                </p>
                 <p className="text-[13px] text-muted mt-1">
                   {[r.account_email ?? r.company_email, r.industry, r.company_size].filter(Boolean).join(" · ")}
+                </p>
+                <p className="text-[13px] mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  {r.website ? (
+                    <a
+                      href={r.website.startsWith("http") ? r.website : `https://${r.website}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline decoration-muted underline-offset-2"
+                    >
+                      Website
+                    </a>
+                  ) : null}
+                  {r.linkedin_url ? (
+                    <a
+                      href={r.linkedin_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline decoration-muted underline-offset-2"
+                    >
+                      LinkedIn
+                    </a>
+                  ) : (
+                    <span className="text-muted">No LinkedIn provided</span>
+                  )}
                 </p>
                 <p className="font-mono text-[11px] text-muted mt-1">
                   {r.verification_status ?? "pending"}

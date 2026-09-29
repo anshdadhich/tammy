@@ -31,6 +31,8 @@ export default function LoginForm({
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [company, setCompany] = useState("");
+  const [website, setWebsite] = useState("");
+  const [linkedin, setLinkedin] = useState("");
   const [coBusy, setCoBusy] = useState(false);
   const [coErr, setCoErr] = useState<string | null>(null);
   const [coDone, setCoDone] = useState(false);
@@ -138,6 +140,8 @@ export default function LoginForm({
     setErr(null);
     setInfo(null);
     setCompany("");
+    setWebsite("");
+    setLinkedin("");
     setCoErr(null);
     setCoDone(false);
     router.refresh();
@@ -153,7 +157,11 @@ export default function LoginForm({
       const res = await fetch("/api/employers", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ company_name: trimmed.slice(0, 200) }),
+        body: JSON.stringify({
+          company_name: trimmed.slice(0, 200),
+          website: website.trim().slice(0, 500),
+          linkedin_url: linkedin.trim().slice(0, 500),
+        }),
       });
       const data = (await res.json().catch(() => null)) as {
         employerId?: unknown;
@@ -211,6 +219,51 @@ export default function LoginForm({
                 No company on file for {session.email} yet. Register it for verification.
               </span>
             )}
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="hr-website">
+              Company website
+              <span className="req" aria-hidden="true">
+                *
+              </span>
+            </label>
+            <input
+              id="hr-website"
+              className="input"
+              value={website}
+              onChange={(e) => {
+                setWebsite(e.target.value);
+                setCoErr(null);
+              }}
+              placeholder="https://acme.com"
+              inputMode="url"
+              maxLength={500}
+              required
+            />
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor="hr-linkedin">
+              Your LinkedIn URL
+              <span className="req" aria-hidden="true">
+                *
+              </span>
+            </label>
+            <input
+              id="hr-linkedin"
+              className="input"
+              value={linkedin}
+              onChange={(e) => {
+                setLinkedin(e.target.value);
+                setCoErr(null);
+              }}
+              placeholder="https://linkedin.com/in/you"
+              inputMode="url"
+              maxLength={500}
+              required
+            />
+            <span className="field-hint">
+              Used to confirm you work at this company.
+            </span>
           </div>
         </div>
         <button
