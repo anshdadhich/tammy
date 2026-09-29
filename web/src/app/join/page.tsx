@@ -13,7 +13,7 @@ export default function JoinPage() {
   return (
     <PageShell>
       <h1 className="sr-only">Build your page</h1>
-      <section className="relative overflow-hidden pt-12 lg:pt-16 pb-24">
+      <section className="join-bleed relative overflow-hidden pt-12 lg:pt-16 pb-24">
         <div className="bg-dither" aria-hidden="true">
           <DitherEffect
             colorFront="#1F2DE6"
