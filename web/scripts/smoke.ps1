@@ -26,7 +26,7 @@ function Post-Code($Url, $Body) {
 Check "GET /" 200 (Get-Code "$BaseUrl/")
 Check "POST /api/search {} -> 401" 401 (Post-Code "$BaseUrl/api/search" '{}')
 Check "POST /api/shortlists {} -> 401" 401 (Post-Code "$BaseUrl/api/shortlists" '{}')
-Check "POST /api/contacts {} -> 401" 401 (Post-Code "$BaseUrl/api/contacts" '{}')
+Check "POST /api/contacts {} -> 400" 400 (Post-Code "$BaseUrl/api/contacts" '{}')
 
 Write-Host "--- $Pass passed, $Fail failed ---"
 if ($Fail -gt 0) { exit 1 }

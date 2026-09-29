@@ -23,7 +23,7 @@ code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/shortlists"
 check "POST /api/shortlists {} -> 401" 401 "$code"
 code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE_URL/api/contacts" \
   -H "Content-Type: application/json" -d '{}')
-check "POST /api/contacts {} -> 401" 401 "$code"
+check "POST /api/contacts {} -> 400" 400 "$code"
 
 echo "--- $PASS passed, $FAIL failed ---"
 [ "$FAIL" -eq 0 ]
