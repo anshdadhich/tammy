@@ -247,6 +247,12 @@ export async function GET(request: Request) {
     wev.end({ status: 400 });
     return Response.json({ error: "candidate_id is required." }, { status: 400 });
   }
+  // Reject garbage up front: without this an invalid uuid falls into PostgREST
+  // and surfaces as a misleading 403 (owner path) or 500 (HR path).
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate_id)) {
+    wev.end({ status: 400 });
+    return Response.json({ error: "candidate_id must be a valid UUID." }, { status: 400 });
+  }
   const raw = {
     limit: url.searchParams.get("limit") ?? undefined,
     cursor: url.searchParams.get("cursor") ?? undefined,

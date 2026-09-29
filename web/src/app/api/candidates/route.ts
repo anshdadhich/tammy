@@ -615,7 +615,7 @@ export async function PATCH(request: Request) {
     .update({ visibility_status: parsed.data.visibility_status })
     .eq("id", parsed.data.id)
     .select("id, visibility_status")
-    .single();
+    .maybeSingle();
   if (!data) return Response.json({ error: "candidate not found" }, { status: 404 });
   return Response.json({ candidate: data });
 }

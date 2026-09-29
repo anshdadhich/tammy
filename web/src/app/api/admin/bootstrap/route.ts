@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     .update({ role: "admin" })
     .eq("email", email)
     .select("id, email, role")
-    .single();
+    .maybeSingle();
   if (!data) {
     return Response.json({ error: "email not found - sign up first" }, { status: 404 });
   }

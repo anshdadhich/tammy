@@ -96,6 +96,23 @@ export async function POST(request: Request) {
   }
   const employerId = created.id;
   if (session.userRow.role === "candidate") {
+    // A candidate profile is owned via role === "candidate". Flipping the
+    // role would silently brick the owner's own talent page (viewerFor drops
+    // the owner branch for employer/admin roles), so require a separate email
+    // for hiring instead of destroying profile access.
+    const { data: owned } = await db
+      .from("candidates")
+      .select("id")
+      .eq("user_id", session.userRow.id)
+      .limit(1)
+      .maybeSingle();
+    if ((owned as { id: string } | null)?.id) {
+      await db.from("employers").delete().eq("id", employerId);
+      return Response.json(
+        { error: "This email owns a candidate profile. Use a different email for hiring." },
+        { status: 403 },
+      );
+    }
     await db.from("users").update({ role: "employer" }).eq("id", session.userRow.id);
   }
   return Response.json({ employerId, status: "pending" }, { status: 201 });
