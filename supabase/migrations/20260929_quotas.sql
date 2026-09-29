@@ -1,7 +1,3 @@
--- Per-employer search quotas (plans). Usage is derived from public.searches
--- (employer_id + created_at), so this table only stores the plan itself.
--- Idempotent. Run after supabase/schema.sql.
-
 CREATE TABLE IF NOT EXISTS public.employer_quotas (
   employer_id UUID PRIMARY KEY REFERENCES public.employers(id) ON DELETE CASCADE,
   plan        TEXT NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'basic', 'pro')),

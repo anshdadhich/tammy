@@ -1,9 +1,3 @@
--- Role / verification guard: subjective RLS WITH CHECK clauses alone let an
--- authenticated caller escalate via direct PostgREST (anon key is public).
--- This trigger is the backstop. Service-role and admins bypass it; direct
--- SQL without a JWT (dashboard SQL editor, migrations, seeds) is trusted.
--- Run after supabase/schema.sql. Idempotent.
-
 CREATE OR REPLACE FUNCTION public.prevent_privilege_escalation()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$

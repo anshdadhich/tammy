@@ -872,7 +872,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 -- Least-privilege correction: match_chunks is service-role-only (granted in
 -- match_chunks.sql). Re-running this file must not reopen it.
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+DO $$ DECLARE r RECORD; BEGIN
+  FOR r IN SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_chunks'
+  LOOP
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon, authenticated, public', r.oid::regprocedure);
+  END LOOP;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.open_source_contributions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

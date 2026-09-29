@@ -1,4 +1,3 @@
--- ================= FILE 1 of 11: supabase/schema.sql =================
 -- =============================================================
 -- Reverse-Hiring MVP â€” Supabase / Postgres schema
 -- Sources: docs/03-database-vs-txt-and-schema.md (source of truth),
@@ -873,7 +872,13 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO authenticated;
 -- Least-privilege correction: match_chunks is service-role-only (granted in
 -- match_chunks.sql). Re-running this file must not reopen it.
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+DO $$ DECLARE r RECORD; BEGIN
+  FOR r IN SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_chunks'
+  LOOP
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon, authenticated, public', r.oid::regprocedure);
+  END LOOP;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.open_source_contributions (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -931,7 +936,6 @@ CREATE INDEX IF NOT EXISTS idx_job_req_embedding_hnsw_nn
   WITH (m = 16, ef_construction = 64)
   WHERE embedding IS NOT NULL;
 
--- ================= FILE 2 of 11: supabase/storage.sql =================
 -- =============================================================
 -- Reverse-Hiring MVP â€” Supabase Storage buckets + policies
 -- Sources: docs/09-privacy-visibility-open-contact-model.md
@@ -1053,7 +1057,6 @@ CREATE POLICY files_employer_read ON storage.objects
     AND public.candidate_is_visible(((storage.foldername(name))[1])::uuid)
   );
 
--- ================= FILE 3 of 11: supabase/contact_prefs.sql =================
 -- Per-channel contact visibility (candidate chooses what HR sees).
 -- Run in Supabase SQL Editor. Idempotent.
 -- Privacy-by-default: new profiles hide every channel until opted in.
@@ -1065,7 +1068,6 @@ ALTER TABLE public.candidates ADD COLUMN IF NOT EXISTS show_portfolio BOOLEAN NO
 ALTER TABLE public.candidates ADD COLUMN IF NOT EXISTS show_resume BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public.candidates ADD COLUMN IF NOT EXISTS show_photo BOOLEAN NOT NULL DEFAULT FALSE;
 
--- ================= FILE 4 of 11: supabase/seed_skills.sql =================
 -- =============================================================
 -- Seed: ~40 canonical skills with aliases
 -- Idempotent (re-runnable): upserts on skills(name).
@@ -1123,7 +1125,6 @@ ON CONFLICT (name) DO UPDATE SET
   aliases  = EXCLUDED.aliases,
   category = EXCLUDED.category;
 
--- ================= FILE 5 of 11: supabase/match_chunks.sql =================
 DO $$ DECLARE r RECORD; BEGIN
   FOR r IN SELECT p.oid::regprocedure AS sig
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -1203,10 +1204,15 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
+DO $$ DECLARE r RECORD; BEGIN
+  FOR r IN SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_chunks'
+  LOOP
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', r.oid::regprocedure);
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon, authenticated, public', r.oid::regprocedure);
+  END LOOP;
+END $$;
 
--- ================= FILE 6 of 11: supabase/oss_contributions.sql =================
 -- Open source contributions (candidate's OSS work, separate from projects).
 -- Run in Supabase SQL Editor AFTER schema.sql. Idempotent.
 
@@ -1238,7 +1244,6 @@ CREATE POLICY oss_employer_read ON public.open_source_contributions
   FOR SELECT TO authenticated
   USING (public.candidate_is_visible(candidate_id) AND public.is_verified_employer());
 
--- ================= FILE 7 of 11: supabase/migrations/20260923_hardening.sql =================
 -- =============================================================
 -- Hardening migration â€” run AFTER schema.sql (+ storage.sql).
 -- Idempotent. Fixes audit findings without breaking demo flows.
@@ -1446,15 +1451,14 @@ CREATE INDEX IF NOT EXISTS idx_projects_tech_gin
 CREATE INDEX IF NOT EXISTS idx_work_exp_tech_gin
   ON public.work_experiences USING gin (tech_stack);
 
-GRANT EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) TO service_role;
-REVOKE EXECUTE ON FUNCTION public.match_chunks(vector, INT, TEXT, NUMERIC, NUMERIC, TEXT, UUID[], TEXT, TEXT[], TEXT[], INT) FROM anon, authenticated, public;
-
--- ================= FILE 8 of 11: supabase/migrations/20260928_role_guard.sql =================
--- Role / verification guard: subjective RLS WITH CHECK clauses alone let an
--- authenticated caller escalate via direct PostgREST (anon key is public).
--- This trigger is the backstop. Service-role and admins bypass it; direct
--- SQL without a JWT (dashboard SQL editor, migrations, seeds) is trusted.
--- Run after supabase/schema.sql. Idempotent.
+DO $$ DECLARE r RECORD; BEGIN
+  FOR r IN SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.proname = 'match_chunks'
+  LOOP
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', r.oid::regprocedure);
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM anon, authenticated, public', r.oid::regprocedure);
+  END LOOP;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.prevent_privilege_escalation()
 RETURNS trigger
@@ -1507,17 +1511,8 @@ CREATE TRIGGER trg_employers_no_self_verify
   BEFORE INSERT OR UPDATE ON public.employers
   FOR EACH ROW EXECUTE FUNCTION public.prevent_privilege_escalation();
 
--- ================= FILE 9 of 11: supabase/migrations/20260928_contact_email_idx.sql =================
--- Exact-match email lookups used by signup, lookup, and owner flows run as
--- `contact_email = '<lowercased>'`, which cannot use the expression index on
--- lower(contact_email). Plain btree covers them. Idempotent.
 CREATE INDEX IF NOT EXISTS idx_candidates_contact_email_exact
   ON public.candidates (contact_email);
-
--- ================= FILE 10 of 11: supabase/migrations/20260929_quotas.sql =================
--- Per-employer search quotas (plans). Usage is derived from public.searches
--- (employer_id + created_at), so this table only stores the plan itself.
--- Idempotent. Run after supabase/schema.sql.
 
 CREATE TABLE IF NOT EXISTS public.employer_quotas (
   employer_id UUID PRIMARY KEY REFERENCES public.employers(id) ON DELETE CASCADE,
@@ -1534,7 +1529,4 @@ CREATE POLICY quotas_owner_all ON public.employer_quotas
   USING (employer_id = public.my_verified_employer_id() OR public.is_admin())
   WITH CHECK (public.is_admin());
 
--- ================= FILE 11 of 11: supabase/migrations/20260929_employer_linkedin.sql =================
--- Employer LinkedIn profile for verification evidence.
--- Idempotent. Run after supabase/schema.sql.
 ALTER TABLE public.employers ADD COLUMN IF NOT EXISTS linkedin_url TEXT;
