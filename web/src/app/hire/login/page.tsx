@@ -18,14 +18,17 @@ export default async function HireLoginPage({
   const session = await readHrSession();
   const rawError = (await searchParams)?.error ?? null;
   // Auth redirects forward machine-readable failures here (?error=...);
-  // map them to human copy so expired/invalid links are never silent.
+  // map them to human copy so raw codes like "invalid_link" never leak
+  // into the form (and long upstream descriptions are capped).
   const initialError = !rawError
     ? null
     : /expir/i.test(rawError)
       ? "That sign-in link expired. Enter your email below for a fresh one."
-      : rawError.length > 200
-        ? "That sign-in link did not work. Enter your email below for a fresh one."
-        : rawError;
+      : /invalid_link/i.test(rawError)
+        ? "That sign-in link didn't work. Enter your email below for a fresh one."
+        : rawError.length > 200
+          ? "That sign-in link did not work. Enter your email below for a fresh one."
+          : rawError;
 
   return (
     <PageShell active="/hire">
