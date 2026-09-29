@@ -134,7 +134,6 @@ export default function SearchClient({
     stageTimer.current = setInterval(() => {
       setStage((s) => Math.min(s + 1, stages.length - 1));
     }, 450);
-    const startedAt = Date.now();
     try {
       const res = await fetch("/api/search", {
         method: "POST",
@@ -150,10 +149,6 @@ export default function SearchClient({
         error?: string;
         errors?: unknown;
       } | null;
-
-      const elapsed = Date.now() - startedAt;
-      if (elapsed < 1500)
-        await new Promise<void>((r) => setTimeout(r, 1500 - elapsed));
 
       if (res.status === 401) {
         setView("compose");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Employer = {
   id: string;
@@ -44,16 +44,19 @@ function domainMatch(e: Employer): boolean {
   return site === mail || site.endsWith(`.${mail}`) || mail.endsWith(`.${site}`);
 }
 
-export default function AdminEmployers() {
-  const [rows, setRows] = useState<Employer[]>([]);
+export default function AdminEmployers({ initialRows }: { initialRows: Employer[] }) {
+  const [rows, setRows] = useState<Employer[]>(initialRows);
   const [filter, setFilter] = useState<"pending" | "verified" | "rejected" | "all">("pending");
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(true);
+  const firstFilterEffect = useRef(true);
 
-  const load = async (status: typeof filter) => {
+  const load = useCallback(async (status: typeof filter) => {
     setErr(null);
+    setLoaded(false);
+    setRows([]);
     try {
       const res = await fetch(`/api/admin/employers?status=${status}&limit=100`);
       const body = (await res.json().catch(() => null)) as { employers?: Employer[]; error?: string } | null;
@@ -67,11 +70,15 @@ export default function AdminEmployers() {
     } finally {
       setLoaded(true);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    if (firstFilterEffect.current) {
+      firstFilterEffect.current = false;
+      return;
+    }
     void load(filter);
-  }, [filter]);
+  }, [filter, load]);
 
   const setPlan = async (employerId: string, plan: string) => {
     if (busy) return;

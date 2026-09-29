@@ -92,6 +92,13 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
   }, [activeProp]);
 
   useEffect(() => {
+    // The server resolved the viewer for this route. Re-fetching on mount
+    // caused a signed-in user to briefly see anonymous actions and repeated
+    // auth work on every page visit.
+    setViewer(initialViewer);
+  }, [initialViewer]);
+
+  useEffect(() => {
     let alive = true;
     const load = () => {
       const hr = readHrSession();
@@ -104,7 +111,6 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
         if (alive) setViewer(v);
       });
     };
-    load();
     window.addEventListener(SESSION_EVENT, load);
     return () => {
       alive = false;

@@ -4,38 +4,22 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { applyTheme } from "@/lib/theme";
+import type { Viewer } from "@/lib/api-auth";
 import {
   clearHrSession,
   clearOwnerSession,
-  fetchHrSession,
-  fetchOwnerSession,
-  readHrSession,
   type ViewerSession,
 } from "@/lib/session-client";
 
-export default function SettingsClient() {
-  const [viewer, setViewer] = useState<ViewerSession | null>(null);
-  const [loaded, setLoaded] = useState(false);
+export default function SettingsClient({ initialViewer }: { initialViewer: Viewer }) {
+  const [viewer, setViewer] = useState<ViewerSession | null>(() =>
+    initialViewer.kind === "anon"
+      ? null
+      : initialViewer.kind === "hr"
+        ? { kind: "hr", email: initialViewer.email, name: initialViewer.name, isAdmin: initialViewer.isAdmin }
+        : { kind: "owner", email: initialViewer.email },
+  );
   const [theme, setTheme] = useState<"light" | "dark">("light");
-
-  useEffect(() => {
-    let alive = true;
-    const hr = readHrSession();
-    const pending = hr
-      ? Promise.resolve(hr)
-      : Promise.all([fetchHrSession(), fetchOwnerSession()]).then(
-          ([h, o]) => h ?? o,
-        );
-    pending.then((v) => {
-      if (alive) {
-        setViewer(v);
-        setLoaded(true);
-      }
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -62,9 +46,7 @@ export default function SettingsClient() {
         <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
           Account
         </p>
-        {!loaded ? (
-          <p className="mt-3 text-[15px] leading-[1.6] text-muted">Loading…</p>
-        ) : viewer ? (
+        {viewer ? (
           <>
             <h2 className="mt-3 text-[20px] font-semibold tracking-[-0.01em] text-ink">
               Signed in as {viewer.name ?? viewer.email}

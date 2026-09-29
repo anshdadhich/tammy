@@ -1,15 +1,18 @@
 import PageShell from "@/components/PageShell";
 import { AuthError, requireRole } from "@/lib/auth";
+import { listAdminEmployers } from "@/lib/admin-employers";
 import AdminEmployers from "./admin-employers";
 
 export default async function AdminPage() {
   let allowed = false;
+  let initialEmployers: Awaited<ReturnType<typeof listAdminEmployers>> = [];
   try {
     await requireRole("admin");
     allowed = true;
   } catch (e) {
     if (!(e instanceof AuthError)) throw e;
   }
+  if (allowed) initialEmployers = await listAdminEmployers("pending", 100);
   return (
     <PageShell>
       <section className="pt-20 lg:pt-28 pb-24">
@@ -23,7 +26,7 @@ export default async function AdminPage() {
           </p>
           <div className="mt-8">
             {allowed ? (
-              <AdminEmployers />
+              <AdminEmployers initialRows={initialEmployers} />
             ) : (
               <p className="empty-note">
                 Not authorized. Sign in with an admin account to review employers.

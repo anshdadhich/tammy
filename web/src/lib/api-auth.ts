@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { getSessionUser, requireOwnerDb } from "@/lib/supabase-user";
 
 export type Viewer =
-  | { kind: "hr"; name: string; email: string }
+  | { kind: "hr"; name: string; email: string; isAdmin?: boolean }
   | { kind: "owner"; id: string; email: string }
   | { kind: "anon" };
 

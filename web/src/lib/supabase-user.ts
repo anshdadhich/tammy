@@ -62,7 +62,7 @@ function viewerFor(userRow: UserRow | null, email: string, employer: EmployerRow
         : employer && employer.company_name.trim()
           ? employer.company_name.trim().slice(0, 100)
           : "Employer";
-    return { kind: "hr", name, email };
+    return { kind: "hr", name, email, isAdmin: userRow.role === "admin" };
   }
   if (userRow.role === "candidate" && candidateId) {
     return { kind: "owner", id: candidateId, email };
@@ -90,12 +90,16 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   let authId: string | null = null;
   let email: string | null = null;
   try {
-    const { data, error } = await client.auth.getUser();
-    if (error) return null;
-    const au = data.user;
-    if (!au || !au.id) return null;
-    authId = au.id;
-    email = normalizeEmail(au.email) ?? normalizeEmail(au.user_metadata?.email);
+    // getClaims verifies the access-token signature locally for projects using
+    // asymmetric JWT keys. getUser always adds an Auth API round trip to page
+    // rendering; getClaims still falls back to the server when local
+    // verification is not available.
+    const { data, error } = await client.auth.getClaims();
+    if (error || !data?.claims) return null;
+    const claims = data.claims;
+    if (typeof claims.sub !== "string" || !claims.sub) return null;
+    authId = claims.sub;
+    email = normalizeEmail(claims.email) ?? normalizeEmail(claims.user_metadata?.email);
     if (!email) return null;
   } catch (e) {
     logErr("getUser failed", e);
@@ -165,32 +169,13 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
 });
 
 export async function getViewerRole(): Promise<{ kind: "owner"; id: string } | { kind: "hr" } | { kind: "anon" }> {
-  try {
-    const client = await supabaseServer();
-    const { data, error } = await client.auth.getUser();
-    if (error || !data.user?.id) return { kind: "anon" };
-    const { data: row } = await client
-      .from("users")
-      .select("id, role, status")
-      .eq("auth_id", data.user.id)
-      .maybeSingle();
-    const r = row as { id: string; role: string; status: string } | null;
-    if (!r || r.status !== "active") return { kind: "anon" };
-    if (r.role === "employer" || r.role === "admin") return { kind: "hr" };
-    if (r.role !== "candidate") return { kind: "anon" };
-    const { data: cand } = await client
-      .from("candidates")
-      .select("id")
-      .eq("user_id", r.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const cid = (cand as { id: string } | null)?.id ?? null;
-    if (!cid) return { kind: "anon" };
-    return { kind: "owner", id: cid };
-  } catch {
-    return { kind: "anon" };
+  const session = await getSessionUser();
+  if (!session) return { kind: "anon" };
+  if (session.viewer.kind === "hr") return { kind: "hr" };
+  if (session.viewer.kind === "owner") {
+    return { kind: "owner", id: session.viewer.id };
   }
+  return { kind: "anon" };
 }
 
 export async function requireOwnerDb(candidateId: string, session?: SessionUser | null): Promise<OwnerDb | Response> {

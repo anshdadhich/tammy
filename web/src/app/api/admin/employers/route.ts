@@ -4,6 +4,7 @@ import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { z } from "zod";
 import { readJsonBody } from "@/lib/http";
 import { PLAN_LIMITS, setEmployerPlan, type PlanName } from "@/lib/quotas";
+import { listAdminEmployers } from "@/lib/admin-employers";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const STATUS_VALUES = ["pending", "verified", "rejected", "suspended", "all"] as const;
@@ -22,38 +23,16 @@ export async function GET(request: Request) {
   const statusFilter = (STATUS_VALUES as readonly string[]).includes(rawStatus) ? rawStatus : "pending";
   const rawLimit = Number(url.searchParams.get("limit") ?? 100);
   const pageLimit = Math.min(Math.max(Number.isFinite(rawLimit) ? Math.floor(rawLimit) : 100, 1), 100);
-  const db = supabaseAdmin();
-  let query = db
-    .from("employers")
-    .select(
-      "id, user_id, company_name, company_email, website, linkedin_url, company_size, industry, verification_status, created_at, updated_at",
-    )
-    .order("created_at", { ascending: true })
-    .limit(pageLimit);
-  if (statusFilter !== "all") {
-    query = query.eq("verification_status", statusFilter);
-  }
-  const { data, error } = await query;
-  if (error) {
+  try {
+    const employers = await listAdminEmployers(
+      statusFilter as (typeof STATUS_VALUES)[number],
+      pageLimit,
+    );
+    return Response.json({ employers });
+  } catch {
     console.error("[admin] employers list failed");
     return Response.json({ error: "employers list failed" }, { status: 500 });
   }
-
-  const rows = (data ?? []) as Record<string, unknown>[];
-  const userIds = [...new Set(rows.map((r) => String(r.user_id ?? "")).filter(Boolean))];
-  const emailByUser: Record<string, string> = {};
-  if (userIds.length) {
-    const { data: users } = await db.from("users").select("id, email").in("id", userIds);
-    for (const u of (users ?? []) as { id: string; email: string }[]) {
-      emailByUser[u.id] = u.email;
-    }
-  }
-  return Response.json({
-    employers: rows.map((r) => ({
-      ...r,
-      account_email: emailByUser[String(r.user_id ?? "")] ?? null,
-    })),
-  });
 }
 
 export async function POST(request: Request) {
