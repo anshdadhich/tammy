@@ -101,7 +101,7 @@ export default function SearchingView({
       <p className="sq-wait-note">
         {waiting
           ? "Ranking the final matches…"
-          : `${pct}% — matching evidence across profiles`}
+          : `${pct}% - matching evidence across profiles`}
       </p>
     </section>
   );

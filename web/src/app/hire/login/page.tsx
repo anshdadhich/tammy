@@ -7,7 +7,7 @@ import LoginForm from "./login-form";
 export const metadata: Metadata = {
   title: "Employer login",
   description:
-    "Open an employer session on this device — then search the pool, shortlist matches, and see contact channels.",
+    "Open an employer session on this device - then search the pool, shortlist matches, and see contact channels.",
 };
 
 export default async function HireLoginPage() {
@@ -42,7 +42,7 @@ export default async function HireLoginPage() {
             </h1>
             <p className="mt-3 text-[15.5px] leading-[1.6] text-muted">
               Enter your email to open a session. Search, shortlists, and contact
-              channels unlock on this device — no password in this build.
+              channels unlock on this device - no password in this build.
             </p>
             <div className="mt-6">
               <LoginForm initialSession={session} bare />

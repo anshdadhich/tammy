@@ -87,7 +87,7 @@ function AnalysisSection({ row }: { row: Row }) {
   return (
     <section className="mt-6 pt-5 border-t border-line">
       <p className="sq-overline">
-        AI analysis — the answers
+        AI analysis - the answers
         <Sparkles size={12} aria-hidden="true" />
       </p>
       <div className="grid gap-2.5 mt-3">
@@ -212,7 +212,7 @@ function Body({ label, value }: { label: string; value: string | null | undefine
   if (!v) return null;
   return (
     <p className="mt-2 text-[13.5px] leading-[1.65] text-body whitespace-pre-line">
-      <span className="font-semibold text-ink">{label} — </span>
+      <span className="font-semibold text-ink">{label} - </span>
       {v}
     </p>
   );
@@ -313,7 +313,7 @@ function ProjectEntry({ p }: { p: Project }) {
       <EntryHead title={nonEmpty(p.title) ?? "Project"} meta={p.project_type} />
       {role ? (
         <p className="mt-1 text-[13.5px] text-body">
-          <span className="font-semibold text-ink">Role — </span>
+          <span className="font-semibold text-ink">Role - </span>
           {role}
         </p>
       ) : null}
@@ -578,7 +578,7 @@ export default function CandidateDetail({
                 <span>/100</span>
               </>
             ) : (
-              "—"
+              "-"
             )}
           </div>
           <p className="sq-score-cap">
@@ -661,7 +661,7 @@ export default function CandidateDetail({
         ) : null}
         {sl === "error" ? (
           <span className="field-error" role="alert">
-            Could not save — try again.
+            Could not save - try again.
           </span>
         ) : null}
       </div>

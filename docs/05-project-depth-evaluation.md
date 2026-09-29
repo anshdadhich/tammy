@@ -1,4 +1,4 @@
-# 05 — Project Depth Evaluation (Secret Sauce)
+# 05 - Project Depth Evaluation (Secret Sauce)
 
 ## Why projects > skills list
 Skills lie. Projects prove. To-do app ≠ prod system with auth/payments/realtime/deploy. System must estimate depth.

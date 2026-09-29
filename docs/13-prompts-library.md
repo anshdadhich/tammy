@@ -1,4 +1,4 @@
-# 13 — Prompts Library (Copy-Paste)
+# 13 - Prompts Library (Copy-Paste)
 
 ## 1. Candidate summary (factual, no-BS)
 ```text
@@ -28,7 +28,7 @@ Return JSON: job_title, domain, seniority, must_have_skills[], nice_to_have_skil
 
 ## 4. Master evaluation / Judge (rubric, BS detector)
 ```text
-You are expert Technical Hiring Manager. Evaluate candidate for role. No keyword matching — evidence of capability/depth.
+You are expert Technical Hiring Manager. Evaluate candidate for role. No keyword matching - evidence of capability/depth.
 JOB: {job_description_and_extracted_criteria}
 CANDIDATE: {structured_json_with_projects_and_experience}
 Task 4 dims:

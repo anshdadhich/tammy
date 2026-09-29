@@ -12,7 +12,7 @@ How it works, two halves:
 Current state: `verifyCaptchaHook` in `web/src/app/api/candidates/route.ts` only
 checks that a token-looking string arrived, and only when `TURNSTILE_REQUIRED=1`
 (or `CAPTCHA_REQUIRED=1`). There is no browser widget yet and no server-side
-`siteverify` call — turning the flag on today only rejects signups that send no
+`siteverify` call - turning the flag on today only rejects signups that send no
 token. Parked because honeypot + rate limits are enough until bot signups appear.
 When ready (needs Cloudflare site key + secret key in env):
 1. Cloudflare dashboard -> Turnstile -> create site -> copy site key (public) and
@@ -25,14 +25,14 @@ When ready (needs Cloudflare site key + secret key in env):
 What: the judge scores each project shallow-to-deep with nothing anchoring what
 "deep" means, so scores can drift whenever the prompt or model changes. A
 calibration set is a small fixed list, written once, run whenever the prompt or
-model changes. It does NOT freeze production judging — judging stays dynamic
+model changes. It does NOT freeze production judging - judging stays dynamic
 per search; the set is an offline ruler.
 Template (write 4-6 real examples, run judge, record expected bands):
 - Tutorial to-do app, never deployed -> expect LOW.
 - Deployed CRUD app with auth -> expect MEDIUM.
 - Production app with payments, caching, real users -> expect HIGH.
 - Distributed system with scale numbers and incident history -> expect VERY HIGH.
-If the tutorial ever scores HIGH, the prompt is broken — caught before employers
+If the tutorial ever scores HIGH, the prompt is broken - caught before employers
 see surprising scores. Takes ~30 minutes, lives in `docs/`, no code. Not started.
 
 ## 3. Deep-mode budget (parked by explicit decision)

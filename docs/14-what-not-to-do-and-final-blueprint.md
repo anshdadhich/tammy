@@ -1,13 +1,13 @@
-# 14 — What Not To Do + Final Blueprint + Build Order
+# 14 - What Not To Do + Final Blueprint + Build Order
 
 ## What NOT to do
 - No public candidate directory (privacy/trust).
 - No keyword-only search.
 - No AI inventing skills/exp (kills trust).
 - No excess personal data.
-- No every-category at once — one niche.
-- No show-all to all employers — matched only (but with open contact per your rule).
-- No stale DB — freshness matters.
+- No every-category at once - one niche.
+- No show-all to all employers - matched only (but with open contact per your rule).
+- No stale DB - freshness matters.
 - No feature bloat before core value proven.
 - (REMOVED per you: no hidden-contact gate, no anonymized-first stage.)
 
@@ -31,4 +31,4 @@ Private talent DB + structured profiles + factual AI summaries + hybrid+judge ma
 ## Growth phases
 Phase1 manual marketplace (50-100 profiles, 3-5 reqs, manual match). Phase2 MVP (forms+DB+summary+search+shortlist+open contact). Phase3 AI matching (embeddings, hybrid, explanations, rerank). Phase4 scale (domains, verification, notifications, dashboard, pricing).
 
-If built this way, employers feel Senior Recruiter behind bar, not dumb search — and HR gets candidates fastly without applications.
+If built this way, employers feel Senior Recruiter behind bar, not dumb search - and HR gets candidates fastly without applications.

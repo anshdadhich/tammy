@@ -90,4 +90,4 @@ await db.from("profile_chunks").insert([
 
 console.log("RESET DONE. Login with:");
 for (const a of ACCOUNTS) console.log(`- ${a.role}: ${a.email} / ${PASS}`);
-console.log("Flow (UI removed — use the JSON API): employer -> POST /api/search | candidate -> POST /api/candidates | admin -> POST /api/admin/bootstrap");
+console.log("Flow (UI removed - use the JSON API): employer -> POST /api/search | candidate -> POST /api/candidates | admin -> POST /api/admin/bootstrap");

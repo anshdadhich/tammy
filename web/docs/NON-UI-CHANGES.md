@@ -2,7 +2,7 @@
 
 > **Note (later):** the UI files this audit references (`hire/page.tsx`,
 > `login/page.tsx`, `chrome.tsx`, `bui.tsx`, `candidate/[id]/page.tsx`,
-> `dashboard/page.tsx`, …) have since been removed — only the landing page
+> `dashboard/page.tsx`, …) have since been removed - only the landing page
 > and JSON API remain. Kept as a historical snapshot of that review.
 
 Date: 2026-09-11. Scope: everything in `web/` that changes **behavior, data,
@@ -14,7 +14,7 @@ illustrations, portfolio cover) is listed at the bottom for the commit split.
 
 ---
 
-## 1. Live transparent scoring in `/api/search` — UNCOMMITTED
+## 1. Live transparent scoring in `/api/search` - UNCOMMITTED
 
 **File:** `src/app/api/search/route.ts` (+73 lines vs `HEAD`)
 
@@ -38,13 +38,13 @@ What changed:
 Impact: ranking order changes for every search; API response gains
 `sub_scores`; historical `candidate_matches` rows (score `null`) are no longer
 comparable with new rows. All wrapped in try/catch so scoring failures fall
-back to old behavior silently — ranking bugs will be **silent**.
+back to old behavior silently - ranking bugs will be **silent**.
 
 Verify: `POST /api/search` with a known job, compare order before/after;
 check `candidate_matches.score` is non-null post-search; force a DB error to
 confirm fallback path.
 
-## 2. New scoring engine — UNCOMMITTED (untracked)
+## 2. New scoring engine - UNCOMMITTED (untracked)
 
 **File:** `src/lib/scoring-live.ts` (126 lines, new)
 
@@ -70,7 +70,7 @@ Risks: magic numbers everywhere, zero unit tests, field-name coupling to the
 real schema (`remote_preference`, `availability_status` as free text). Recommend
 `vitest` coverage for the pure functions before trusting rankings.
 
-## 3. Hire results: min-score filter + `sub_scores` breakdown — UNCOMMITTED
+## 3. Hire results: min-score filter + `sub_scores` breakdown - UNCOMMITTED
 
 **File:** `src/app/hire/page.tsx`
 
@@ -79,12 +79,12 @@ real schema (`remote_preference`, `availability_status` as free text). Recommend
   state + reset button when all are filtered out. Filtering never re-runs the
   search (stated in UI, true in code).
 - Reads new `row.sub_scores` and passes a `breakdown` prop into `MatchCard`
-  (new component contract — see §6).
+  (new component contract - see §6).
 
 Behavior note: the slider default 0 = no-op, so existing UX is unchanged until
 dragged. The filter threshold uses `50` as fallback for unscored rows.
 
-## 4. Dev-only one-tap test logins — UNCOMMITTED
+## 4. Dev-only one-tap test logins - UNCOMMITTED
 
 **File:** `src/app/login/page.tsx` (+35)
 
@@ -99,7 +99,7 @@ leak vector if the gate is ever bypassed (e.g. `NODE_ENV` mis-set in a preview
 deploy, or the file copied). Recommend moving creds to `.env.local` or
 deleting before any shared preview URL.
 
-## 5. Command-palette keyboard + ARIA upgrade — UNCOMMITTED
+## 5. Command-palette keyboard + ARIA upgrade - UNCOMMITTED
 
 **File:** `src/components/chrome.tsx` (+85/−19)
 
@@ -108,17 +108,17 @@ deleting before any shared preview URL.
 - New `signup` command, regrouped labels (`group: Candidates/Employers/…`),
   combobox/listbox ARIA wiring, `aria-modal` dialog, keyboard-hint footer.
 - Client-only, no backend touch. Behavior change (new interactions), not
-  visual restyle — flagging here so it isn't mistaken for a pure re-skin.
+  visual restyle - flagging here so it isn't mistaken for a pure re-skin.
 
-## 6. `MatchCard` `breakdown` prop — UNCOMMITTED (in `bui.tsx` diff)
+## 6. `MatchCard` `breakdown` prop - UNCOMMITTED (in `bui.tsx` diff)
 
 `MatchCard` accepts optional `breakdown: { label, value }[]` and renders the
 five sub-scores. Backwards-compatible (optional), but it is the display half of
-the §1 contract change — landing one without the other leaves dead code.
+the §1 contract change - landing one without the other leaves dead code.
 
 ## 7. Docs (untracked, non-code)
 
-- `docs/ARCHITECTURE.md` — new doc file from the parallel session. Review
+- `docs/ARCHITECTURE.md` - new doc file from the parallel session. Review
   before commit; docs are cheap but this one may describe intended backend
   behavior.
 

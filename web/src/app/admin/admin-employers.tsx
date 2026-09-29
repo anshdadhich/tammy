@@ -63,7 +63,7 @@ export default function AdminEmployers() {
       }
       setRows(Array.isArray(body?.employers) ? body.employers : []);
     } catch {
-      setErr("Network error — try again.");
+      setErr("Network error - try again.");
     } finally {
       setLoaded(true);
     }
@@ -84,12 +84,12 @@ export default function AdminEmployers() {
         body: JSON.stringify({ employerId, action: "set_plan", plan }),
       });
       if (!res.ok) {
-        setErr("Plan update failed — try again.");
+        setErr("Plan update failed - try again.");
         return;
       }
       setInfo(`Plan set to ${plan}.`);
     } catch {
-      setErr("Network error — try again.");
+      setErr("Network error - try again.");
     } finally {
       setBusy(null);
     }
@@ -105,7 +105,7 @@ export default function AdminEmployers() {
         body: JSON.stringify({ employerId, action }),
       });
       if (!res.ok) {
-        setErr("Action failed — try again.");
+        setErr("Action failed - try again.");
         return;
       }
       setRows((rs) =>
@@ -116,7 +116,7 @@ export default function AdminEmployers() {
         ),
       );
     } catch {
-      setErr("Network error — try again.");
+      setErr("Network error - try again.");
     } finally {
       setBusy(null);
     }

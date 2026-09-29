@@ -1,21 +1,21 @@
-# ReverseHiring — Implementation Architecture (code-truthful)
+# ReverseHiring - Implementation Architecture (code-truthful)
 
 > NOTE (2026-09-28): Supabase-Auth rewrite landed after this doc. Current truth:
 > passwordless OTP sessions (not HMAC cookies); `POST /api/contact` (singular)
-> does not exist — use `POST /api/contacts`; `_actions.tsx` is gone (admin acts
+> does not exist - use `POST /api/contacts`; `_actions.tsx` is gone (admin acts
 > via `POST /api/admin/employers` directly); `lib/matching/scoring.ts` deleted
 > (live scoring is `lib/scoring-live.ts`); `lookup` returns `{exists, token}`,
 > never an id; `STRICT_HR_VERIFY` no longer gates anything (fail-closed always).
 > Sections below marked previous-UI remain historical.
 >
-> NOTE (2026-09-12): UI removed — `web/` is now API-only (`/api/*` + `GET /` JSON index).
+> NOTE (2026-09-12): UI removed - `web/` is now API-only (`/api/*` + `GET /` JSON index).
 > Flows A/B/D/E and landing/admin/dashboard pages below describe the PREVIOUS
 > Next.js UI and no longer exist in code. Backend flows (API routes, `lib/`,
 > Inngest pipeline, Supabase schema) remain accurate.
 
 > ONE record of what the code DOES. Verified against `web/src/**`, `supabase/*.sql`,
 > `web/scripts/*`, `web/package.json`, `web/.env.example` (names only).
-> `docs/` (repo-root, 14 files) predates implementation — §11 lists every divergence.
+> `docs/` (repo-root, 14 files) predates implementation - §11 lists every divergence.
 > No secrets below; env names only.
 
 ---
@@ -26,10 +26,10 @@
 employers search the talent DB; every match cites evidence + gaps; contact is
 open on match (no unlock/approval). Landing: `web/src/app/page.tsx:26-197`
 (server component, static marketing; former CTAs → `/candidate`, `/hire` now 404
-— **all UI routes below were removed; only the landing page and JSON API remain.**
+- **all UI routes below were removed; only the landing page and JSON API remain.**
 Flows A–C describe the deleted UI and are kept for historical context only).
 
-### Flow A — candidate onboarding (`/candidate`, client) — `web/src/app/candidate/page.tsx:59-742` *(deleted)*
+### Flow A - candidate onboarding (`/candidate`, client) - `web/src/app/candidate/page.tsx:59-742` *(deleted)*
 
 4-step wizard (`STEPS`, `candidate/page.tsx:56`): 0 Basics → 1 Profile & skills →
 2 Proof of work (experience/projects/education) → 3 Resume & terms (prefs + review +
@@ -40,7 +40,7 @@ Client validates with `candidateSchema` then `POST /api/candidates`
 (`:307-367`); queued photo/resume files upload AFTER submit once `candidateId`
 exists (`:375-400`).
 
-**Drive gate (hard gate, blocks submit):** resume is REQUIRED — Drive link OR PDF
+**Drive gate (hard gate, blocks submit):** resume is REQUIRED - Drive link OR PDF
 (`:257-260`, `:284-301`). If link and no file: `GET /api/drive-check?url=` must
 return `reachable`, else submit blocked + share-help shown (`:293-300`). Phone OR
 LinkedIn required (email alone insufficient) (`:302-306`); consent checkbox
@@ -48,7 +48,7 @@ required (`z.literal(true)`, `lib/validators.ts:150-152`). Photo URL optional;
 photo file JPG/PNG ≤10 MB, resume PDF ≤10 MB, client pre-validated
 (`candidate/page.tsx:166-174`) and server re-validated (`api/uploads/route.ts:89-104`).
 
-### Flow B — employer search (`/hire`, client) — `web/src/app/hire/page.tsx:25-391` *(deleted)*
+### Flow B - employer search (`/hire`, client) - `web/src/app/hire/page.tsx:25-391` *(deleted)*
 
 3-step job form (role → skills → context), client `jobSchema` validation
 (`hire/page.tsx:67-84`), autofill demo job (`:146-166`), `POST /api/search`
@@ -62,7 +62,7 @@ score/level, salary/location fit (`:328-386`). Per-card actions: Open dossier
 `:203-225`). **Deep toggle** (`Switch`, `:290`) adds LLM judge of top-10,
 slower (`:114`).
 
-### Flow C — admin/verify
+### Flow C - admin/verify
 
 Employer files company at `/employer/verify` (client, `employer/verify/page.tsx:28-297`):
 requires signed-in `users.role employer|admin` (`:54-69`); insert/update
@@ -76,7 +76,7 @@ candidates (20) + searches (10) + audit (20) + counts; verify/reject via client
 `api/admin/bootstrap/route.ts:6-27`); `scripts/bootstrap-admin.mjs` same + verifies
 all pending.
 
-### Flow D — shortlist/contact (audit-only, NOT a gate)
+### Flow D - shortlist/contact (audit-only, NOT a gate)
 
 `contact_log` is append-only audit. Contact visible directly on match cards /
 dossier (`hire/page.tsx:346`, `candidate/[id]/page.tsx:201-216`). Logging =
@@ -84,7 +84,7 @@ dossier (`hire/page.tsx:346`, `candidate/[id]/page.tsx:201-216`). Logging =
 best-effort candidate email. Shortlist = `POST /api/shortlists` → row +
 best-effort `newMatchEmail`. Manual dedupe in code (NULL-safe, §7).
 
-### Flow E — dashboard (`/dashboard`, client) — `dashboard/page.tsx:29-273`
+### Flow E - dashboard (`/dashboard`, client) - `dashboard/page.tsx:29-273`
 
 Load by candidate UUID OR contact email → `GET /api/candidates?id|email`
 (`:46-47`): shows dossier header + visibility toggle (PATCH visible/hidden/
@@ -100,19 +100,19 @@ Delete profile (DELETE + confirm, `:100-118`), AI summary, who-contacted-me
 |---|---|---|
 | `next` | `16.3.4` | App Router, server/client split, route handlers, `next/font` |
 | `react` / `react-dom` | `19.2.8` | UI |
-| `@supabase/ssr` `^0.12.6`, `@supabase/supabase-js` `^2.115.0` | — | Auth + Postgres + Storage; 3 clients (§8) |
-| `inngest` `^4.20.0` | — | Background profile pipeline (async AI, retries) |
-| `resend` `^6.26.0` | — | Transactional email, no-op without key |
-| `zod` `^4.5.4` | — | Shared client+server validation (`lib/validators.ts`) |
-| `tailwindcss` `^4` + `@tailwindcss/postcss` | — | Styling via `globals.css` tokens |
-| `typescript` `^5`, `eslint` `^9` + `eslint-config-next` | — | Types, lint |
+| `@supabase/ssr` `^0.12.6`, `@supabase/supabase-js` `^2.115.0` | - | Auth + Postgres + Storage; 3 clients (§8) |
+| `inngest` `^4.20.0` | - | Background profile pipeline (async AI, retries) |
+| `resend` `^6.26.0` | - | Transactional email, no-op without key |
+| `zod` `^4.5.4` | - | Shared client+server validation (`lib/validators.ts`) |
+| `tailwindcss` `^4` + `@tailwindcss/postcss` | - | Styling via `globals.css` tokens |
+| `typescript` `^5`, `eslint` `^9` + `eslint-config-next` | - | Types, lint |
 | Voyage embeddings | `voyage-4-lite`, 1024-dim, plain `fetch` (no SDK) | `lib/matching/voyage.ts:12-84` |
 | LLM | OpenRouter OpenAI-compatible, `minimax/minimax-m3:free` cheap+judge | `lib/matching/judge.ts:74-120`, `.env.example:10-13` |
 | Fonts | `next/font/google`: Plus Jakarta Sans + Instrument Serif + JetBrains Mono → CSS vars | `app/layout.tsx:2-8,17` |
 | Canvas art | hand-rolled `FlowerLattice`, `BondType` (2D), `DdiivvShader` (WebGL2) | §10 guards |
 
 No ORM, no pg client lib (all DB via Supabase JS + one RPC), no test runner
-(no vitest/jest in `package.json` — scripts are `.mjs`/curl only, §9).
+(no vitest/jest in `package.json` - scripts are `.mjs`/curl only, §9).
 `web/next.config.ts:1-7` is empty default. `web/supabase/storage.sql` is a
 byte-identical copy of `supabase/storage.sql` (mirror, apply either once).
 
@@ -154,30 +154,30 @@ OPEN-CONTACT `contact_email/phone`, `linkedin/github/portfolio/resume_url`,
 CASCADE, `summary_markdown`, `summary_json` dflt {}, `original_resume_text`,
 `profile_json` dflt {}, timestamps. (Pipeline only writes
 summary_markdown/json; `original_resume_text`/`profile_json` never written by
-app code — always NULL/{} in practice.)
+app code - always NULL/{} in practice.)
 
 **`work_experiences`** (`:117-131`): `id`, `candidate_id` CASCADE, `company_name`,
 `job_title`, `employment_type`, `start_date/end_date` DATE, `is_current` dflt
 false, `description`, `achievements`, `tech_stack` TEXT[] dflt {}, `evidence_links`
 TEXT[] dflt {}, `created_at`. (API writes all but `employment_type`/
-`evidence_links` — always NULL/{} from onboarding.)
+`evidence_links` - always NULL/{} from onboarding.)
 
 **`projects`** (`:134-153`): `id`, `candidate_id` CASCADE, `title` NOT NULL,
 `description`, `problem_statement`, `tech_stack` [], `role_in_project`,
 `project_link`, `repo_link`, `deployment_link`, `impact_summary`, `metrics`
-(never written by API — always NULL), `challenges_faced` (never written —
+(never written by API - always NULL), `challenges_faced` (never written -
 folded into `impact_summary` with `|` separators,
 `api/candidates/route.ts:142`), `project_type` ∈
 personal/academic/freelance/production/open_source/prototype, dates, `created_at`.
 
 **`project_depth_analysis`** (`:156-171`): `id`, `project_id` → projects CASCADE,
 `complexity_score` 1-10, `technical_complexity` ∈ low/medium/high/very_high,
-`architectural_concepts` [], `business_impact` (pipeline never sets — NULL),
+`architectural_concepts` [], `business_impact` (pipeline never sets - NULL),
 `autonomy_level` ∈ solo/contributed/led/unknown, `evidence_quality` ∈
-weak/moderate/strong, `project_maturity` (never set — NULL),
+weak/moderate/strong, `project_maturity` (never set - NULL),
 `relevance_tags` [], `estimated_seniority_signal` ∈ intern/junior/mid/senior/
-unknown (never set — NULL), `raw_ai_analysis` jsonb, `created_at`. Pipeline
-upserts `ON CONFLICT(project_id)` — but table has NO unique constraint on
+unknown (never set - NULL), `raw_ai_analysis` jsonb, `created_at`. Pipeline
+upserts `ON CONFLICT(project_id)` - but table has NO unique constraint on
 `project_id` (`profile-pipeline.ts:86-95`), so the upsert degrades to insert on
 re-run (duplicate depth rows possible).
 
@@ -192,7 +192,7 @@ mobile/data_ai/devops_cloud/tools, `created_at`. Seeded ~46 rows
 (`seed_skills.sql:7-53`).
 
 **`candidate_skills`** (`:195-204`): PK(`candidate_id`,`skill_id`), CASCADE /
-RESTRICT, `experience_years` ≥0 (onboarding never sets — NULL),
+RESTRICT, `experience_years` ≥0 (onboarding never sets - NULL),
 `proficiency_level` ∈ beginner/intermediate/advanced/expert (never set),
 `source` ∈ self_reported/extracted/verified, `evidence_strength` 0-100 (never
 set). Onboarding links exact-name matches only, `self_reported`
@@ -215,7 +215,7 @@ NULL, `domain`, `seniority`, `description`, `responsibilities`,
 `must_have_skills` [] / `nice_to_have_skills` [], `min/max_experience`,
 `salary_min/max`, `salary_currency` dflt INR, `location`, `remote_policy`,
 `employment_type`, `start_date`, `status` ∈ draft/active/paused/closed dflt
-active, timestamps. (No API writes jobs — the deleted `/hire` UI searched WITHOUT
+active, timestamps. (No API writes jobs - the deleted `/hire` UI searched WITHOUT
 persisting a job row; `job_id` is NULL on all live searches.)
 
 **`job_requirements`** (`:265-281`): PK `job_id` → jobs CASCADE, `must_have` /
@@ -224,22 +224,22 @@ persisting a job row; `job_id` is NULL on all live searches.)
 `full_parsed` jsonb, `embedding vector(1024)` + model/dim, `created_at`. **Dead
 table**: zero writers in app code (no JD parser exists).
 
-**`searches`** (`:284-292`): `id`, `employer_id` (NULL on live searches — search
+**`searches`** (`:284-292`): `id`, `employer_id` (NULL on live searches - search
 is anonymous, `api/search/route.ts:152-157` inserts without it) → employers
 CASCADE, `job_id` SET NULL (always NULL live), `query_text` (built query, the
 cache key), `filters_json` (the JobReq), `result_count`, `created_at`.
 
 **`candidate_matches`** (`:295-306`): `id`, `search_id` SET NULL, `job_id` SET
 NULL (always NULL), `candidate_id` CASCADE, `score` 0-100 NULLABLE (NULL = fast
-mode cache seed), `sub_scores` (never written — always {}), `match_reasons_json`
+mode cache seed), `sub_scores` (never written - always {}), `match_reasons_json`
 ({} fast, judge object deep), `status` ∈ shown/shortlisted/contacted/rejected/
 hired dflt shown, `created_at`.
 
-**`shortlists`** (`:309-319`): `id`, `employer_id` CASCADE (NULL in practice —
+**`shortlists`** (`:309-319`): `id`, `employer_id` CASCADE (NULL in practice -
 hire page sends no employer_id), `candidate_id` CASCADE NOT NULL, `job_id` SET
 NULL (NULL in practice), `status` ∈ saved/contacted/interviewing/offered/hired/
 rejected dflt saved, `notes`, `created_at`, UNIQUE(employer_id,candidate_id,
-job_id) — **NULLs don't dedupe in Postgres**, so code does manual JS dedupe
+job_id) - **NULLs don't dedupe in Postgres**, so code does manual JS dedupe
 (`api/shortlists/route.ts:70-79`).
 
 **`contact_log`** (`:322-330`): `id`, `employer_id` SET NULL (NULL in practice),
@@ -247,7 +247,7 @@ job_id) — **NULLs don't dedupe in Postgres**, so code does manual JS dedupe
 other, `message`, `created_at`. Audit-only.
 
 **`audit_logs`** (`:333-341`): `id`, `actor_id` (NULL = system; app never sets
-it — always NULL), `action` (contact, employer_verified/rejected; contact route
+it - always NULL), `action` (contact, employer_verified/rejected; contact route
 also mirrors `contact`), `target_type`, `target_id`, `metadata`, `created_at`.
 
 **`show_*` prefs (NOT in `schema.sql`, migration OPTIONAL):**
@@ -265,7 +265,7 @@ searches employer/job; matches search/job+score DESC/candidate; shortlists ×3;
 contact_log ×2; audit (actor,time DESC)+(target). Trigram GIN
 `f_unaccent(col) gin_trgm_ops` on candidate name/headline/role, company/title,
 project title, job title, skill name, chunk content (`:445-462`). FTS GIN
-`to_tsvector('english', content_text)` (`:465-466`) — unused by app (no
+`to_tsvector('english', content_text)` (`:465-466`) - unused by app (no
 `tsquery` call anywhere). HNSW cosine on both embedding columns (`:470-475`).
 
 ### 3c. RLS model, plain words (`schema.sql:489-864`)
@@ -277,16 +277,16 @@ unless verified), `is_verified_employer`, `owns_candidate`, `candidate_is_visibl
 
 - **Candidates own everything** under their id (candidates/profiles/work/
   projects/education/skills/chunks: owner ALL + admin; verified-employer SELECT
-  only when `visibility_status='visible'` — **INCLUDING contact columns, no
+  only when `visibility_status='visible'` - **INCLUDING contact columns, no
   gate** (`:599-603` + mirrors). Depth: employer read via project join (`:660-668`).
 - **`skills` reference:** any authenticated SELECT; admin-only write (`:683-702`).
-- **`employers`:** owner ALL only (`:729-733`) — no cross-read.
+- **`employers`:** owner ALL only (`:729-733`) - no cross-read.
 - **`jobs`:** owner ALL + other verified employers may SELECT `status='active'`
-  (`:738-757`) — market transparency (no UI uses it yet).
+  (`:738-757`) - market transparency (no UI uses it yet).
 - **`searches/shortlists/contact_log`:** verified-employer-id-scoped ALL
   (`:793-797`, `:829-833`, `:841-845`); candidates may SELECT rows about
   themselves (`matches_candidate_read :823-826`, `shortlists_candidate_read
-  :835-838`, `contactlog_candidate_read :848-851`) — transparency without gate.
+  :835-838`, `contactlog_candidate_read :848-851`) - transparency without gate.
   `candidate_matches` employer write requires owning search OR job (`:801-821`).
 - **`audit_logs`:** any authenticated may INSERT; only admin SELECT (`:856-864`).
 - **Backend bypass:** every API route + pipeline uses `supabaseAdmin()`
@@ -297,7 +297,7 @@ unless verified), `is_verified_employer`, `owns_candidate`, `candidate_is_visibl
 ### 3d. Storage (`supabase/storage.sql:1-120`, mirrored in `web/`)
 
 Private buckets `resumes|photos|portfolios` (`:25-30`). Browsers NEVER touch
-Storage directly — `POST /api/uploads` (service_role) uploads + mints 1h signed
+Storage directly - `POST /api/uploads` (service_role) uploads + mints 1h signed
 URL + writes path onto candidate row (`resume_url|photo_url|portfolio_url` per
 `KIND_COLUMN`, `api/uploads/route.ts:49-53,135-143`); `GET /api/uploads` mints
 fresh 1h URL for `{candidate_uuid}/{filename}` (`:151-180`, `PATH_RE` + `..`
@@ -305,13 +305,13 @@ reject `:163`). Policies additionally allow: owners CRUD own
 `{candidate_id}/…` prefix (regex-guarded uuid cast, `:38-106`); verified
 employers SELECT any visible candidate's files (`:112-120`). **Two parallel
 resume paths:** Storage object path (uploads) vs external URL (Drive link in
-`resume_url`) — `candidate/[id]` handles both (`signedLink`, `[id]/page.tsx:33-49`).
+`resume_url`) - `candidate/[id]` handles both (`signedLink`, `[id]/page.tsx:33-49`).
 
 ### 3e. Seeds
 
 `seed_skills.sql`: ~46 canonical + aliases, upsert on name. `seed_demo.sql`:
 1 verified demo employer + 2 jobs + 6 candidates (`@demo.local`, fixed
-`aaaaaaaa…`/`bbbb…`/`cccc…` UUIDs) + 2 zero-vector (1024-dim) chunks each —
+`aaaaaaaa…`/`bbbb…`/`cccc…` UUIDs) + 2 zero-vector (1024-dim) chunks each -
 `match_chunks` returns ties → recency fallback without `VOYAGE_API_KEY`
 (`seed_demo.sql:9-18`); wipe with `DELETE … WHERE contact_email LIKE
 '%@demo.local'`.
@@ -320,17 +320,17 @@ resume paths:** Storage object path (uploads) vs external URL (Drive link in
 
 ## 4. AI / matching pipeline end to end
 
-### 4a. Normalization — `lib/skills.ts:136-156`, `lib/validators.ts:115-119,167-176`
+### 4a. Normalization - `lib/skills.ts:136-156`, `lib/validators.ts:115-119,167-176`
 
 Free-text skills → canonical via `SKILL_ALIASES` map (JS→JavaScript,
 Postgres→PostgreSQL, ML→Machine Learning…), case-insensitive dedupe. Applied as
 zod `.transform(normalizeSkills)` on candidate `skills`, job `must_have`/
-`nice_to_have` — so server sees canonical; client sends raw. Dropdowns use
+`nice_to_have` - so server sees canonical; client sends raw. Dropdowns use
 `CANONICAL_SKILLS` (~70 entries covering tech + UI/Figma/SEO/Sales/Excel) +
 `DOMAINS` (10) + `SENIORITIES` (intern–lead; note: `lead` has no counterpart in
 `Seniority` type's `unknown`-style depth signals, harmless).
 
-### 4b. Summary + project depth (cheap LLM) — `lib/ai.ts:1-39`
+### 4b. Summary + project depth (cheap LLM) - `lib/ai.ts:1-39`
 
 `chat()` → `defaultOpenAIProvider(cheapModel())`, `CHEAP_MODEL → JUDGE_MODEL →
 minimax/minimax-m3:free` fallback (`matching/judge.ts:76-78`); returns NULL on
@@ -343,21 +343,21 @@ autonomy_level/relevance_tags/strengths/limitations, brace-extract parse,
 ### 4c. Chunking (implemented ⊂ documented)
 
 Pipeline builds **2 shapes only** (`profile-pipeline.ts:39-54`): 1 `summary`
-(`headline + domain + exp` — thin by design) + N `project` (`title +
+(`headline + domain + exp` - thin by design) + N `project` (`title +
 description + tech + impact`, metadata `{project_id, technologies}`).
 Documented `experience|education|skills` chunk types exist in CHECK constraint
 and seed (`seed_demo` writes summary+project) but the pipeline never emits them.
 
-### 4d. Embeddings — `lib/matching/voyage.ts:12-84`
+### 4d. Embeddings - `lib/matching/voyage.ts:12-84`
 
 `POST https://api.voyageai.com/v1/embeddings`, model **`voyage-4-lite`**,
 `input_type: document` (chunks) vs `query` (job). Batch w/ index-order guard
 (`:59-66`); throws w/ status+body slice on failure. Query text =
 `Role / Domain / Must-have / Nice-to-have / Responsibilities`
 (`buildJobQueryText`, `:87-106`). Dim recorded per row (`embedding_dim =
-vectors[i].length`, `profile-pipeline.ts:106-107`) — 1024 in practice.
+vectors[i].length`, `profile-pipeline.ts:106-107`) - 1024 in practice.
 
-### 4e. Hybrid retrieval — implemented vs planned
+### 4e. Hybrid retrieval - implemented vs planned
 
 **Was planned, now DELETED 2026-09-09** (`lib/matching/hybrid.ts`,
 `lib/matching/scoring.ts` removed; had wrong column names, zero importers).
@@ -390,7 +390,7 @@ partial / else weak (`:40-44`); `semanticFromDistance=(2-d)/2` (`:47-50`);
 **Live `/api/search` fast path returns NO scores** (`score:null` persisted,
 `:159-171`); rules helpers have zero callers outside their module.
 
-### 4h. LLM judge rubric (deep mode only) — `lib/matching/judge.ts:45-233`
+### 4h. LLM judge rubric (deep mode only) - `lib/matching/judge.ts:45-233`
 
 System prompt (`:45-53`): hiring-manager, 4 dims × 25 (technical depth /
 relevance / impact-ownership / red-flags inverted 25=clean), use-only-provided,
@@ -400,12 +400,12 @@ JSON sliced (job desc 4k, candidate 12k, `:55-71`). Provider: OpenRouter
 chat-completions, `JUDGE_MODEL → minimax/m3:free` dflt, temp 0.2, `json_object`
 mode, `HTTP-Referer/X-Title` headers (`:80-120`). `parseJudgeOutput` strips
 fences, `total_score ?? Σ4`, clamps 0-100, level 75/50, questions ≤5 (`:139-192`).
-`judgeTop(inputs, provider, concurrency=5 from route, dflt 10)` — worker-pool
+`judgeTop(inputs, provider, concurrency=5 from route, dflt 10)` - worker-pool
 parallel, per-item try/catch → null (`:210-233`). Deep path
 (`api/search/route.ts:174-208`): top-10 rows → parallel fetch candidate+projects
 → judge → merge `{...row, judge}` → persist `score=judge.overall_score`.
 Judge throw → 200 with `deepError` (graceful). Suggested `blendWithJudge`
-0.7/0.3 (`scoring.ts:187-190`) documented but **never called** — merged rows
+0.7/0.3 (`scoring.ts:187-190`) documented but **never called** - merged rows
 carry raw judge beside scoreless row.
 
 ### 4i. Search cache + invalidation (`api/search/route.ts:56-93,149-172`)
@@ -418,7 +418,7 @@ Hit with rows → return `candidate_matches` joined candidates + `applyContactPr
 seed `candidate_matches` (`score:null`, `{}`, `shown`) for cache seeding
 (non-deep only). Deep persists scored rows but never reads cache.
 
-### 4j. Quality score — `profile-pipeline.ts:114-127`
+### 4j. Quality score - `profile-pipeline.ts:114-127`
 
 `q=20 +15 hasProjects +10 anyTech +15 anyImpact +10 anyDesc>100ch +10 hasExp
 +10 ≥3 skills (limit-5 probe) +5 headline`, capped 100 → `profile_strength` +
@@ -437,12 +437,12 @@ Trigger: `POST /api/candidates` → `inngest.send("candidate.profile.submitted",
 summary-depth (cheap LLM; summary upsert + per-project depth upsert loop) →
 embed-store (Voyage batch → `embedding` string literal → DELETE+INSERT chunks) →
 quality-score → mark-active (profile-ready email only; visibility NEVER forced,
-`:129-146`)`. Returns `{candidateId, chunks}`. No explicit retry config —
+`:129-146`)`. Returns `{candidateId, chunks}`. No explicit retry config -
 Inngest step defaults ("step retries" per `lib/inngest.ts:7` comment).
 **Failure semantics:** candidate-not-found throws (retried); LLM null → skip
 write; **Voyage throw in `embed-store` throws → step retries, NO chunks stored
 until success** (profile stays chunkless = invisible to vector search, visible
-to recency fallback only if a prior chunk row exists — fresh candidates have
+to recency fallback only if a prior chunk row exists - fresh candidates have
 none until first embed succeeds); email always best-effort. No DLQ/slack, no
 cron, no job_requirements writer.
 
@@ -462,7 +462,7 @@ judged, search_id). Tail-sampled: status≥500 / error / >2000 ms always, else
 errors swallowed to skipped (`:43-51`). Templates: `profileReadyEmail`,
 `newMatchEmail`, `contactLoggedEmail` (all link `NEXT_PUBLIC_SITE_URL`,
 dflt localhost). Callers: pipeline ready mail, shortlist mail (generic "a role
-you match"/"An employer" — no job/company lookup,
+you match"/"An employer" - no job/company lookup,
 `api/shortlists/route.ts:93-100`), contact mail (generic in `/api/contact`
 vs job+company-resolved in `/api/contacts`, `:55-72`).
 
@@ -486,12 +486,12 @@ admin page copy claiming it (`admin/page.tsx:209-213`).
 | `/api/candidates` | DELETE `?id=` or body `{id}` | uuid | 200 `{ok:true}` (cascades); 400; 500 |
 | `/api/contact` | POST | `{candidate_id, job_id?, employer_id?, channel: email\|phone\|platform\|other, message? ≤4000}` | 201 `{contactId}` + audit mirror + generic mail; 400; 404 candidate; 500 |
 | `/api/contacts` | POST | same, `channel` dflt `platform` | 201 `{id, status:'logged'}` + job/company-resolved mail; 400; 500. **Duplicate of `/api/contact`** (hire page uses `/api/contact`) |
-| `/api/contacts` | GET `?candidate_id?&limit=1-100 dflt 50` | — | 200 `{results[{id,employer_id,candidate_id,job_id,channel,created_at}]}`; 500 |
+| `/api/contacts` | GET `?candidate_id?&limit=1-100 dflt 50` | - | 200 `{results[{id,employer_id,candidate_id,job_id,channel,created_at}]}`; 500 |
 | `/api/shortlists` | GET `?employer_id?&candidate_id?&job_id=` | uuids, "" dropped | 200 `{results[≤100 + candidates(id,full_name,headline,contact_email/phone)]}`; 400; 500 |
 | `/api/shortlists` | POST | `{candidate_id, job_id?, employer_id?, notes? ≤2000}` | 201 `{shortlist}` (+generic mail) or 200 `{shortlist, deduped:true}`; 400; 404 candidate/job; 500 |
-| `/api/shortlists` | DELETE `?id=` / `{id}` / `{candidate_id,job_id?,employer_id?}` (null-aware) | — | 200 `{ok:true}`; 400; 500 |
+| `/api/shortlists` | DELETE `?id=` / `{id}` / `{candidate_id,job_id?,employer_id?}` (null-aware) | - | 200 `{ok:true}`; 400; 500 |
 | `/api/uploads` | POST multipart | `file, kind: resume\|photo\|portfolio, candidate_id` (10 MB; resume=pdf; photo=jpg/png; portfolio=pdf/jpg/png; ext+mime double-check) | 201 `{bucket,path,signedUrl,expiresIn:3600}` + candidate col write; 400 validation; 404 orphan; 409 dup; 500 sign fail. `runtime:nodejs, force-dynamic` |
-| `/api/uploads` | GET `?bucket=resumes\|photos\|portfolios&path={uuid}/{file}` | — | 200 same shape; 400 bad bucket/path; 404 missing |
+| `/api/uploads` | GET `?bucket=resumes\|photos\|portfolios&path={uuid}/{file}` | - | 200 same shape; 400 bad bucket/path; 404 missing |
 | `/api/drive-check` | GET `?url=` | http(s) | 200 `{status: reachable\|restricted\|unknown\|invalid, reason?/note?/http?}`; 400 non-URL. Drive: `uc?export=download&id=` + UA spoof, login-wall/403/404→restricted, html→reachable-with-confirm (`:20-40`); non-Drive: HEAD check, 8s timeout |
 | `/api/admin/employers` | GET `?status=pending\|…\|all` | **admin only** (`requireRole`) | 200 `{employers[≤100 + account_email]}`; 401/403; 500 |
 | `/api/admin/employers` | POST `{employerId, action: verify\|reject}` | admin | 200 `{employer}` + audit; 400; 401/403; 500 |
@@ -512,7 +512,7 @@ all client pages), `supabaseServer` (cookie RLS user), `supabaseAdmin`
 reads auth user then users row via admin client (`auth.ts:36-55`, null-safe);
 `requireRole` throws `AuthError(401)` anon/no-row, `403` suspended/role-mismatch
 (`:64-82`). **Middleware** (`middleware.ts`, since **deleted**) only refreshed
-session on every non-static request — enforces NOTHING. Enforcement points:
+session on every non-static request - enforces NOTHING. Enforcement points:
 `api/admin/*` (401/403 JSON), `/admin` (denied card), `/employer/verify`
 (client redirect + role message), `/auth/callback` (links pre-existing email
 rows, sets `auth_id`, `email_verified:true`, role from `?role` → metadata →
@@ -521,7 +521,7 @@ candidate dflt; `next` allow-listed to `/`-paths). Login/signup
 `auth_id` then email, route home by role (admin→`/admin`,
 employer→`/employer/verify`, else `/candidate`). **Gap: every non-admin API
 (candidates/search/shortlists/contacts/uploads/drive-check) is unauthenticated
-— anyone can create candidates, log contacts, mint signed URLs for any known
+- anyone can create candidates, log contacts, mint signed URLs for any known
 candidate UUID, toggle any visibility, delete any profile.** RLS is bypassed
 by design (service_role) and not re-checked in code.
 
@@ -569,7 +569,7 @@ Smoke covers validation-shape (400-not-500) only, not happy paths.
   `ExperienceAccordion.tsx:39-48`).
 
 **Known gaps / risks / backlog (all verified):**
-1. Unauthenticated mutating APIs (§8) — ANY caller can write candidates,
+1. Unauthenticated mutating APIs (§8) - ANY caller can write candidates,
    shortlists, contact logs, delete profiles, mint file URLs.
 2. ~~`hybrid.ts` + `scoring.ts` rules~~ DELETED 2026-09-09 (were dead:
     wrong column names, zero importers). Live search = RPC + group-by-candidate
@@ -586,7 +586,7 @@ Smoke covers validation-shape (400-not-500) only, not happy paths.
    employer/job scoping (anonymous shared cache); `score:null` rows pollute
    `candidate_matches` analytics.
 7. Duplicate `/api/contact` vs `/api/contacts` (different response shapes,
-   mail richness, GET support) — keep one.
+   mail richness, GET support) - keep one.
 8. `contact-prefs` dormant BY DESIGN (per-channel toggles dropped from the
    form; `supabase/contact_prefs.sql` optional, nothing in API code references
    `show_*`, filter treats missing flags as visible). Do NOT run the migration
@@ -597,8 +597,8 @@ Smoke covers validation-shape (400-not-500) only, not happy paths.
     (`hire/page.tsx:232`); no search audit rows; `audit_logs.actor_id` always
     NULL.
 11. `matching/README.md` TODO section describes unbuilt integration (pg client,
-    grouping, fast/deep split) as future — all built differently since.
-12. `web/README.md` is stock create-next-app (Geist/Vercel) — describes nothing
+    grouping, fast/deep split) as future - all built differently since.
+12. `web/README.md` is stock create-next-app (Geist/Vercel) - describes nothing
     real. `DESIGN-SYSTEM.md` token values drift from `globals.css` (e.g. royal
     `#1d4ed8` vs `#bc3b24`, paper `#efe6d0` vs `#fafaf8`).
 
@@ -614,13 +614,13 @@ Smoke covers validation-shape (400-not-500) only, not happy paths.
    for BOTH cheap and judge** (`judge.ts:74-85`, `.env.example:10-13`). NOT
    OpenAI-direct; NOT `gpt-4o-mini` (only appears as a stale comment in
    `matching/README.md:23`).
-3. **"Hidden-contact gate removed" is accurate — but `show_*` prefs were NOT
+3. **"Hidden-contact gate removed" is accurate - but `show_*` prefs were NOT
    dropped.** `docs/09` + README claim pure open-contact; implementation
    ADDS optional per-channel filtering: `applyContactPrefs`
    (`lib/contact-prefs.ts:13-23`) nulls any channel whose `show_*===false`,
    applied in fast search (`api/search/route.ts:83-86,146`), deep search, and
    dossier page (`candidate/[id]/page.tsx:79-83`). This is candidate-chosen
-   channel hiding, not an approval gate — docs conflate the two.
+   channel hiding, not an approval gate - docs conflate the two.
 4. **`contact_prefs.sql` is REQUIRED, not superseded.** `schema.sql` does NOT
    create `show_*` columns; only `supabase/contact_prefs.sql:3-9` does (7× BOOL
    NOT NULL DEFAULT TRUE). Without running it the filter is a silent no-op;
@@ -629,17 +629,17 @@ Smoke covers validation-shape (400-not-500) only, not happy paths.
    funnel (prefilter → vector+keyword → RRF → rules → judge → blend) is
    implemented as: RPC vector → group-by-candidate → optional judge-merge.
    `hybrid.ts` references `is_visible/consent_to_match/is_active/remote_ok/
-   location/pc.text/pc.metadata` — schema has `visibility_status/
+   location/pc.text/pc.metadata` - schema has `visibility_status/
    consent_status/location_city/remote_preference/content_text/metadata_json`.
    RRF, keyword arm, hard-filter SQL, `combineRanks` never execute.
 6. **Scoring weights live in code, not docs.** Effective rule weights
    `.25/.25/.20/.15/.10` + `blendWithJudge` .7/.3 (`scoring.ts:16-22,187-190`)
-   supersede `docs/12`'s "alt simple" 0.35/0.25/0.15/0.10/0.10/0.05 sketch —
+   supersede `docs/12`'s "alt simple" 0.35/0.25/0.15/0.10/0.10/0.05 sketch -
    and neither runs in live fast search (unscored rows).
 7. **Judge output shape ≠ docs/13 §5 claim.** Live parser keeps
    `total_score/4 subscores/best_project_match/fit/questions/gaps/
    matched/missing/strengths/risks` and hardcodes `salary/location/seniority_fit:
-   "unknown"` (`judge.ts:170-191`) — no salary/location/seniority labels from
+   "unknown"` (`judge.ts:170-191`) - no salary/location/seniority labels from
    the LLM despite `MatchScore` type declaring them.
 8. **Chunk inventory: 2 shapes, not 5.** `docs/08` lists
    summary/experience/project/education/skills; pipeline emits summary+project
@@ -648,18 +648,18 @@ Smoke covers validation-shape (400-not-500) only, not happy paths.
    chunks → embed".** Live: fetch-candidate → fetch-projects → build-chunks →
    summary-depth → embed-store → quality-score → mark-active. No separate
    normalize step (normalization is zod-transform at intake); chunks built
-   BEFORE summary (summary text never embedded — summary chunk is just
+   BEFORE summary (summary text never embedded - summary chunk is just
    headline+domain+exp).
-10. **Quality-score formula is code-only** (§4j) — absent from all `docs/`.
+10. **Quality-score formula is code-only** (§4j) - absent from all `docs/`.
 11. **Cache design is code-only** (exact-text key, 1h TTL, `updated_at`-probe
-    invalidation, deep bypass, §4i) — `docs/` describes "cache repeat
+    invalidation, deep bypass, §4i) - `docs/` describes "cache repeat
     searches" as TODO (`matching/README.md:44`).
 12. **Two contact routes exist; docs describe one flow.** Both write the same
     table with different response/mail behavior (§6-7).
 13. **Salary `stipend` frequency IS in schema** (`schema.sql:80-81`) though
-    validators allow only hourly/monthly/yearly (`validators.ts:35,133-139`) —
+    validators allow only hourly/monthly/yearly (`validators.ts:35,133-139`) -
     UI can never submit `stipend`; DB accepts it from raw SQL only.
 14. **`users.status`/`employers` suspension paths** exist in schema + `requireRole`
-    (403 on suspended) but no UI/API sets suspended — dead state.
+    (403 on suspended) but no UI/API sets suspended - dead state.
 15. **Docs promise search rate-limit + view/export audit; neither exists**
     (hire copy `hire/page.tsx:232`, admin copy `admin/page.tsx:209-213` vs §6).

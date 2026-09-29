@@ -127,28 +127,28 @@ const STEPS = [
 ] as const;
 
 const STEP_TITLES: [string, string][] = [
-  ["Basics — who you are", "This is how your page introduces you."],
+  ["Basics - who you are", "This is how your page introduces you."],
   [
-    "Profile — the work you want next",
+    "Profile - the work you want next",
     "Role, domain, and the skills you get found by.",
   ],
   [
-    "Experience — where you've worked",
-    "Titles, dates, what you actually did — one card per role.",
+    "Experience - where you've worked",
+    "Titles, dates, what you actually did - one card per role.",
   ],
   [
-    "Projects — what you've shipped",
+    "Projects - what you've shipped",
     "A couple of real ones beat a list of ten.",
   ],
   [
-    "Background — the paper trail",
-    "Education and open source — the record behind the work.",
+    "Background - the paper trail",
+    "Education and open source - the record behind the work.",
   ],
   [
-    "Private — how you're found",
+    "Private - how you're found",
     "Preferences, links, and exactly what employers can see.",
   ],
-  ["Review — read it as they will", "One pass before anything enters search."],
+  ["Review - read it as they will", "One pass before anything enters search."],
 ];
 
 const STEP_OF_FIELD: Record<string, number> = {
@@ -728,7 +728,7 @@ function PickList({
           onMouseEnter={() => onHover(-1)}
           onClick={onOther}
         >
-          Other — type my own
+          Other - type my own
         </button>
       ) : null}
     </div>
@@ -1304,22 +1304,22 @@ export default function JoinWizard() {
         error?: string;
       } | null;
       if (res.status === 429) {
-        setLookupMsg("Too many checks in a short window — try again shortly.");
+        setLookupMsg("Too many checks in a short window - try again shortly.");
         return;
       }
       if (!res.ok) {
-        setLookupMsg(body?.error ?? "Lookup failed — try again.");
+        setLookupMsg(body?.error ?? "Lookup failed - try again.");
         return;
       }
       if (body?.exists === true) {
         setLookupMsg(
-          "A visible page already exists for this email — publishing hands control of it back to you.",
+          "A visible page already exists for this email - publishing hands control of it back to you.",
         );
       } else {
-        setLookupMsg("No page yet for this email — you are clear to publish.");
+        setLookupMsg("No page yet for this email - you are clear to publish.");
       }
     } catch {
-      setLookupMsg("Network error — try again.");
+      setLookupMsg("Network error - try again.");
     } finally {
       setLookupBusy(false);
     }
@@ -1351,12 +1351,12 @@ export default function JoinWizard() {
       });
       await res.json().catch(() => null);
       if (!res.ok) {
-        setOtpErr("Could not send the verification code — use resend to retry.");
+        setOtpErr("Could not send the verification code - use resend to retry.");
         return;
       }
       setOtpInfo("Check your inbox for the verification code.");
     } catch {
-      setOtpErr("Network error — use resend to retry.");
+      setOtpErr("Network error - use resend to retry.");
     }
   };
 
@@ -1373,12 +1373,12 @@ export default function JoinWizard() {
       });
       await res.json().catch(() => null);
       if (!res.ok) {
-        setOtpErr("Could not resend the code — try again.");
+        setOtpErr("Could not resend the code - try again.");
         return;
       }
       setOtpInfo("A fresh code is on its way.");
     } catch {
-      setOtpErr("Network error — try again.");
+      setOtpErr("Network error - try again.");
     } finally {
       setOtpBusy(false);
     }
@@ -1406,7 +1406,7 @@ export default function JoinWizard() {
         error?: string;
       } | null;
       if (!res.ok || body?.ok !== true) {
-        setOtpErr(body?.error ?? "That code did not work — try again.");
+        setOtpErr(body?.error ?? "That code did not work - try again.");
         return;
       }
       const { candidateId, mode, message, warnings } = otpPending;
@@ -1422,7 +1422,7 @@ export default function JoinWizard() {
       setNotice(message || "A visible profile already exists for this email.");
       setNoticeId(candidateId);
     } catch {
-      setOtpErr("Network error — try again.");
+      setOtpErr("Network error - try again.");
     } finally {
       setOtpBusy(false);
     }
@@ -1458,7 +1458,7 @@ export default function JoinWizard() {
       }
       if (res.status === 429) {
         setNotice(
-          "Submission rate limit — wait a couple of minutes, your draft is safe on this device.",
+          "Submission rate limit - wait a couple of minutes, your draft is safe on this device.",
         );
         return;
       }
@@ -1480,9 +1480,9 @@ export default function JoinWizard() {
         );
         return;
       }
-      setNotice(body?.error ?? "Publish failed — try again.");
+      setNotice(body?.error ?? "Publish failed - try again.");
     } catch {
-      setNotice("Network error — your draft is safe on this device.");
+      setNotice("Network error - your draft is safe on this device.");
     } finally {
       setBusy(false);
     }
@@ -1532,7 +1532,7 @@ export default function JoinWizard() {
         <p className="mt-2.5 text-[15px] leading-[1.6] text-body max-w-[46ch] mx-auto">
           {draft.visibility === "visible"
             ? "It is listed for employer searches right away."
-            : "It is unlisted — reachable only by direct link."}{" "}
+            : "It is unlisted - reachable only by direct link."}{" "}
           Change anything later; your draft lives on this device.
         </p>
         {done.warnings.length ? (
@@ -1627,7 +1627,7 @@ export default function JoinWizard() {
                   label="Photo URL"
                   htmlFor="j-photo"
                   error={errs.photo_url}
-                  hint="Direct image link — shown as your avatar."
+                  hint="Direct image link - shown as your avatar."
                 >
                   <input
                     id="j-photo"
@@ -1684,7 +1684,7 @@ export default function JoinWizard() {
             <F
               label="Current role"
               htmlFor="p-current"
-              hint="Optional — shown under your name."
+              hint="Optional - shown under your name."
             >
               <PickCombo
                 id="p-current"
@@ -1745,7 +1745,7 @@ export default function JoinWizard() {
                 id="p-skills"
                 label="Skills"
                 required
-                hint="The terms employers search by — normalized to canonical names."
+                hint="The terms employers search by - normalized to canonical names."
                 placeholder="+ Add skill…"
                 error={errs.skills}
                 value={draft.skills}
@@ -1785,7 +1785,7 @@ export default function JoinWizard() {
           <>
             {draft.experiences.length === 0 ? (
               <div className="empty-note">
-                No roles added yet — add one, or continue if your path is still
+                No roles added yet - add one, or continue if your path is still
                 taking shape.
               </div>
             ) : (
@@ -1897,7 +1897,7 @@ export default function JoinWizard() {
           <>
             {draft.projects.length === 0 ? (
               <div className="empty-note">
-                No projects yet — one real project with your part spelled out
+                No projects yet - one real project with your part spelled out
                 does more than a list of ten.
               </div>
             ) : (
@@ -2079,7 +2079,7 @@ export default function JoinWizard() {
             <div>
               <h3 className="text-[15.5px] font-semibold text-ink mb-4">Education</h3>
               {draft.education.length === 0 ? (
-                <div className="empty-note">No entries yet — safe to skip.</div>
+                <div className="empty-note">No entries yet - safe to skip.</div>
               ) : (
                 <div className="grid gap-5">
                   {draft.education.map((row, i) => (
@@ -2156,7 +2156,7 @@ export default function JoinWizard() {
             <div>
               <h3 className="text-[15.5px] font-semibold text-ink mb-4">Open source</h3>
               {draft.oss.length === 0 ? (
-                <div className="empty-note">No repos yet — safe to skip.</div>
+                <div className="empty-note">No repos yet - safe to skip.</div>
               ) : (
                 <div className="grid gap-5">
                   {draft.oss.map((row, i) => (
@@ -2265,7 +2265,7 @@ export default function JoinWizard() {
                     placeholder="Not specified"
                   />
                 </F>
-                <F label="Salary expectation" htmlFor="v-salary" error={errs.min_salary} hint="Plain number — your period is chosen below.">
+                <F label="Salary expectation" htmlFor="v-salary" error={errs.min_salary} hint="Plain number - your period is chosen below.">
                   <input
                     id="v-salary"
                     className="input"
@@ -2311,7 +2311,7 @@ export default function JoinWizard() {
                     </select>
                   </div>
                 </div>
-                <F label="Preferred location" htmlFor="v-locref" hint="Type or pick — Remote, Bengaluru…">
+                <F label="Preferred location" htmlFor="v-locref" hint="Type or pick - Remote, Bengaluru…">
                   <PickCombo
                     id="v-locref"
                     value={draft.location_pref}
@@ -2385,7 +2385,7 @@ export default function JoinWizard() {
                 {(
                   [
                     ["visible", "Listed in search", "Appears in employer searches and by direct link."],
-                    ["hidden", "Unlisted", "Reachable only by direct link — never in searches."],
+                    ["hidden", "Unlisted", "Reachable only by direct link - never in searches."],
                   ] as const
                 ).map(([value, title, sub]) => (
                   <label
@@ -2442,10 +2442,10 @@ export default function JoinWizard() {
         return (
           <div className="grid gap-4 sm:grid-cols-2">
             <ReviewCard title="Basics" onEdit={() => jump(0)}>
-              <p>{draft.name || "—"}</p>
-              <p>{draft.email || "—"}</p>
+              <p>{draft.name || "-"}</p>
+              <p>{draft.email || "-"}</p>
               <p>
-                {[draft.location, draft.phone].filter(Boolean).join(" · ") || "—"}
+                {[draft.location, draft.phone].filter(Boolean).join(" · ") || "-"}
               </p>
             </ReviewCard>
             <ReviewCard title="Profile" onEdit={() => jump(1)}>
@@ -2634,8 +2634,8 @@ export default function JoinWizard() {
           <span className="grid gap-3 w-full">
             <span>
               {otpPending.mode === "created"
-                ? "Your page is ready — verify your email to finish publishing."
-                : "That email already has a page — verify it to take control."}{" "}
+                ? "Your page is ready - verify your email to finish publishing."
+                : "That email already has a page - verify it to take control."}{" "}
               {otpInfo ?? `A code was sent to ${draft.email.trim()}.`}
             </span>
             <span className="flex flex-wrap items-center gap-2">

@@ -12,7 +12,7 @@ if (!url || !key) {
   process.exit(1);
 }
 if (!bootstrapSecret) {
-  console.error("BOOTSTRAP_SECRET is required in web/.env.local — refusing to bootstrap over an open endpoint");
+  console.error("BOOTSTRAP_SECRET is required in web/.env.local - refusing to bootstrap over an open endpoint");
   process.exit(1);
 }
 const db = createClient(url, key, { auth: { persistSession: false } });
@@ -41,7 +41,7 @@ if (!admins?.length) {
   if (!email) {
     const { data: first } = await db.from("users").select("id,email").order("created_at").limit(1).maybeSingle();
     if (!first) {
-      console.log("no users yet — sign up at /signup first, then re-run");
+      console.log("no users yet - sign up at /signup first, then re-run");
       process.exit(0);
     }
     email = first.email;

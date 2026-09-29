@@ -1,5 +1,5 @@
 -- =============================================================
--- Hardening migration — run AFTER schema.sql (+ storage.sql).
+-- Hardening migration - run AFTER schema.sql (+ storage.sql).
 -- Idempotent. Fixes audit findings without breaking demo flows.
 -- 1) users role-escalation trigger  2) verified-employer-only job writes
 -- 3) audit insert allowlist  4) contact-prefs privacy-by-default

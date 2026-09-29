@@ -615,7 +615,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
     await attachContacts(rows);
     const results = finalize(rows);
     wev.add({ deep: true, degraded: true, unranked_fallback: true });
-    return Response.json({ results, queryText, searchId, deep: true, degraded: true, deepError: "No strong matches — showing recent profiles." });
+    return Response.json({ results, queryText, searchId, deep: true, degraded: true, deepError: "No strong matches - showing recent profiles." });
   }
 
   try {

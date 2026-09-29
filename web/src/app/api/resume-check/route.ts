@@ -121,13 +121,13 @@ export async function GET(request: Request) {
       }
     }
     if (/accounts\.google\.com|ServiceLogin/i.test(finalUrl)) {
-      return Response.json({ status: "restricted", reason: "Google asks to log in — sharing is off" });
+      return Response.json({ status: "restricted", reason: "Google asks to log in - sharing is off" });
     }
     if (status === 403 || status === 404) {
       return Response.json({ status: "restricted", reason: `Google returned ${status}` });
     }
     if (contentType.includes("text/html")) {
-      return Response.json({ status: "reachable", note: "shared — large files may show one confirm screen" });
+      return Response.json({ status: "reachable", note: "shared - large files may show one confirm screen" });
     }
     if (status !== 0 && (status < 200 || status >= 300)) {
       return Response.json({ status: "unknown", http: status });

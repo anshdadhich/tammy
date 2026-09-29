@@ -38,7 +38,7 @@ export interface JudgeCallOpts {
 export const JUDGE_MAX_TOKENS = 1200;
 export const JUDGE_TIMEOUT_MS = 25000;
 
-export const JUDGE_SYSTEM_PROMPT = `You are an expert Technical Hiring Manager. Evaluate the candidate for the role. No keyword matching — look for evidence of capability and depth.
+export const JUDGE_SYSTEM_PROMPT = `You are an expert Technical Hiring Manager. Evaluate the candidate for the role. No keyword matching - look for evidence of capability and depth.
 Score 4 dimensions (each 0-25):
 1. TECHNICAL DEPTH: CRUD vs hard problems (caching, concurrency, state, design)? Scale/hurdles overcome?
 2. RELEVANCE: does actual past work map to the job's actual problems?

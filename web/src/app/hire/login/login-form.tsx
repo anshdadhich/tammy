@@ -180,7 +180,7 @@ export default function LoginForm({
       window.dispatchEvent(new Event(SESSION_EVENT));
       router.refresh();
     } catch {
-      setCoErr("Network error — try again.");
+      setCoErr("Network error - try again.");
     } finally {
       setCoBusy(false);
     }
@@ -456,7 +456,7 @@ export default function LoginForm({
             placeholder="Optional"
             maxLength={100}
           />
-          <span className="field-hint">Optional — it only labels the session.</span>
+          <span className="field-hint">Optional - it only labels the session.</span>
         </div>
         <div className="field">
           <label className="field-label" htmlFor="hr-email">
@@ -484,7 +484,7 @@ export default function LoginForm({
             </span>
           ) : (
             <span className="field-hint">
-              We email you a one-time code — no password in this build.
+              We email you a one-time code - no password in this build.
             </span>
           )}
         </div>

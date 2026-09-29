@@ -244,7 +244,7 @@ export default function SkillPicker({
               onMouseEnter={() => setActive(-1)}
               onClick={startOther}
             >
-              Other — type my own
+              Other - type my own
             </button>
           </div>
         ) : null}

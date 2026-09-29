@@ -45,7 +45,7 @@ export default function EmailChange({ id, current }: { id: string; current: stri
       }
       setDone(true);
     } catch {
-      setErr("Network error — try again.");
+      setErr("Network error - try again.");
     } finally {
       setBusy(false);
     }
@@ -54,7 +54,7 @@ export default function EmailChange({ id, current }: { id: string; current: stri
   if (done) {
     return (
       <span className="field-hint">
-        Email updated — future sign-in codes go to {next.trim().toLowerCase()}.
+        Email updated - future sign-in codes go to {next.trim().toLowerCase()}.
       </span>
     );
   }

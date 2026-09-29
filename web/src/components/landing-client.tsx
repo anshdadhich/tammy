@@ -45,15 +45,15 @@ const CHECKLIST_STEPS = [
 const MATCH_COPY = {
   describe: {
     title: "Describe the role, not a query.",
-    desc: "Write how you'd brief a teammate — stack, scope, constraints, and seniority. No Boolean gymnastics. Tammy parses intent, not keywords, and surfaces evidence that matches meaning.",
+    desc: "Write how you'd brief a teammate - stack, scope, constraints, and seniority. No Boolean gymnastics. Tammy parses intent, not keywords, and surfaces evidence that matches meaning.",
   },
   search: {
     title: "It explains every score.",
-    desc: "Semantic fit, skill evidence, project depth, constraints and seniority — each weighed from what people actually built, not what they claimed. Every value is real and inspectable, so what lands is a shortlist, not a guess.",
+    desc: "Semantic fit, skill evidence, project depth, constraints and seniority - each weighed from what people actually built, not what they claimed. Every value is real and inspectable, so what lands is a shortlist, not a guess.",
   },
   deep: {
     title: "Deep Read judges the evidence.",
-    desc: "For the top profiles, the judge reads full context — written exhibits, gaps, and risks — then calibrates interview questions. Slower, sharper, and audit-logged so hiring stays accountable.",
+    desc: "For the top profiles, the judge reads full context - written exhibits, gaps, and risks - then calibrates interview questions. Slower, sharper, and audit-logged so hiring stays accountable.",
   },
 } as const;
 

@@ -34,7 +34,7 @@ const siteUrl = resolveSiteUrl();
 export const metadata: Metadata = {
   metadataBase: siteUrl,
   title: {
-    default: "Tammy — Reverse Hiring Platform",
+    default: "Tammy - Reverse Hiring Platform",
     template: "%s · Tammy",
   },
   description:
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Tammy",
-    title: "Tammy — Reverse Hiring Platform",
+    title: "Tammy - Reverse Hiring Platform",
     description:
       "Get discovered, hire fast. Evidence-backed profiles, semantic search, and accountable outreach.",
   },

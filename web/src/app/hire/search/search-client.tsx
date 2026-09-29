@@ -162,7 +162,7 @@ export default function SearchClient({
       }
       if (res.status === 429) {
         setView("compose");
-        setNotice("Rate limit reached — take a short pause and try again.");
+        setNotice("Rate limit reached - take a short pause and try again.");
         return;
       }
       if (res.status === 400 && body?.errors) {
@@ -173,7 +173,7 @@ export default function SearchClient({
       }
       if (!res.ok) {
         setView("compose");
-        setNotice(body?.error || "Search failed — try again.");
+        setNotice(body?.error || "Search failed - try again.");
         return;
       }
       const rows: Row[] = Array.isArray(body?.results) ? body.results : [];
@@ -199,7 +199,7 @@ export default function SearchClient({
       setView("results");
     } catch {
       setView("compose");
-      setNotice("Network error — try again.");
+      setNotice("Network error - try again.");
     } finally {
       if (stageTimer.current) {
         clearInterval(stageTimer.current);
@@ -232,7 +232,7 @@ export default function SearchClient({
         return;
       }
       if (res.status === 429)
-        setNotice("Shortlist rate limit — pause a moment and retry.");
+        setNotice("Shortlist rate limit - pause a moment and retry.");
       setSl((s) => ({ ...s, [id]: "error" }));
     } catch {
       setSl((s) => ({ ...s, [id]: "error" }));
@@ -251,7 +251,7 @@ export default function SearchClient({
           </h2>
           <p className="mt-3 text-[15px] leading-[1.6] text-body">
             Results carry candidate contact channels, so searches sit behind a
-            per-device employer session — one email opens it.
+            per-device employer session - one email opens it.
           </p>
           <Link href="/hire/login" className="btn btn-primary press mt-6">
             Open a session <ArrowRight size={16} aria-hidden="true" />

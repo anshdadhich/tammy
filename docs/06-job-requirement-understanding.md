@@ -1,4 +1,4 @@
-# 06 — Job Requirement Understanding
+# 06 - Job Requirement Understanding
 
 ## Parse job, don't treat as blob
 Extract: must-have, nice-to-have, seniority, domain, exp range, salary, location, remote, responsibilities, implied needs.

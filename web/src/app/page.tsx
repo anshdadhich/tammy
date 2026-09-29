@@ -18,7 +18,7 @@ const FAQS = [
   },
   {
     q: 'What is the "Deep Read Judge" and how are scores formed?',
-    a: "The Deep Read Judge is a structured reasoning model that inspects technical contributions across 5 distinct axes: system scale, architectural depth, operational evidence, verified metrics, and verified seniority. It does not output a mysterious vanity score—it gives the hiring manager written exhibits and specific suggested questions.",
+    a: "The Deep Read Judge is a structured reasoning model that inspects technical contributions across 5 distinct axes: system scale, architectural depth, operational evidence, verified metrics, and verified seniority. It does not output a mysterious vanity score-it gives the hiring manager written exhibits and specific suggested questions.",
   },
   {
     q: "Is Tammy completely free for engineers and builders?",
@@ -351,7 +351,7 @@ export default async function Landing() {
               </h2>
               <p className="text-[17px] leading-[1.6] text-muted max-w-[560px] mt-4">
                 The result gives a hiring manager enough context to decide whether a conversation is
-                worth having—without pretending the system knows more than the evidence says.
+                worth having-without pretending the system knows more than the evidence says.
                 Illustrative example below; live dossiers render from real profiles.
               </p>
             </div>

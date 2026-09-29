@@ -497,7 +497,7 @@ function Body({ label, value }: { label: string; value?: string | null }) {
   if (!v) return null;
   return (
     <p className="mt-2 text-[13.5px] leading-[1.65] text-body whitespace-pre-line">
-      <span className="font-semibold text-ink">{label} — </span>
+      <span className="font-semibold text-ink">{label} - </span>
       {v}
     </p>
   );
@@ -649,7 +649,7 @@ export default async function TalentPage({
                 One moment.
               </h1>
               <p className="mt-3 text-[15.5px] leading-[1.6] text-body">
-                This record is being read too often right now — give it a minute
+                This record is being read too often right now - give it a minute
                 and reload.
               </p>
               <div className="flex flex-wrap gap-3 mt-6">
@@ -1012,7 +1012,7 @@ export default async function TalentPage({
 
               {!summary && !hasAnyEvidence ? (
                 <div className="empty-note mt-8">
-                  This record is still being assembled — summary, skills, and the
+                  This record is still being assembled - summary, skills, and the
                   search embedding fill in as background processing completes.
                 </div>
               ) : null}

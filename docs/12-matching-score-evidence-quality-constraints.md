@@ -1,4 +1,4 @@
-# 12 — Scores, Evidence, Constraints, Bias, LLM Use
+# 12 - Scores, Evidence, Constraints, Bias, LLM Use
 
 ## Score composition (adjust per niche)
 `final = 0.25*semantic + 0.25*skill_evidence + 0.20*project_depth + 0.15*constraint_fit + 0.10*seniority + 0.05*freshness/evidence`
@@ -11,7 +11,7 @@ Hard exclusions/downranks: not open, impossible location, huge salary gap, missi
 Strong = deployed + repo + demo + role + metrics + real users + beyond CRUD + problem-solving. Weak = skill listed once, no links, tutorial clone. Rank strong higher.
 
 ## Avoid keyword limits (examples)
-"High-traffic" ≈ "5k req/min optimized". "Independent startup-minded" ≈ solo+deploy+iteration evidence. Don't over-infer — unknown if no evidence.
+"High-traffic" ≈ "5k req/min optimized". "Independent startup-minded" ≈ solo+deploy+iteration evidence. Don't over-infer - unknown if no evidence.
 
 ## LLM use carefully
 Use for: summarization, extraction, rerank, explanation. Don't rely alone: hallucinates, biased, misses hard constraints, inconsistent. DB+filters = control, scoring = explainability.

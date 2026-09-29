@@ -1,4 +1,4 @@
-# 03 — Database vs .txt, Architecture, Full Schema
+# 03 - Database vs .txt, Architecture, Full Schema
 
 ## Decision: database as source of truth
 Use **PostgreSQL** as source of truth. Do NOT use .txt as primary.
@@ -8,10 +8,10 @@ Why not .txt primary:
 - Can't answer: "backend Bangalore 2y+ remote <80k with payments experience"
 
 Best setup:
-1. **PostgreSQL** (or Supabase Postgres) — structured fields
-2. **pgvector** in Postgres — vector search. Alternative: Qdrant/Weaviate if separate vector DB needed. MVP: Postgres + pgvector is simplest strongest.
-3. **Object storage** (S3 / R2 / Supabase Storage) — resume PDFs, photos, portfolio, exported .md/.txt
-4. **Generated summary** — stored in DB as markdown text, optionally exported as .md file. Secondary artifact only.
+1. **PostgreSQL** (or Supabase Postgres) - structured fields
+2. **pgvector** in Postgres - vector search. Alternative: Qdrant/Weaviate if separate vector DB needed. MVP: Postgres + pgvector is simplest strongest.
+3. **Object storage** (S3 / R2 / Supabase Storage) - resume PDFs, photos, portfolio, exported .md/.txt
+4. **Generated summary** - stored in DB as markdown text, optionally exported as .md file. Secondary artifact only.
 
 Layering:
 - DB: structured data, skills, embeddings, privacy, jobs, searches, matches, shortlists, contact logs, audit

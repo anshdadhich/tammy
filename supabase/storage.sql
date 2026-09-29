@@ -1,5 +1,5 @@
 -- =============================================================
--- Reverse-Hiring MVP — Supabase Storage buckets + policies
+-- Reverse-Hiring MVP - Supabase Storage buckets + policies
 -- Sources: docs/09-privacy-visibility-open-contact-model.md
 --          (OPEN-CONTACT: verified employers see matched files)
 --

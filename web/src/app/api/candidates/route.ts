@@ -402,7 +402,7 @@ export async function POST(request: Request) {
   const row: Record<string, unknown> = {
     user_id: userId,
     full_name: c.name,
-    headline: c.headline || `${c.role} — ${c.domain}`,
+    headline: c.headline || `${c.role} - ${c.domain}`,
     domain: c.domain,
     current_position: c.current_role || c.role,
     total_experience_years: c.exp ?? 0,
@@ -660,7 +660,7 @@ export async function PUT(request: Request) {
     const role = (c.role || "").trim();
     const domain = (c.domain || "").trim();
     if (head) patch.headline = head;
-    else if (role || domain) patch.headline = [role, domain].filter(Boolean).join(" — ");
+    else if (role || domain) patch.headline = [role, domain].filter(Boolean).join(" - ");
   }
   if (present.has("domain")) patch.domain = c.domain;
   if (present.has("current_role") || present.has("role")) {

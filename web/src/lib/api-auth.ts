@@ -49,7 +49,7 @@ function tryDecode(v: string): string | null {
   }
 }
 
-function signaturesEqual(a: string, b: string): boolean {
+export function signaturesEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a, "utf8");
   const bb = Buffer.from(b, "utf8");
   if (ab.length !== bb.length || ab.length === 0) return false;

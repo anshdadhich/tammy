@@ -28,7 +28,7 @@ export default function NotFound() {
             className="rise text-[17px] leading-[1.6] text-muted max-w-[560px] mt-5"
             style={{ "--d": "160ms" } as React.CSSProperties}
           >
-            That page doesn&apos;t exist — or the profile it points to is
+            That page doesn&apos;t exist - or the profile it points to is
             private. The record you&apos;re after might just be off the grid.
           </p>
           <div

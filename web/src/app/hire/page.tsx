@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 const STEPS = [
   {
     title: "Write the brief",
-    body: "Title, must-haves, constraints — the same five minutes you'd spend briefing a recruiter, in plain sentences.",
+    body: "Title, must-haves, constraints - the same five minutes you'd spend briefing a recruiter, in plain sentences.",
   },
   {
     title: "Read the shortlist",
@@ -89,7 +89,7 @@ export default function HirePage() {
                   Your brief
                 </p>
                 <p className="mt-2 text-[15px] leading-[1.55] text-ink font-medium">
-                  Senior React engineer — someone who has shipped design systems,
+                  Senior React engineer - someone who has shipped design systems,
                   not just used them.
                 </p>
                 <div className="mt-5 pt-4 border-t border-line grid gap-4">
@@ -157,7 +157,7 @@ export default function HirePage() {
               </h2>
               <p className="mt-4 text-[15.5px] leading-[1.6] text-body max-w-[46ch]">
                 Five parts, fixed weights, every part visible in the results.
-                When someone ranks, you can see which dimension carried them —
+                When someone ranks, you can see which dimension carried them -
                 and which one didn&apos;t.
               </p>
             </div>
@@ -187,7 +187,7 @@ export default function HirePage() {
               Describe your first hire.
             </h2>
             <p className="mt-4 text-[15.5px] leading-[1.6] text-muted max-w-[52ch] mx-auto">
-              Search runs behind an employer session — one email on this device
+              Search runs behind an employer session - one email on this device
               opens it. Then it&apos;s a brief away.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3 mt-7">

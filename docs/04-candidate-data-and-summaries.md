@@ -1,11 +1,11 @@
-# 04 — Candidate Data Collection + No-BS Summaries
+# 04 - Candidate Data Collection + No-BS Summaries
 
 ## Intake form sections (detailed but manageable)
 1. Basic: name, email, phone, location, optional photo (visible directly in open model)
 2. Professional identity: desired role, domain, years exp, current role, headline
 3. Skills: free entry → normalized to canonical (JS→JavaScript, ReactJS→React, Postgres→PostgreSQL, ML→Machine Learning)
 4. Work experience (per entry): company, title, dates, description, achievements, tech stack, evidence links. Push for specific achievements, not generic duties.
-5. Projects (most important — see 05): title, description, problem solved, tech, role, links (live/repo/demo), impact, users/scale, hardest challenge, what you personally built, project type
+5. Projects (most important - see 05): title, description, problem solved, tech, role, links (live/repo/demo), impact, users/scale, hardest challenge, what you personally built, project type
 6. Education: institution, degree, field, years, achievements
 7. Preferences: min salary/stipend + currency + frequency + negotiable, location pref, remote pref, relocation, availability, notice
 8. Consent: processing + visible-to-verified-employers agreement, withdraw anytime, delete/export rights

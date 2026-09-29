@@ -13,7 +13,7 @@
 -- RPC + /hire UI return rows WITHOUT a VOYAGE_API_KEY (all distances tie
 -- at ~1.0, so results fall back to recency order). Re-running the real
 -- pipeline overwrites these with true embeddings. Demo rows use
--- @demo.local emails — delete them with:
+-- @demo.local emails - delete them with:
 --   DELETE FROM public.candidates WHERE contact_email LIKE '%@demo.local';
 -- =============================================================
 

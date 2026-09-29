@@ -1,4 +1,4 @@
-# Tammy — file once, get discovered
+# Tammy - file once, get discovered
 
 Next.js App Router: candidate portfolio pages + HR chat search + JSON API.
 
@@ -11,7 +11,7 @@ npm run dev     # http://localhost:3000
 
 ## Pages
 
-- `/` — landing (candidates / employers / match engine / FAQ sections)
+- `/` - landing (candidates / employers / match engine / FAQ sections)
 
 All other UI routes (`/join`, `/start`, `/hire/*`, `/talent/*`, `/u/*`) were removed; only the landing page and the JSON API remain. Former nav/CTA links to those routes now 404.
 

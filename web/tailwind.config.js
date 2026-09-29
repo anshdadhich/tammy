@@ -9,7 +9,7 @@ module.exports = {
         sans: ['var(--font-geist-sans)', 'Geist', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['var(--font-geist-mono)', '"Geist Mono"', 'monospace'],
       },
-      // Semantic color tokens — every value is a CSS variable defined in
+      // Semantic color tokens - every value is a CSS variable defined in
       // globals.css, so dark mode flips the palette by overriding variables
       // and never by branching markup (shadcn-style semantic tokens).
       colors: {

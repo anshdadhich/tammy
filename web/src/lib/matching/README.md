@@ -1,10 +1,10 @@
-# matching/ — live retrieval and scoring
+# matching/ - live retrieval and scoring
 
 Flow: `job -> embed -> match_chunks RPC (filtered vector + FTS) -> group per candidate -> rules score (+evidence/gaps) -> optional judge top10 -> blend`
 
 | File | Covers |
 |---|---|
-| `types.ts` | `CandidateChunk`, `ChunkMetadata`, `JobReq`, `SubScores`, `HybridHit`, `MatchScore`, `MatchLevel` |
+| `types.ts` | `CandidateChunk`, `ChunkMetadata`, `JobReq`, `SubScores`, `MatchLevel` |
 | `voyage.ts` | `embedTexts`, `embedChunks`, `embedQuery`, `buildJobQueryText`, dim asserts. Needs `VOYAGE_API_KEY`. |
 | `hybrid.ts` | `buildFtsQueryText` / `buildFtsTerms` (per-term keyword list feeding the RPC `p_fts_terms` OR arm). The vector arm runs inside `match_chunks` SQL, not here. |
 | `judge.ts` | `JudgeProvider`, `defaultOpenAIProvider`, `judgeCandidate`, `judgeTop` (parallel, timeouts, null-tolerant), `parseJudgeOutput`. |
@@ -12,8 +12,8 @@ Flow: `job -> embed -> match_chunks RPC (filtered vector + FTS) -> group per can
 
 ## Env
 
-- `VOYAGE_API_KEY` — embeddings
-- `OPENROUTER_API_KEY` (or `LLM_API_KEY`) + optional `JUDGE_MODEL`, `OPENROUTER_BASE_URL` — judge
+- `VOYAGE_API_KEY` - embeddings
+- `OPENROUTER_API_KEY` (or `LLM_API_KEY`) + optional `JUDGE_MODEL`, `OPENROUTER_BASE_URL` - judge
 
 ## Notes
 

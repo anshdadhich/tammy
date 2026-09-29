@@ -63,7 +63,7 @@ function CandidateRow({
         </span>
       </span>
       <span className="sq-cand-side">
-        <span className="sq-cand-num">{score ?? "—"}</span>
+        <span className="sq-cand-num">{score ?? "-"}</span>
         <span className="sq-cand-bar">
           <i style={{ width: `${score ?? 0}%` }} />
         </span>

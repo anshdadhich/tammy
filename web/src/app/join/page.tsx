@@ -6,7 +6,7 @@ import JoinWizard from "./join-wizard";
 export const metadata: Metadata = {
   title: "Build your page",
   description:
-    "Seven steps — basics, profile, experience, projects, background, private, review. Drafts autosave, and you review everything before your profile enters employer searches.",
+    "Seven steps - basics, profile, experience, projects, background, private, review. Drafts autosave, and you review everything before your profile enters employer searches.",
 };
 
 export default function JoinPage() {

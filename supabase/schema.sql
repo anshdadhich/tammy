@@ -1,9 +1,9 @@
 -- =============================================================
--- Reverse-Hiring MVP — Supabase / Postgres schema
+-- Reverse-Hiring MVP - Supabase / Postgres schema
 -- Sources: docs/03-database-vs-txt-and-schema.md (source of truth),
 --          docs/09-privacy-visibility-open-contact-model.md (OPEN-CONTACT)
 --
--- Model: OPEN-CONTACT — NO hidden gate, NO unlock flow.
+-- Model: OPEN-CONTACT - NO hidden gate, NO unlock flow.
 --   Verified employers see full matched profiles immediately,
 --   including contact fields (email/phone/links).
 --   contact_log is audit-only, not an approval gate.
@@ -362,7 +362,7 @@ CREATE TRIGGER trg_jobs_updated
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- =============================================================
--- 2. INDEXES — structured + full-text/trigram + vector
+-- 2. INDEXES - structured + full-text/trigram + vector
 -- =============================================================
 
 -- ----- structured (btree / gin on arrays) -----
@@ -474,14 +474,14 @@ CREATE INDEX IF NOT EXISTS idx_job_req_embedding_hnsw_nn
   WHERE embedding IS NOT NULL;
 
 -- =============================================================
--- 3. RLS — OPEN-CONTACT model
+-- 3. RLS - OPEN-CONTACT model
 --   * NO anon access: no policies for anon => public gets nothing.
 --   * Candidates: full control of own rows.
 --   * Verified employers: SELECT visible candidates + all child data
 --     INCLUDING contact_* columns (no gate), plus own jobs/searches/
 --     matches/shortlists/contact_log writes.
 --   * Candidates can SELECT contact_log + matches rows about themselves
---     (who viewed/contacted them) — transparency without a gate.
+--     (who viewed/contacted them) - transparency without a gate.
 --   * Admins: everything. service_role bypasses RLS (backends/embeddings).
 -- =============================================================
 

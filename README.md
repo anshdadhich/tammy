@@ -1,4 +1,4 @@
-# Reverse Hiring — get discovered, hire fast
+# Reverse Hiring - get discovered, hire fast
 
 Candidates create one deep profile once. Employers search with AI understanding
 (not keywords) and see best matches with contact directly (open-contact model:
@@ -6,23 +6,23 @@ no unlock gate; `contact_log` is audit-only).
 
 Monorepo layout: `web/` (Next.js app: portfolio pages + HR search + JSON API) + `supabase/` (SQL) + `docs/` (blueprint).
 
-Flow: landing `/` only — all app UI routes (`/join`, `/talent/[id]`, `/hire/*`, `/start`, `/u/*`) were removed; the JSON API and background pipeline remain fully functional.
+Flow: landing `/` only - all app UI routes (`/join`, `/talent/[id]`, `/hire/*`, `/start`, `/u/*`) were removed; the JSON API and background pipeline remain fully functional.
 
 ## Quickstart
 
-### 1. Supabase SQL — run in this order (SQL Editor)
+### 1. Supabase SQL - run in this order (SQL Editor)
 
-1. `supabase/schema.sql` — tables, indexes, RLS
-2. `supabase/seed_skills.sql` — ~40 canonical skills
-3. `supabase/match_chunks.sql` — `match_chunks` RPC for vector search
-4. `supabase/seed_demo.sql` — 6 demo candidates + 2 jobs + zero-vector chunks
+1. `supabase/schema.sql` - tables, indexes, RLS
+2. `supabase/seed_skills.sql` - ~40 canonical skills
+3. `supabase/match_chunks.sql` - `match_chunks` RPC for vector search
+4. `supabase/seed_demo.sql` - 6 demo candidates + 2 jobs + zero-vector chunks
    (lets search/API work with no Voyage key; real pipeline overwrites vectors)
-5. `supabase/oss_contributions.sql` — open source contributions table + RLS
+5. `supabase/oss_contributions.sql` - open source contributions table + RLS
    (required for the Open Source profile section; safe to re-run anytime)
 
 Requires extensions: `vector`, `pg_trgm`, `unaccent`, `pgcrypto` (created by schema.sql).
 
-### 2. Env vars (names only — copy `web/.env.example` to `web/.env.local`)
+### 2. Env vars (names only - copy `web/.env.example` to `web/.env.local`)
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -32,9 +32,9 @@ Requires extensions: `vector`, `pg_trgm`, `unaccent`, `pgcrypto` (created by sch
 - `JUDGE_MODEL`
 - `INNGEST_EVENT_KEY`
 - `INNGEST_SIGNING_KEY`
-- `RESEND_API_KEY` (optional — email sends are graceful no-ops without it)
-- `RESEND_FROM` (optional — defaults to Resend onboarding sender)
-- `NEXT_PUBLIC_SITE_URL` (optional — used in email links)
+- `RESEND_API_KEY` (optional - email sends are graceful no-ops without it)
+- `RESEND_FROM` (optional - defaults to Resend onboarding sender)
+- `NEXT_PUBLIC_SITE_URL` (optional - used in email links)
 
 ### 3. Run the app
 
@@ -44,7 +44,7 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-Pages: `/` (landing) only — UI routes (`/join`, `/talent/[id]`, `/hire/search`, `/hire/dashboard`, legacy `/start`, `/u/*`) were removed; the JSON API is unchanged.
+Pages: `/` (landing) only - UI routes (`/join`, `/talent/[id]`, `/hire/search`, `/hire/dashboard`, legacy `/start`, `/u/*`) were removed; the JSON API is unchanged.
 
 ### 4. Inngest dev (background pipeline: normalize → summary → depth → chunks → embed)
 
@@ -75,7 +75,7 @@ Checks `GET /` → 200 (JSON index) and `POST /api/search` with `{}` → 400.
 - `POST /api/candidates/lookup` `{ email }` → `{ exists }` (rate-limited existence check; id never disclosed; full bundles only via `GET /api/candidates?id=`)
 - `POST /api/contacts` `{ candidate_id, job_id?, employer_id?, channel?, message? }` → audit-logs + emails candidate (best-effort)
 
-All email sends are wrapped in try/catch — missing `RESEND_API_KEY` never breaks an API response.
+All email sends are wrapped in try/catch - missing `RESEND_API_KEY` never breaks an API response.
 
 ## Deploy notes (Vercel + Supabase)
 

@@ -1,4 +1,4 @@
-# 02 — Product Flow (Open-Contact Version)
+# 02 - Product Flow (Open-Contact Version)
 
 > REVISION: No hidden-contact gate. No anonymized stage. No candidate approve-to-reveal. Verified employer sees full contact immediately on match.
 
@@ -8,13 +8,13 @@ Join as to-get-hired, fill form:
 - professional identity: desired role, domain, years exp, current role, headline
 - skills (normalized later)
 - work experience (per-role entries)
-- projects (structured — see 05)
+- projects (structured - see 05)
 - education
 - links: GitHub, portfolio, LinkedIn, resume PDF
 - desired role/domain, min salary/stipend + currency + frequency + negotiable flag
 - location preference, remote preference, relocation openness
 - availability, notice period
-- photo (optional — visible directly in open model, see bias note in 12)
+- photo (optional - visible directly in open model, see bias note in 12)
 - consent for processing + visibility toggle (visible / hidden / inactive)
 
 System after submit (async background job):
@@ -49,9 +49,9 @@ Press **Search** → system returns:
 - full contact info visible immediately (name, email, phone, links, photo)
 - actions: shortlist, save, mark contacted/hired, report bad profile
 
-No free browsing of all candidates — only matched results per job search. Rate-limited, audit-logged.
+No free browsing of all candidates - only matched results per job search. Rate-limited, audit-logged.
 
-## C. Hiring flow (open — no approval)
+## C. Hiring flow (open - no approval)
 1. Employer searches
 2. Sees full matched profiles with contact
 3. Shortlists / contacts directly via email/phone
@@ -59,6 +59,6 @@ No free browsing of all candidates — only matched results per job search. Rate
 5. Optional: candidate can still set visibility off to opt-out of future searches
 
 Why open per your request:
-- fastest for HR — "just get candidates fastly"
+- fastest for HR - "just get candidates fastly"
 - no waiting for candidate accept
-- Trade-off: more spam/exposure risk, more bias risk — mitigations in 09.
+- Trade-off: more spam/exposure risk, more bias risk - mitigations in 09.

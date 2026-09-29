@@ -1,4 +1,4 @@
-# 08 — Retrieval, Chunking, Embeddings
+# 08 - Retrieval, Chunking, Embeddings
 
 ## Don't embed whole profile as blob
 Split into meaningful chunks: summary, per-experience, per-project, education, skills.
@@ -39,7 +39,7 @@ Enables filtered vector search: domain=frontend + skill=React + exp>=2 + remote_
 ## Source of truth
 Postgres is the source of truth: profiles, structured fields, and rows live there.
 The pipeline only manages derived retrieval artifacts (chunks, embeddings) and can be
-re-run from the profile rows at any time — search never reads anything but Postgres.
+re-run from the profile rows at any time - search never reads anything but Postgres.
 
 ## Implementation
 MVP: Next.js + Postgres + pgvector + LLM API + embedding API + background queue (BullMQ/Celery) + auth + storage + email.

@@ -70,7 +70,7 @@ export default function SettingsClient() {
               Signed in as {viewer.name ?? viewer.email}
             </h2>
             <p className="mt-2 text-[15px] leading-[1.6] text-body">
-              {viewer.name ? `${viewer.email} — ` : ""}
+              {viewer.name ? `${viewer.email} - ` : ""}
               {viewer.kind === "hr"
                 ? "Employer session on this device."
                 : "Candidate page session."}
@@ -98,7 +98,7 @@ export default function SettingsClient() {
               Not signed in
             </h2>
             <p className="mt-2 text-[15px] leading-[1.6] text-body">
-              Pick a path — build your candidate page or open an employer session.
+              Pick a path - build your candidate page or open an employer session.
             </p>
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Link href="/join" className="btn btn-primary press">
@@ -120,7 +120,7 @@ export default function SettingsClient() {
           Theme
         </h2>
         <p className="mt-2 text-[15px] leading-[1.6] text-body">
-          Light or dark — applies across the app.
+          Light or dark - applies across the app.
         </p>
         <div className="seg mt-5" role="group" aria-label="Theme">
           <button

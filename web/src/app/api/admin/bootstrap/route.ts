@@ -1,20 +1,9 @@
-import { timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase";
 import { rateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { readJsonBody } from "@/lib/http";
+import { signaturesEqual as secretsEqual } from "@/lib/api-auth";
 
 const MAX_EMAIL_LEN = 320;
-
-function secretsEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
-  if (ab.length !== bb.length || ab.length === 0) return false;
-  try {
-    return timingSafeEqual(ab, bb);
-  } catch {
-    return false;
-  }
-}
 
 export async function GET() {
   return Response.json(
@@ -29,7 +18,7 @@ export async function POST(request: Request) {
   const requiredSecret = process.env.BOOTSTRAP_SECRET;
   if (!requiredSecret) {
     return Response.json(
-      { error: "bootstrap closed — server not configured" },
+      { error: "bootstrap closed - server not configured" },
       { status: 403 },
     );
   }
@@ -40,7 +29,7 @@ export async function POST(request: Request) {
   const bodySecret = typeof body?.token === "string" ? body.token : "";
   const provided = headerSecret || bodySecret;
   if (!provided || !secretsEqual(provided, requiredSecret)) {
-    return Response.json({ error: "bootstrap closed — invalid token" }, { status: 403 });
+    return Response.json({ error: "bootstrap closed - invalid token" }, { status: 403 });
   }
   const rawEmail =
     (typeof body?.email === "string" && body.email) ||
@@ -60,11 +49,11 @@ export async function POST(request: Request) {
   const db = supabaseAdmin();
   const existing = await db.from("users").select("id").eq("role", "admin").limit(1);
   if (existing.error) {
-    return Response.json({ error: "bootstrap closed — try again" }, { status: 403 });
+    return Response.json({ error: "bootstrap closed - try again" }, { status: 403 });
   }
   const rows = existing.data as { id: string }[] | null;
   if (rows && rows.length > 0) {
-    return Response.json({ error: "bootstrap closed — an admin already exists" }, { status: 403 });
+    return Response.json({ error: "bootstrap closed - an admin already exists" }, { status: 403 });
   }
   const { data } = await db
     .from("users")
@@ -73,7 +62,7 @@ export async function POST(request: Request) {
     .select("id, email, role")
     .single();
   if (!data) {
-    return Response.json({ error: "email not found — sign up first" }, { status: 404 });
+    return Response.json({ error: "email not found - sign up first" }, { status: 404 });
   }
   return Response.json({ ok: true, admin: data });
 }

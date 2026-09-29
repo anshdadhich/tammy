@@ -35,12 +35,12 @@ export default function VisibilityToggle({
         return;
       }
       if (res.status === 429) {
-        setErr("Rate limited — try again in a minute.");
+        setErr("Rate limited - try again in a minute.");
         return;
       }
       setErr("Couldn't change visibility.");
     } catch {
-      setErr("Network error — try again.");
+      setErr("Network error - try again.");
     } finally {
       setBusy(false);
     }

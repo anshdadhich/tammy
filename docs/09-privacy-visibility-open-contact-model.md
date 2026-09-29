@@ -1,4 +1,4 @@
-# 09 — Privacy & Visibility (Open-Contact Model)
+# 09 - Privacy & Visibility (Open-Contact Model)
 
 > Your instruction applied: **DO NOT hide contact info until approval/unlock.** This doc replaces all hidden-gate versions.
 
@@ -6,7 +6,7 @@
 - Candidates cannot browse each other. No public directory, no public URLs.
 - Only verified/approved employers can search. Must have job intent. Rate-limited, anti-scrape.
 - Employers see ONLY matched results per search, not full DB dump.
-- On match: full profile visible immediately — name, headline, summary, skills, experience, projects, education, salary/availability, photo (if provided), email, phone, links.
+- On match: full profile visible immediately - name, headline, summary, skills, experience, projects, education, salary/availability, photo (if provided), email, phone, links.
 - No anonymized stage, no request-to-reveal, no candidate accept-to-share.
 - `contact_log` replaces approval table: log who viewed/contacted whom when.
 - `audit_logs`: every view/shortlist/contact/export logged.
@@ -27,7 +27,7 @@
 - no scraping people in without consent
 
 ## Photo note (open model)
-Original warning: photos cause gender/age/appearance bias; hide early. In open model you chose speed over that protection — photo visible immediately if candidate uploads. Mitigation: make photo optional, tell candidates it's directly visible, keep evaluation evidence-first in UI (skills/projects above photo/contact).
+Original warning: photos cause gender/age/appearance bias; hide early. In open model you chose speed over that protection - photo visible immediately if candidate uploads. Mitigation: make photo optional, tell candidates it's directly visible, keep evaluation evidence-first in UI (skills/projects above photo/contact).
 
 ## Why open
-Per your "HR can just get candidates fastly" — zero wait, direct outreach. Trade-off accepted: higher spam/exposure vs speed.
+Per your "HR can just get candidates fastly" - zero wait, direct outreach. Trade-off accepted: higher spam/exposure vs speed.

@@ -38,7 +38,7 @@ function resolveSiteUrl(): string {
   const raw = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
   const fallback = "https://example.com";
   if (process.env.NODE_ENV === "production" && !raw) {
-    console.warn("[email] NEXT_PUBLIC_SITE_URL unset in production — links fall back to example.com");
+    console.warn("[email] NEXT_PUBLIC_SITE_URL unset in production - links fall back to example.com");
   }
   const candidate = raw || (process.env.NODE_ENV === "production" ? fallback : "http://localhost:3000");
   try {
@@ -59,12 +59,12 @@ export async function sendEmail(
 ): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.warn("[email] RESEND_API_KEY missing — skipping send");
+    console.warn("[email] RESEND_API_KEY missing - skipping send");
     return { skipped: true, reason: "RESEND_API_KEY missing" };
   }
   const toAddr = String(to ?? "").trim();
   if (!isValidEmail(toAddr)) {
-    console.warn("[email] invalid recipient — skipping send");
+    console.warn("[email] invalid recipient - skipping send");
     return { skipped: true, reason: "invalid recipient" };
   }
   const safeSubject = sanitizeSubject(subject);
@@ -76,7 +76,7 @@ export async function sendEmail(
     const rawFrom = (process.env.RESEND_FROM ?? "Reverse Hiring <onboarding@resend.dev>").trim();
     const fromAddr = extractEmailAddress(rawFrom);
     if (!fromAddr) {
-      console.warn("[email] invalid sender — skipping send");
+      console.warn("[email] invalid sender - skipping send");
       return { skipped: true, reason: "invalid sender" };
     }
     const { data, error } = await resend.emails.send({
@@ -102,7 +102,7 @@ function shell(title: string, body: string): string {
     + `<h2 style="font-size:20px;margin:0 0 12px">${title}</h2>`
     + body
     + `<hr style="border:none;border-top:1px solid #e4e4e7;margin:24px 0" />`
-    + `<p style="font-size:12px;color:#71717a">Reverse Hiring — account email about your profile. Manage visibility anytime from your talent page.</p>`
+    + `<p style="font-size:12px;color:#71717a">Reverse Hiring - account email about your profile. Manage visibility anytime from your talent page.</p>`
     + `</div>`;
 }
 
@@ -117,8 +117,8 @@ export function profileReadyEmail(name: string, candidateId?: string): {
     subject: sanitizeSubject("Your Reverse Hiring profile is live"),
     html: shell(
       `Hi ${safe}, your profile is ready 🎉`,
-      `<p>Your deep profile is now visible to verified employers. You don't need to apply anywhere — employers search the talent database and contact you directly (email/phone shown on match, open-contact model).</p>`
-        + `<p>Tip: keep achievements and project evidence specific — that's what ranks you higher.</p>`
+      `<p>Your deep profile is now visible to verified employers. You don't need to apply anywhere - employers search the talent database and contact you directly (email/phone shown on match, open-contact model).</p>`
+        + `<p>Tip: keep achievements and project evidence specific - that's what ranks you higher.</p>`
         + `<p><a href="${site}${profilePath}">View / update your profile</a></p>`,
     ),
   };
@@ -135,9 +135,9 @@ export function newMatchEmail(
   return {
     subject: sanitizeSubject(`You were shortlisted for ${String(jobTitle || "a role")}`),
     html: shell(
-      `Hi ${safeName} — an employer shortlisted you 🎯`,
+      `Hi ${safeName} - an employer shortlisted you 🎯`,
       `<p>You were shortlisted for <strong>${safeJob}</strong>${safeCompany}.</p>`
-        + `<p>The employer can see your full profile and contact details. Expect to hear from them directly — no cover letter needed.</p>`,
+        + `<p>The employer can see your full profile and contact details. Expect to hear from them directly - no cover letter needed.</p>`,
     ),
   };
 }
@@ -155,7 +155,7 @@ export function contactLoggedEmail(
   return {
     subject: sanitizeSubject("An employer reached out to you"),
     html: shell(
-      `Hi ${safeName} — an employer contacted you 👋`,
+      `Hi ${safeName} - an employer contacted you 👋`,
       `<p>An employer reached out${suffix}.</p>`
         + `<p>They used the contact details on your profile. Check your email/phone for their message.</p>`,
     ),

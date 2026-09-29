@@ -107,19 +107,19 @@ export const EXAMPLES = [
   {
     label: "Designer · fintech · remote",
     prompt:
-      "Product designer for a fintech team — owns flows end to end, from onboarding to payouts, and makes dense data tables legible. Figma-first, comfortable shipping with engineers, remote across India.",
+      "Product designer for a fintech team - owns flows end to end, from onboarding to payouts, and makes dense data tables legible. Figma-first, comfortable shipping with engineers, remote across India.",
     skills: ["Figma"],
   },
   {
     label: "Backend · Node/Postgres",
     prompt:
-      "Backend engineer on Node/Postgres — designs the service boundaries, owns the schema, and keeps p95 honest under load. Payments experience is a plus; rigor is the requirement.",
+      "Backend engineer on Node/Postgres - designs the service boundaries, owns the schema, and keeps p95 honest under load. Payments experience is a plus; rigor is the requirement.",
     skills: ["Node.js", "PostgreSQL"],
   },
   {
     label: "Design systems lead",
     prompt:
-      "Design systems lead — builds and governs the component library two product teams actually ship with. Tokens to documentation, adoption metrics, and a migration plan people finish.",
+      "Design systems lead - builds and governs the component library two product teams actually ship with. Tokens to documentation, adoption metrics, and a migration plan people finish.",
     skills: ["Design Systems", "Figma"],
   },
 ] as const;
@@ -287,9 +287,9 @@ export function aiAnswers(row: Row): [string, string, string, string] {
   if (!a1.length) {
     a1.push(
       profile
-        ? `${cap(profile)} is what this row documents — with no sub-scores returned, it is the closest read on the match.`
+        ? `${cap(profile)} is what this row documents - with no sub-scores returned, it is the closest read on the match.`
         : level
-          ? `No sub-scores or skill list came back — the ${LEVEL_LABEL[level].toLowerCase()} rating is the only match signal.`
+          ? `No sub-scores or skill list came back - the ${LEVEL_LABEL[level].toLowerCase()} rating is the only match signal.`
           : `No sub-scores, skills or rating came back for this row, so there is nothing to read the match against.`,
     );
   }
@@ -306,7 +306,7 @@ export function aiAnswers(row: Row): [string, string, string, string] {
   if (skills.length) {
     a2.push(
       depthless
-        ? `Ships with ${joinList(skills)} — no project or depth figures came back for this row.`
+        ? `Ships with ${joinList(skills)} - no project or depth figures came back for this row.`
         : `Ships with ${joinList(skills)}.`,
     );
   }
@@ -332,8 +332,8 @@ export function aiAnswers(row: Row): [string, string, string, string] {
   if (!a3.length && weakest.length) {
     a3.push(
       lowList.length
-        ? `Weakest sub-scores are ${subText(lowList)} — the softest part of this match.`
-        : `No sub-score dips below 60% — the lowest are ${subText(
+        ? `Weakest sub-scores are ${subText(lowList)} - the softest part of this match.`
+        : `No sub-score dips below 60% - the lowest are ${subText(
             weakest,
           )}, so any shortfall sits outside the scored dimensions.`,
     );
@@ -352,17 +352,17 @@ export function aiAnswers(row: Row): [string, string, string, string] {
   if (a4) a4 = sentence(a4);
   if (!a4) {
     if (score != null && level === "strong") {
-      a4 = `Move them forward — ${score}/100, a strong match${
+      a4 = `Move them forward - ${score}/100, a strong match${
         strongest.length ? `, led by ${subText(strongest)}` : ""
       }.`;
     } else if (score != null && level === "partial") {
       a4 = soft
-        ? `Worth a screen — ${score}/100 overall, but ${soft}; probe those on the first call.`
-        : `Worth a screen — ${score}/100 overall${lowNote}; probe those areas on the first call.`;
+        ? `Worth a screen - ${score}/100 overall, but ${soft}; probe those on the first call.`
+        : `Worth a screen - ${score}/100 overall${lowNote}; probe those areas on the first call.`;
     } else if (score != null && level === "weak") {
-      a4 = `Hold for now — ${score}/100, a weak match${soft ? `; ${soft}` : lowNote}.`;
+      a4 = `Hold for now - ${score}/100, a weak match${soft ? `; ${soft}` : lowNote}.`;
     } else {
-      a4 = `No overall score on this row, so the call stays manual — review the profile before advancing.`;
+      a4 = `No overall score on this row, so the call stays manual - review the profile before advancing.`;
     }
   }
 
@@ -382,7 +382,7 @@ export function salaryLine(
 export function deriveTitle(p: string): string {
   const first =
     p.split(/\n/)[0].trim() || p.trim().split(/\s+/).slice(0, 8).join(" ");
-  const cut = first.search(/\s+[—–|·]\s+/);
+  const cut = first.search(/\s+[-–|·]\s+/);
   let t = cut > 6 ? first.slice(0, cut).trim() : first;
   if (t.length > 90) t = t.slice(0, 90).replace(/\s+\S*$/, "");
   return t || "Open role";
@@ -421,7 +421,7 @@ export function stageDefs(o: {
   if (o.deep) {
     base.push({
       label: "Deep Read judge",
-      sub: "judge reads top profiles in full — slower, sharper",
+      sub: "judge reads top profiles in full - slower, sharper",
     });
   }
   return base;

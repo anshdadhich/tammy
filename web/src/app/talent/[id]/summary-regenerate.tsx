@@ -27,12 +27,12 @@ export default function SummaryRegenerate({ id }: { id: string }) {
         return;
       }
       if (res.status === 429) {
-        setErr("Rate limited — try again in an hour.");
+        setErr("Rate limited - try again in an hour.");
         return;
       }
       setErr("Couldn't start regeneration.");
     } catch {
-      setErr("Network error — try again.");
+      setErr("Network error - try again.");
     } finally {
       setBusy(false);
     }
@@ -50,7 +50,7 @@ export default function SummaryRegenerate({ id }: { id: string }) {
         {done ? "Regenerating…" : busy ? "Starting…" : "Regenerate summary"}
       </button>
       {done ? (
-        <span className="field-hint">A fresh summary is being written — refresh in a minute.</span>
+        <span className="field-hint">A fresh summary is being written - refresh in a minute.</span>
       ) : null}
       {err ? (
         <span className="field-error" role="alert">

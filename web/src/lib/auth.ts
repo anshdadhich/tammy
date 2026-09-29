@@ -17,7 +17,7 @@ export async function requireRole(
   const session = await getSessionUser();
   const row = session?.userRow ?? null;
   if (!session || !row) {
-    throw new AuthError("Unauthorized — sign in first", 401);
+    throw new AuthError("Unauthorized - sign in first", 401);
   }
   if (row.status !== "active") {
     throw new AuthError("Account suspended", 403);
@@ -25,7 +25,7 @@ export async function requireRole(
   const roles = Array.isArray(role) ? role : [role];
   if (!roles.includes(row.role as Role)) {
     throw new AuthError(
-      `Forbidden — requires role: ${roles.join(" or ")}`,
+      `Forbidden - requires role: ${roles.join(" or ")}`,
       403,
     );
   }

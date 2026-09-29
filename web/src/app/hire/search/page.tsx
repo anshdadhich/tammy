@@ -6,7 +6,7 @@ import SearchClient from "./search-client";
 export const metadata: Metadata = {
   title: "Search talent",
   description:
-    "Describe the target role in plain English — requirements are parsed automatically and matched against verified candidates.",
+    "Describe the target role in plain English - requirements are parsed automatically and matched against verified candidates.",
 };
 
 export default async function HireSearchPage() {

@@ -324,7 +324,7 @@ export default function ComposeView({
                 id="refine-skills"
                 label="Skills & tech stack"
                 required
-                hint="The bar to clear — these are the must-haves."
+                hint="The bar to clear - these are the must-haves."
                 placeholder="+ Add skill…"
                 error={errs.must_have}
                 value={mustHave}
@@ -463,7 +463,7 @@ export default function ComposeView({
           </button>
         ) : (
           <p className="empty-note">
-            Your shortlist lands here — ranked, scored, with every sub-score one
+            Your shortlist lands here - ranked, scored, with every sub-score one
             click open.
           </p>
         )}

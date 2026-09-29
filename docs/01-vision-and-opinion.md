@@ -1,4 +1,4 @@
-# 01 — Vision, Opinion, Risks
+# 01 - Vision, Opinion, Risks
 
 ## What you're building
 Reverse-recruiting / talent marketplace:
@@ -8,8 +8,8 @@ Reverse-recruiting / talent marketplace:
 - candidates don't re-apply repeatedly
 
 ## What's good
-- Candidates hate repeated applications — solves real pain.
-- HR hates screening hundreds of resumes — helps them too.
+- Candidates hate repeated applications - solves real pain.
+- HR hates screening hundreds of resumes - helps them too.
 - Structured talent database + AI matching can be very valuable if done well.
 - Private (no candidate-to-candidate browsing) is a strong privacy feature.
 
@@ -34,7 +34,7 @@ Niche = easier growth + easier relevance.
 ## Hard parts are not just "AI search"
 1. profile quality
 2. trust / verification
-3. privacy (revised to open-contact in this blueprint — see 09)
+3. privacy (revised to open-contact in this blueprint - see 09)
 4. matching accuracy (needs deep understanding, not keywords)
 5. getting enough good candidates + employers (cold-start)
 
