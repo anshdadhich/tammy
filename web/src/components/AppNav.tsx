@@ -41,7 +41,7 @@ const SIGNUP_OPTIONS = [
 
 type NavItem = { label: string; href: string };
 
-export default function AppNav({ active: activeProp }: { active?: string } = {}) {
+export default function AppNav({ active: activeProp, initialViewer = null }: { active?: string; initialViewer?: ViewerSession | null } = {}) {
   const pathname = usePathname();
   const isJoin = pathname.startsWith("/join");
   const isHire = pathname.startsWith("/hire");
@@ -57,7 +57,7 @@ export default function AppNav({ active: activeProp }: { active?: string } = {})
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [viewer, setViewer] = useState<ViewerSession | null>(null);
+  const [viewer, setViewer] = useState<ViewerSession | null>(initialViewer);
   const [scrolled, setScrolled] = useState(false);
   const [hideNav, setHideNav] = useState(false);
   const reduceMotion = useReducedMotion();
