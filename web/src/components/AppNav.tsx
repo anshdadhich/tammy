@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Menu, Moon, Sun, X } from "lucide-react";
 import { toggleTheme } from "@/lib/theme";
@@ -13,6 +13,7 @@ import {
   fetchHrSession,
   fetchOwnerSession,
   readHrSession,
+  recallViewer,
   viewerInitials,
   type ViewerSession,
 } from "@/lib/session-client";
@@ -109,16 +110,22 @@ export default function AppNav({ active: activeProp, initialViewer = null, viewe
     if (initialViewer !== null || viewerConfirmed) setViewer(initialViewer);
   }
 
+  useLayoutEffect(() => {
+    const remembered = recallViewer();
+    if (remembered) {
+      setViewer((cur) => cur ?? remembered);
+      setProvisional(false);
+    }
+  }, []);
+
   useEffect(() => {
     let alive = true;
     const settle = (v: ViewerSession | null, authoritative: boolean) => {
       if (!alive) return;
-      if (v !== null) {
+      if (v !== null || authoritative) {
         setViewer(v);
         setProvisional(false);
-        return;
       }
-      if (authoritative) setProvisional(false);
     };
     const load = (authoritative: boolean) => {
       const hr = readHrSession();

@@ -6,6 +6,47 @@ const HR_DISPLAY_COOKIE = "tammy_hr_display";
 
 export const SESSION_EVENT = "tammy-session-changed";
 
+const REMEMBER_KEY = "tammy_viewer";
+const REMEMBER_TTL_MS = 10 * 60_000;
+
+type RememberedViewer = ViewerSession & { ts: number };
+
+export function rememberViewer(v: ViewerSession | null): void {
+  if (typeof document === "undefined") return;
+  try {
+    if (!v) {
+      localStorage.removeItem(REMEMBER_KEY);
+      return;
+    }
+    const rec: RememberedViewer = { ...v, ts: Date.now() };
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify(rec));
+  } catch {
+  }
+}
+
+export function recallViewer(): ViewerSession | null {
+  if (typeof document === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    if (!raw) return null;
+    const rec = JSON.parse(raw) as Partial<RememberedViewer>;
+    if (!rec || typeof rec.email !== "string" || !rec.email.includes("@")) return null;
+    if (rec.kind !== "hr" && rec.kind !== "owner") return null;
+    if (typeof rec.ts !== "number" || Date.now() - rec.ts > REMEMBER_TTL_MS) {
+      localStorage.removeItem(REMEMBER_KEY);
+      return null;
+    }
+    return {
+      kind: rec.kind,
+      name: typeof rec.name === "string" && rec.name.trim() ? rec.name : undefined,
+      email: rec.email,
+      isAdmin: rec.isAdmin === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function notifySessionChanged() {
   window.dispatchEvent(new Event(SESSION_EVENT));
 }
@@ -64,13 +105,15 @@ export async function fetchHrSession(): Promise<ViewerSession | null> {
       isAdmin?: unknown;
     } | null;
     if (data && typeof data.email === "string" && data.email.includes("@")) {
-      return {
+      const viewer: ViewerSession = {
         kind: "hr",
         name:
           typeof data.name === "string" && data.name.trim() ? data.name : undefined,
         email: data.email,
         isAdmin: data.isAdmin === true,
       };
+      rememberViewer(viewer);
+      return viewer;
     }
   } catch {
   }
@@ -83,20 +126,24 @@ export async function fetchOwnerSession(): Promise<ViewerSession | null> {
     const { data: sessData } = await client.auth.getSession();
     const sessEmail = sessData.session?.user?.email;
     if (sessEmail && sessEmail.includes("@")) {
-      return {
+      const viewer: ViewerSession = {
         kind: "owner",
         name: metadataName(sessData.session?.user?.user_metadata),
         email: sessEmail,
       };
+      rememberViewer(viewer);
+      return viewer;
     }
     const { data } = await client.auth.getUser();
     const email = data.user?.email;
     if (!email || !email.includes("@")) return null;
-    return {
+    const viewer: ViewerSession = {
       kind: "owner",
       name: metadataName(data.user?.user_metadata),
       email,
     };
+    rememberViewer(viewer);
+    return viewer;
   } catch {
   }
   return null;
@@ -104,6 +151,7 @@ export async function fetchOwnerSession(): Promise<ViewerSession | null> {
 
 export function clearHrSession() {
   clearDisplayCookie();
+  rememberViewer(null);
   notifySessionChanged();
 }
 
@@ -112,6 +160,7 @@ export async function clearOwnerSession() {
     await supabaseBrowser().auth.signOut();
   } catch {
   }
+  rememberViewer(null);
   notifySessionChanged();
 }
 
