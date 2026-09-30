@@ -388,15 +388,19 @@ export default function AppNav({ active: activeProp, initialViewer = null, viewe
                   className="site-mobile-actions"
                 >
                   {!viewer ? (
-                    <button
-                      type="button"
-                      className="site-nav-cta"
-                      style={{ justifyContent: "center" }}
-                      aria-expanded={authOpen}
-                      onClick={() => setAuthOpen((v) => !v)}
-                    >
-                      Login / Sign up
-                    </button>
+                    provisional ? (
+                      <span className="nav-avatar nav-avatar--ghost" aria-hidden="true" />
+                    ) : (
+                      <button
+                        type="button"
+                        className="site-nav-cta"
+                        style={{ justifyContent: "center" }}
+                        aria-expanded={authOpen}
+                        onClick={() => setAuthOpen((v) => !v)}
+                      >
+                        Login / Sign up
+                      </button>
+                    )
                   ) : null}
                   {!viewer && authOpen ? (
                     <div className="nav-menu nav-menu--inline" role="menu">

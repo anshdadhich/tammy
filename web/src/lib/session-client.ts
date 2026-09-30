@@ -79,7 +79,17 @@ export async function fetchHrSession(): Promise<ViewerSession | null> {
 
 export async function fetchOwnerSession(): Promise<ViewerSession | null> {
   try {
-    const { data } = await supabaseBrowser().auth.getUser();
+    const client = supabaseBrowser();
+    const { data: sessData } = await client.auth.getSession();
+    const sessEmail = sessData.session?.user?.email;
+    if (sessEmail && sessEmail.includes("@")) {
+      return {
+        kind: "owner",
+        name: metadataName(sessData.session?.user?.user_metadata),
+        email: sessEmail,
+      };
+    }
+    const { data } = await client.auth.getUser();
     const email = data.user?.email;
     if (!email || !email.includes("@")) return null;
     return {
