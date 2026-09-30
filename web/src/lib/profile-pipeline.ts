@@ -49,7 +49,11 @@ export const processProfile = inngest.createFunction(
     }
 
     const bundle = await step.run("fetch-context", async () => {
-      const [{ data: projects }, { data: experiences }, { data: skillRows }] = await Promise.all([
+      const [
+        { data: projects, error: projectsErr },
+        { data: experiences, error: expErr },
+        { data: skillRows, error: skillsErr },
+      ] = await Promise.all([
         db
           .from("projects")
           .select("id, title, description, tech_stack, impact_summary")
@@ -67,6 +71,9 @@ export const processProfile = inngest.createFunction(
           .eq("candidate_id", candidateId)
           .limit(50),
       ]);
+      if (projectsErr) throw projectsErr;
+      if (expErr) console.error(`[pipeline] experiences read failed for ${candidateId}`);
+      if (skillsErr) console.error(`[pipeline] skills read failed for ${candidateId}`);
       const skills = ((skillRows ?? []) as unknown as { skills: { name: string } | { name: string }[] | null }[])
         .flatMap((s) => (Array.isArray(s.skills) ? s.skills : s.skills ? [s.skills] : []))
         .map((s) => s.name)

@@ -48,8 +48,8 @@ export async function revealedCandidateIds(
   const out = new Set<string>();
   try {
     const [{ data: sl }, { data: cl }] = await Promise.all([
-      db.from("shortlists").select("candidate_id").eq("employer_id", employerId).limit(2000),
-      db.from("contact_log").select("candidate_id").eq("employer_id", employerId).limit(2000),
+      db.from("shortlists").select("candidate_id").eq("employer_id", employerId).limit(10000),
+      db.from("contact_log").select("candidate_id").eq("employer_id", employerId).limit(10000),
     ]);
     for (const r of ((sl ?? []) as { candidate_id: string }[])) {
       if (r.candidate_id) out.add(String(r.candidate_id));

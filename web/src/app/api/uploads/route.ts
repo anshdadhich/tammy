@@ -111,6 +111,13 @@ function sniffFile(ext: string, bytes: Uint8Array): { ok: boolean; reason?: stri
 export async function POST(request: Request) {
   const rl = rateLimit(request, { key: "uploads-post", limit: 20, windowMs: 10 * 60_000 });
   if (!rl.ok) return rateLimitResponse(rl.retryAfterMs);
+  const clRaw = request.headers.get("content-length");
+  if (clRaw !== null) {
+    const cl = Number(clRaw);
+    if (Number.isFinite(cl) && cl > MAX_BYTES + 1024 * 1024) {
+      return err("file too large: exceeds 10MB");
+    }
+  }
   let form: FormData;
   try {
     form = await request.formData();
@@ -203,11 +210,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    await db
+    const { error: linkErr } = await db
       .from("candidates")
       .update({ [KIND_COLUMN[kind]]: path })
       .eq("id", candidateId);
-  } catch {
+    if (linkErr) throw linkErr;
+  } catch (e) {
+    console.error("[uploads] profile link failed — removing orphan object", redactPii(bucket));
+    try {
+      await db.storage.from(bucket).remove([path]);
+    } catch {
+    }
+    return err("upload failed to attach to profile", 500);
   }
 
   return Response.json(

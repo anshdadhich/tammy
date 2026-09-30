@@ -1,9 +1,9 @@
 -- =============================================================
--- Reverse-Hiring MVP â€” Supabase / Postgres schema
+-- Reverse-Hiring MVP - Supabase / Postgres schema
 -- Sources: docs/03-database-vs-txt-and-schema.md (source of truth),
 --          docs/09-privacy-visibility-open-contact-model.md (OPEN-CONTACT)
 --
--- Model: OPEN-CONTACT â€” NO hidden gate, NO unlock flow.
+-- Model: OPEN-CONTACT - NO hidden gate, NO unlock flow.
 --   Verified employers see full matched profiles immediately,
 --   including contact fields (email/phone/links).
 --   contact_log is audit-only, not an approval gate.
@@ -362,7 +362,7 @@ CREATE TRIGGER trg_jobs_updated
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 -- =============================================================
--- 2. INDEXES â€” structured + full-text/trigram + vector
+-- 2. INDEXES - structured + full-text/trigram + vector
 -- =============================================================
 
 -- ----- structured (btree / gin on arrays) -----
@@ -474,14 +474,14 @@ CREATE INDEX IF NOT EXISTS idx_job_req_embedding_hnsw_nn
   WHERE embedding IS NOT NULL;
 
 -- =============================================================
--- 3. RLS â€” OPEN-CONTACT model
+-- 3. RLS - OPEN-CONTACT model
 --   * NO anon access: no policies for anon => public gets nothing.
 --   * Candidates: full control of own rows.
 --   * Verified employers: SELECT visible candidates + all child data
 --     INCLUDING contact_* columns (no gate), plus own jobs/searches/
 --     matches/shortlists/contact_log writes.
 --   * Candidates can SELECT contact_log + matches rows about themselves
---     (who viewed/contacted them) â€” transparency without a gate.
+--     (who viewed/contacted them) - transparency without a gate.
 --   * Admins: everything. service_role bypasses RLS (backends/embeddings).
 -- =============================================================
 
@@ -937,7 +937,7 @@ CREATE INDEX IF NOT EXISTS idx_job_req_embedding_hnsw_nn
   WHERE embedding IS NOT NULL;
 
 -- =============================================================
--- Reverse-Hiring MVP â€” Supabase Storage buckets + policies
+-- Reverse-Hiring MVP - Supabase Storage buckets + policies
 -- Sources: docs/09-privacy-visibility-open-contact-model.md
 --          (OPEN-CONTACT: verified employers see matched files)
 --
@@ -1245,44 +1245,12 @@ CREATE POLICY oss_employer_read ON public.open_source_contributions
   USING (public.candidate_is_visible(candidate_id) AND public.is_verified_employer());
 
 -- =============================================================
--- Hardening migration â€” run AFTER schema.sql (+ storage.sql).
+-- Hardening migration - run AFTER schema.sql (+ storage.sql).
 -- Idempotent. Fixes audit findings without breaking demo flows.
--- 1) users role-escalation trigger  2) verified-employer-only job writes
+-- 1) (moved to 20260928_role_guard.sql)  2) verified-employer-only job writes
 -- 3) audit insert allowlist  4) contact-prefs privacy-by-default
 -- 5) shortlist/match dedupe  6) hot-path indexes  7) least-privilege grants
 -- =============================================================
-
--- ---------- 1. users: block self-promotion to admin ----------
-CREATE OR REPLACE FUNCTION public.block_user_escalation()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-BEGIN
-  IF public.is_admin() THEN RETURN NEW; END IF;
-  -- Self-signup may only create candidate/employer, active, unverified.
-  IF TG_OP = 'INSERT' THEN
-    IF NEW.role NOT IN ('candidate', 'employer') THEN
-      RAISE EXCEPTION 'role must be candidate or employer';
-    END IF;
-    IF NEW.status <> 'active' THEN
-      RAISE EXCEPTION 'status must be active on signup';
-    END IF;
-    IF NEW.email_verified THEN
-      RAISE EXCEPTION 'email_verified must be false on signup';
-    END IF;
-    RETURN NEW;
-  END IF;
-  -- Non-admins may not change role/status/email_verified of anyone.
-  IF NEW.role IS DISTINCT FROM OLD.role
-     OR NEW.status IS DISTINCT FROM OLD.status
-     OR NEW.email_verified IS DISTINCT FROM OLD.email_verified THEN
-    RAISE EXCEPTION 'only admins may change role/status/verification';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-DROP TRIGGER IF EXISTS users_no_escalation ON public.users;
-CREATE TRIGGER users_no_escalation
-  BEFORE INSERT OR UPDATE ON public.users
-  FOR EACH ROW EXECUTE FUNCTION public.block_user_escalation();
 
 -- ---------- 2. jobs / job_requirements: verified employers only ----------
 DROP POLICY IF EXISTS jobs_owner_all ON public.jobs;
@@ -1531,7 +1499,5 @@ CREATE POLICY quotas_owner_all ON public.employer_quotas
 
 ALTER TABLE public.employers ADD COLUMN IF NOT EXISTS linkedin_url TEXT;
 
-DROP INDEX IF EXISTS public.idx_chunks_embedding_hnsw;
-DROP INDEX IF EXISTS public.idx_job_req_embedding_hnsw;
-DROP INDEX IF EXISTS public.idx_matches_search;
-DROP INDEX IF EXISTS public.candidate_matches_search_cand;
+DROP TRIGGER IF EXISTS users_no_escalation ON public.users;
+DROP FUNCTION IF EXISTS public.block_user_escalation();

@@ -7,6 +7,12 @@ function monthStart(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
 
+function isMissingRelation(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  const code = (e as { code?: string })?.code ?? "";
+  return code === "42P01" || code === "42703" || /PGRST205/i.test(msg) || /does not exist|Could not find the table/i.test(msg);
+}
+
 export async function checkSearchQuota(
   employerId: string,
 ): Promise<{ ok: boolean; used: number; limit: number; plan: PlanName }> {
@@ -16,11 +22,12 @@ export async function checkSearchQuota(
   let plan: PlanName = "free";
   let limit: number = PLAN_LIMITS.free;
   try {
-    const { data } = await db
+    const { data, error } = await db
       .from("employer_quotas")
       .select("plan, search_limit, cycle_started_at")
       .eq("employer_id", employerId)
       .maybeSingle();
+    if (error) throw error;
     const row = data as { plan: string; search_limit: number; cycle_started_at: string } | null;
     if (!row) {
       await db.from("employer_quotas").upsert(
@@ -33,20 +40,34 @@ export async function checkSearchQuota(
         : "free";
       limit = typeof row.search_limit === "number" ? row.search_limit : PLAN_LIMITS[plan];
       if (row.cycle_started_at < cycleStart) {
-        await db.from("employer_quotas").update({ cycle_started_at: cycleStart }).eq("employer_id", employerId);
+        const { error: cycleErr } = await db.from("employer_quotas").update({ cycle_started_at: cycleStart }).eq("employer_id", employerId);
+        if (cycleErr) throw cycleErr;
       }
     }
-  } catch {
+  } catch (e) {
+    if (isMissingRelation(e)) {
+      console.error("[quotas] employer_quotas table missing — run migrations; allowing search");
+      return { ok: true, used: 0, limit, plan };
+    }
+    console.error("[quotas] quota read failed — failing closed");
+    return { ok: false, used: limit, limit, plan };
   }
   let used = 0;
   try {
-    const { count } = await db
+    const { count, error: countErr } = await db
       .from("searches")
       .select("id", { count: "exact", head: true })
       .eq("employer_id", employerId)
       .gte("created_at", cycleStart);
+    if (countErr) throw countErr;
     used = count ?? 0;
-  } catch {
+  } catch (e) {
+    if (isMissingRelation(e)) {
+      console.error("[quotas] searches table missing — allowing search");
+      return { ok: true, used: 0, limit, plan };
+    }
+    console.error("[quotas] usage read failed — failing closed");
+    return { ok: false, used: limit, limit, plan };
   }
   return { ok: used < limit, used, limit, plan };
 }

@@ -147,7 +147,7 @@ export async function GET(request: Request) {
   let ownSearchIds: string[] | null = null;
   if (privilegedLogs && !isOwnerVerified && hrEmployerId) {
     try {
-      const { data: ownSearches } = await db.from("searches").select("id").eq("employer_id", hrEmployerId).limit(500);
+      const { data: ownSearches } = await db.from("searches").select("id").eq("employer_id", hrEmployerId).limit(2000);
       ownSearchIds = ((ownSearches ?? []) as { id: string }[]).map((s) => s.id);
     } catch {
       ownSearchIds = [];
@@ -291,7 +291,7 @@ async function restoreRows(
 async function skillIdMap(
   db: ReturnType<typeof supabaseAdmin>,
   names: unknown,
-): Promise<{ canon: string[]; byName: Map<string, string> }> {
+): Promise<{ canon: string[]; byName: Map<string, string>; ok: boolean }> {
   const raw = Array.isArray(names) ? names : [];
   const canon = normalizeSkills(
     raw
@@ -300,7 +300,7 @@ async function skillIdMap(
       .filter((s) => s.length >= 2 && s.length <= 60 && /^[A-Za-z0-9][A-Za-z0-9 +#./&\-]{1,59}$/.test(s)),
   );
   const byName = new Map<string, string>();
-  if (!canon.length) return { canon, byName };
+  if (!canon.length) return { canon, byName, ok: true };
   try {
     await db.from("skills").upsert(
       canon.map((name) => ({ name })),
@@ -309,13 +309,15 @@ async function skillIdMap(
   } catch {
   }
   try {
-    const { data } = await db.from("skills").select("id, name").in("name", canon);
+    const { data, error } = await db.from("skills").select("id, name").in("name", canon);
+    if (error) throw error;
     for (const s of ((data ?? []) as { id: string; name: string }[])) {
       byName.set(s.name.toLowerCase(), s.id);
     }
   } catch {
+    return { canon, byName, ok: false };
   }
-  return { canon, byName };
+  return { canon, byName, ok: true };
 }
 
 export async function POST(request: Request) {
@@ -574,9 +576,17 @@ export async function POST(request: Request) {
 
   if (warnings.some((w) => /\(code [A-Z_]+\)/.test(w))) {
     try {
-      if (candidateId) await db.from("candidates").delete().eq("id", candidateId);
-      if (createdUser && userId) await db.from("users").delete().eq("id", userId);
-    } catch {
+      if (candidateId) {
+        const { error: delErr } = await db.from("candidates").delete().eq("id", candidateId);
+        if (delErr) throw delErr;
+      }
+      if (createdUser && userId) {
+        const { error: userDelErr } = await db.from("users").delete().eq("id", userId);
+        if (userDelErr) throw userDelErr;
+      }
+    } catch (e) {
+      console.error("[candidates] rollback failed — manual cleanup needed", redactPii(candidateId ?? ""));
+      return Response.json({ error: "Could not save the profile and rollback failed. Contact support." }, { status: 500 });
     }
     return Response.json({ error: "Could not save the profile. Fix the highlighted fields and retry." }, { status: 500 });
   }
@@ -936,12 +946,16 @@ export async function PUT(request: Request) {
   }
   if (present.has("skills")) {
     try {
-      const { canon, byName } = await skillIdMap(db, c.skills ?? []);
+      const { canon, byName, ok: skillsOk } = await skillIdMap(db, c.skills ?? []);
       const nextNames = [...canon.map((s) => s.toLowerCase())].sort();
-      const { data: haveRows } = await db
+      const { data: haveRows, error: haveErr } = await db
         .from("candidate_skills")
         .select("skills(name)")
         .eq("candidate_id", id);
+      if (!skillsOk || haveErr) {
+        console.error("[candidates] skills read failed — skipping rewrite to protect existing links");
+        putWarnings.push("skills: could not save (code SKL_SAVE)");
+      } else {
       const haveNames = (((haveRows ?? []) as unknown as { skills: { name: string } | { name: string }[] | null }[])
         .flatMap((s) => (Array.isArray(s.skills) ? s.skills : s.skills ? [s.skills] : []))
         .map((s) => s.name.toLowerCase())
@@ -975,6 +989,7 @@ export async function PUT(request: Request) {
           }
         }
       }
+    }
     } catch (e) {
       console.error("[candidates] skills replace threw", redactPii((e as Error).message));
       putWarnings.push("skills: could not save (code SKL_SAVE)");

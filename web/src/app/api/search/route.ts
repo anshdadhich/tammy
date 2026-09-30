@@ -245,6 +245,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       const { data, error } = await db
         .from("searches")
         .select("id, created_at, query_embedding")
+        .eq("employer_id", hr.employerId)
         .eq("query_hash", qhash)
         .gt("created_at", since)
         .order("created_at", { ascending: false })
@@ -259,6 +260,7 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
         const { data } = await db
           .from("searches")
           .select("id, created_at")
+          .eq("employer_id", hr.employerId)
           .eq("query_text", queryText)
           .gt("created_at", since)
           .order("created_at", { ascending: false })
@@ -642,12 +644,14 @@ export const POST = withWideEvent("/api/search", async (request, wev) => {
       const cid = String(r.id ?? "");
       return { candidate_id: cid, job: jobReq, candidateJson: { candidate: candById.get(cid) ?? r, projects: projsById.get(cid) ?? [] } };
     });
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const judged = (await Promise.race([
       judgeTop(inputs, defaultOpenAIProvider(), JUDGE_CONCURRENCY, { timeoutMs: JUDGE_TIMEOUT_MS }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Deep judge overall deadline exceeded")), 40000),
-      ),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Deep judge overall deadline exceeded")), 40000);
+      }),
     ])) as Array<JudgeResult | null>;
+    if (timer) clearTimeout(timer);
     const judgeNulls = judged.filter((jj) => jj == null).length;
     wev.add({ judge_nulls: judgeNulls, judged: judged.length });
     const merged = top.map((r, i) => {
