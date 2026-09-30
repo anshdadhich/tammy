@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { getSessionUser } from "@/lib/supabase-user";
+import { getNavSession, getSessionUser } from "@/lib/supabase-user";
 import type { ViewerSession } from "@/lib/session-client";
 
 export type HrSession = { name?: string; email: string };
@@ -24,13 +24,13 @@ export async function readHrSession(): Promise<HrSession | null> {
  * The client still revalidates in the background (AppNav) for freshness.
  */
 export async function readNavViewer(): Promise<{ viewer: ViewerSession | null; confirmed: boolean }> {
-  let session: Awaited<ReturnType<typeof getSessionUser>>;
+  let nav: Awaited<ReturnType<typeof getNavSession>>;
   try {
-    session = await getSessionUser();
+    nav = await getNavSession();
   } catch {
     return { viewer: null, confirmed: false };
   }
-  if (!session) {
+  if (!nav) {
     let hasAuthCookie = false;
     try {
       const jar = await cookies();
@@ -40,22 +40,14 @@ export async function readNavViewer(): Promise<{ viewer: ViewerSession | null; c
     }
     return { viewer: null, confirmed: !hasAuthCookie };
   }
-  if (session.viewer.kind === "hr") {
+  if (nav.role === "employer" || nav.role === "admin") {
     return {
-      viewer: {
-        kind: "hr",
-        name: session.viewer.name,
-        email: session.viewer.email,
-        isAdmin: session.userRow?.role === "admin",
-      },
+      viewer: { kind: "hr", email: nav.email, isAdmin: nav.role === "admin" },
       confirmed: true,
     };
   }
-  if (session.viewer.kind === "owner") {
-    return { viewer: { kind: "owner", email: session.viewer.email }, confirmed: true };
-  }
-  if (session.email) {
-    return { viewer: { kind: "owner", email: session.email }, confirmed: true };
+  if (nav.role === "candidate") {
+    return { viewer: { kind: "owner", email: nav.email }, confirmed: true };
   }
   return { viewer: null, confirmed: true };
 }

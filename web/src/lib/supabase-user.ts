@@ -181,6 +181,41 @@ export async function getViewerRole(): Promise<{ kind: "owner"; id: string } | {
   return { kind: "anon" };
 }
 
+export type NavSession = {
+  authId: string;
+  email: string;
+  role: string | null;
+};
+
+export const getNavSession = cache(async (): Promise<NavSession | null> => {
+  let client: SupabaseClient;
+  try {
+    client = await supabaseServer();
+  } catch (e) {
+    logErr("nav client failed", e);
+    return null;
+  }
+  try {
+    const { data, error } = await getVerifiedClaims(client);
+    if (error || !data?.claims) return null;
+    const claims = data.claims;
+    if (typeof claims.sub !== "string" || !claims.sub) return null;
+    const email = normalizeEmail(claims.email) ?? normalizeEmail(claims.user_metadata?.email);
+    if (!email) return null;
+    const { data: row, error: rowErr } = await client
+      .from("users")
+      .select("role")
+      .eq("auth_id", claims.sub)
+      .maybeSingle();
+    if (rowErr) throw rowErr;
+    const role = ((row as { role: string } | null)?.role) ?? null;
+    return { authId: claims.sub, email, role };
+  } catch (e) {
+    logErr("nav session failed", e);
+    return null;
+  }
+});
+
 export async function requireOwnerDb(candidateId: string, session?: SessionUser | null): Promise<OwnerDb | Response> {
   if (typeof candidateId !== "string" || !candidateId) {
     return Response.json({ error: "You can only modify your own profile." }, { status: 403 });
