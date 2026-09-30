@@ -41,7 +41,14 @@ const SIGNUP_OPTIONS = [
 
 type NavItem = { label: string; href: string };
 
-export default function AppNav({ active: activeProp, initialViewer = null }: { active?: string; initialViewer?: ViewerSession | null } = {}) {
+function sameViewer(a: ViewerSession | null | undefined, b: ViewerSession | null | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.kind !== b.kind || a.email !== b.email) return false;
+  return (a.isAdmin ?? false) === (b.isAdmin ?? false);
+}
+
+export default function AppNav({ active: activeProp, initialViewer = null, viewerConfirmed = true }: { active?: string; initialViewer?: ViewerSession | null; viewerConfirmed?: boolean } = {}) {
   const pathname = usePathname();
   const isJoin = pathname.startsWith("/join");
   const isHire = pathname.startsWith("/hire");
@@ -59,6 +66,7 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
   const [profileOpen, setProfileOpen] = useState(false);
   const [viewer, setViewer] = useState<ViewerSession | null>(initialViewer);
   const [syncedInitialViewer, setSyncedInitialViewer] = useState(initialViewer);
+  const [provisional, setProvisional] = useState(!initialViewer && !viewerConfirmed);
   const [scrolled, setScrolled] = useState(false);
   const [hideNav, setHideNav] = useState(false);
   const reduceMotion = useReducedMotion();
@@ -93,30 +101,41 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
   }, [activeProp]);
 
   // Apply new server-rendered identity during render, before React paints the
-  // old actions for a route transition. An effect here creates a visible frame
-  // where a signed-in user sees Login / Sign up before the avatar appears.
-  if (initialViewer !== syncedInitialViewer) {
+  // old actions for a route transition. Compares by value so equal identities
+  // never tear down the actions subtree; an unconfirmed null never replaces a
+  // known viewer (server hiccup must not paint logged-out UI).
+  if (!sameViewer(initialViewer, syncedInitialViewer)) {
     setSyncedInitialViewer(initialViewer);
-    setViewer(initialViewer);
+    if (initialViewer !== null || viewerConfirmed) setViewer(initialViewer);
   }
 
   useEffect(() => {
     let alive = true;
-    const load = () => {
-      const hr = readHrSession();
-      const pending = hr
-        ? Promise.resolve(hr)
-        : Promise.all([fetchHrSession(), fetchOwnerSession()]).then(
-            ([h, o]) => h ?? o,
-          );
-      pending.then((v) => {
-        if (alive) setViewer(v);
-      });
+    const settle = (v: ViewerSession | null, authoritative: boolean) => {
+      if (!alive) return;
+      if (v !== null) {
+        setViewer(v);
+        setProvisional(false);
+        return;
+      }
+      if (authoritative) setProvisional(false);
     };
-    window.addEventListener(SESSION_EVENT, load);
+    const load = (authoritative: boolean) => {
+      const hr = readHrSession();
+      if (hr) {
+        settle(hr, true);
+        return;
+      }
+      Promise.all([fetchHrSession(), fetchOwnerSession()]).then(
+        ([h, o]) => settle(h ?? o, authoritative),
+      );
+    };
+    load(true);
+    const onEvent = () => load(false);
+    window.addEventListener(SESSION_EVENT, onEvent);
     return () => {
       alive = false;
-      window.removeEventListener(SESSION_EVENT, load);
+      window.removeEventListener(SESSION_EVENT, onEvent);
     };
   }, []);
 
@@ -146,6 +165,7 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
     clearHrSession();
     await clearOwnerSession();
     setViewer(null);
+    setProvisional(false);
     setProfileOpen(false);
     setMobileOpen(false);
   };
@@ -269,7 +289,10 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
             <Moon className="theme-icon-moon" aria-hidden="true" />
           </button>
           {showAuth && !viewer ? (
-            <div className="nav-menu-wrap">
+            provisional ? (
+              <span className="nav-avatar nav-avatar--ghost" aria-hidden="true" />
+            ) : (
+              <div className="nav-menu-wrap">
               <button
                 type="button"
                 className="site-nav-cta press h-10"
@@ -301,6 +324,7 @@ export default function AppNav({ active: activeProp, initialViewer = null }: { a
                 </div>
               ) : null}
             </div>
+            )
           ) : null}
           <button
             type="button"

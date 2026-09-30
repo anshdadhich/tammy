@@ -550,6 +550,19 @@ button, input { font: inherit; }
   transition: box-shadow 160ms var(--ease-out);
 }
 .nav-avatar:hover { box-shadow: var(--shadow-sm); }
+.nav-avatar--ghost {
+  background: var(--line);
+  border-color: transparent;
+  cursor: default;
+  animation: nav-avatar-pulse 1.6s ease-in-out infinite;
+}
+@keyframes nav-avatar-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-avatar--ghost { animation: none; }
+}
 @keyframes nav-menu-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }

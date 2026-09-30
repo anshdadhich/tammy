@@ -11,13 +11,13 @@ export default async function PageShell({
   active?: string;
   footer?: boolean;
 }) {
-  const initialViewer = await readNavViewer();
+  const { viewer: initialViewer, confirmed: viewerConfirmed } = await readNavViewer();
   return (
     <div className="relative min-h-screen bg-paper text-body antialiased selection:bg-brand selection:text-on-brand">
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
-      <AppNav active={active} initialViewer={initialViewer} />
+      <AppNav active={active} initialViewer={initialViewer} viewerConfirmed={viewerConfirmed} />
       <main id="main-content">{children}</main>
       {footer ? <SiteFooter /> : null}
     </div>

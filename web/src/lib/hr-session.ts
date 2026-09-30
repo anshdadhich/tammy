@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { getSessionUser } from "@/lib/supabase-user";
 import type { ViewerSession } from "@/lib/session-client";
 
@@ -22,30 +23,39 @@ export async function readHrSession(): Promise<HrSession | null> {
  * immediately instead of flashing logged-out until client checks finish.
  * The client still revalidates in the background (AppNav) for freshness.
  */
-export async function readNavViewer(): Promise<ViewerSession | null> {
+export async function readNavViewer(): Promise<{ viewer: ViewerSession | null; confirmed: boolean }> {
   let session: Awaited<ReturnType<typeof getSessionUser>>;
   try {
     session = await getSessionUser();
   } catch {
-    return null;
+    return { viewer: null, confirmed: false };
   }
-  if (!session) return null;
+  if (!session) {
+    let hasAuthCookie = false;
+    try {
+      const jar = await cookies();
+      hasAuthCookie = jar.getAll().some((c) => c.name.startsWith("sb-") && c.name.includes("auth-token"));
+    } catch {
+      hasAuthCookie = false;
+    }
+    return { viewer: null, confirmed: !hasAuthCookie };
+  }
   if (session.viewer.kind === "hr") {
     return {
-      kind: "hr",
-      name: session.viewer.name,
-      email: session.viewer.email,
-      isAdmin: session.userRow?.role === "admin",
+      viewer: {
+        kind: "hr",
+        name: session.viewer.name,
+        email: session.viewer.email,
+        isAdmin: session.userRow?.role === "admin",
+      },
+      confirmed: true,
     };
   }
   if (session.viewer.kind === "owner") {
-    return { kind: "owner", email: session.viewer.email };
+    return { viewer: { kind: "owner", email: session.viewer.email }, confirmed: true };
   }
-  // Authenticated but profile-less (fresh OTP inbox, no candidate row and no
-  // employer row): mirror the client's fetchOwnerSession fallback so the nav
-  // still paints the avatar instead of flashing logged-out.
   if (session.email) {
-    return { kind: "owner", email: session.email };
+    return { viewer: { kind: "owner", email: session.email }, confirmed: true };
   }
-  return null;
+  return { viewer: null, confirmed: true };
 }
